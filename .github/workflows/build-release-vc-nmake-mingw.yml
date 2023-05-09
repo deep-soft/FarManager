@@ -1,4 +1,5 @@
-name: Build
+# 2023-04-30 17:50
+name: Build release VC-nmake-mingw
 
 on:
 #  push:
@@ -7,13 +8,17 @@ on:
 #    branches: [ master ]
   workflow_dispatch:    
 
+env:
+  TAG_NAME: "Far-release"
+  Far_version: "3.0.0"
+
 jobs:
 #------------------------------------------------------------------------------
   code-style-checks:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source
-        uses: actions/checkout@v3
+        uses: deep-soft/checkout@v3
 
       - name: Setup Python
         uses: actions/setup-python@v4
@@ -23,18 +28,15 @@ jobs:
         run: python tools/source_validator.py
 
 #------------------------------------------------------------------------------
-  changelog-hlf-checks:
-    runs-on: ubuntu-latest
+  hlf-checks:
+    runs-on: windows-2022
     steps:
       - name: Checkout source
-        uses: actions/checkout@v3
+        uses: deep-soft/checkout@v3
 
       - uses: actions/setup-dotnet@v3
         with:
           dotnet-version: '6.0'
-
-# For "--property UseSharedCompilation=false", see
-# https://docs.github.com/en/code-security/code-scanning/automatically-scanning-your-code-for-vulnerabilities-and-errors/troubleshooting-the-codeql-workflow#no-code-found-during-the-build
 
       - name: Build and run ChangelogChecker
         working-directory: misc/build-checks/ChangelogChecker
@@ -51,23 +53,39 @@ jobs:
       fail-fast: false
       matrix:
         build: [
-                 msbuild_cl_x64_debug,
+#                 msbuild_cl_x64_debug,
                  msbuild_cl_x64_release,
-                 msbuild_cl_x86_debug,
+#                 msbuild_cl_x86_debug,
                  msbuild_cl_x86_release,
                  msbuild_cl_ARM64_release,
                ]
 
         include:
-          - { build: msbuild_cl_x64_debug,     compiler: msbuild_cl, arch: amd64,       platform_sln: x64,   platform_name: x64,   build_config: Debug }
+#          - { build: msbuild_cl_x64_debug,     compiler: msbuild_cl, arch: amd64,       platform_sln: x64,   platform_name: x64,   build_config: Debug }
           - { build: msbuild_cl_x64_release,   compiler: msbuild_cl, arch: amd64,       platform_sln: x64,   platform_name: x64,   build_config: Release }
-          - { build: msbuild_cl_x86_debug,     compiler: msbuild_cl, arch: amd64_x86,   platform_sln: Win32, platform_name: x86,   build_config: Debug }
+#          - { build: msbuild_cl_x86_debug,     compiler: msbuild_cl, arch: amd64_x86,   platform_sln: Win32, platform_name: x86,   build_config: Debug }
           - { build: msbuild_cl_x86_release,   compiler: msbuild_cl, arch: amd64_x86,   platform_sln: Win32, platform_name: x86,   build_config: Release }
           - { build: msbuild_cl_ARM64_release, compiler: msbuild_cl, arch: amd64_arm64, platform_sln: ARM64, platform_name: ARM64, build_config: Release }
 
     steps:
       - name: Checkout source
-        uses: actions/checkout@v3
+        uses: deep-soft/checkout@v3
+
+      - name: Get program version
+        continue-on-error: false
+        shell: bash
+        run: |
+          Far_version=${{ env.Far_Version}}
+          Far_build=$(cat "far/vbuild.m4")
+          echo $Far_version$Far_build
+          echo "VERSION=$Far_version$Far_build" >> $GITHUB_ENV
+
+      - name: Print program version
+        continue-on-error: false
+        shell: bash
+        run: |
+          echo "Print program version"
+          echo ${{ env.VERSION }}
 
       - name: Initialize CodeQL
         if: matrix.build == 'msbuild_cl_x64_debug'
@@ -76,7 +94,7 @@ jobs:
           languages: cpp
 
       - name: Set MSVC envrioment
-        uses: ilammy/msvc-dev-cmd@v1
+        uses: deep-soft/msvc-dev-cmd@v1
         with:
           arch: ${{ matrix.arch }}
 
@@ -92,11 +110,35 @@ jobs:
         if: matrix.build == 'msbuild_cl_x64_debug'
         uses: github/codeql-action/analyze@v2
 
-      - name: Publish
-        uses: actions/upload-artifact@v3
+      - name: Create zip
+        continue-on-error: true
+        working-directory: _build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}
+        run: |
+          dir ./
+          Compress-Archive . ../Far.${{ matrix.build_config }}.${{ matrix.platform_sln }}.${{ env.VERSION }}.zip
+          dir ../
+
+      - name: Upload zip
+        continue-on-error: true
+        uses: deep-soft/upload-artifact@main
         with:
-          name: Far.${{ matrix.build_config }}.${{ matrix.platform_name }}
-          path: _build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}
+          name: Far.${{ matrix.build_config }}.${{ matrix.platform_name }}.${{ env.VERSION }}.zip
+          path: _build/vc/_output/product/Far.${{ matrix.build_config }}.${{ matrix.platform_sln }}.${{ env.VERSION }}.zip
+
+#      - name: Upload folder
+#        continue-on-error: true
+#        uses: deep-soft/upload-artifact@main
+#        with:
+#          name: Far.${{ matrix.build_config }}.${{ matrix.platform_name }}
+#         path: _build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}
+
+      - name: Publish
+        continue-on-error: true
+        uses: deep-soft/action-gh-release@v1
+        with:
+          tag_name: ${{ env.TAG_NAME }}-${{ env.VERSION }}
+          files: |
+            _build/vc/_output/product/Far.${{ matrix.build_config }}.${{ matrix.platform_sln }}.${{ env.VERSION }}.zip
 
 #------------------------------------------------------------------------------
   build-nmake:
@@ -105,27 +147,43 @@ jobs:
       fail-fast: false
       matrix:
         build: [
-                 nmake_cl_x64_debug,
+#                 nmake_cl_x64_debug,
                  nmake_cl_x64_release,
-                 nmake_cl_x86_debug,
+#                 nmake_cl_x86_debug,
                  nmake_cl_x86_release,
                  nmake_cl_ARM64_release,
-                 nmake_clang_x64_debug,
+#                 nmake_clang_x64_debug,
                  nmake_clang_x64_release,
                ]
 
         include:
-          - { build: nmake_cl_x64_debug,      compiler: nmake_cl,    arch: amd64,       build_config: Debug }
+#          - { build: nmake_cl_x64_debug,      compiler: nmake_cl,    arch: amd64,       build_config: Debug }
           - { build: nmake_cl_x64_release,    compiler: nmake_cl,    arch: amd64,       build_config: Release }
-          - { build: nmake_cl_x86_debug,      compiler: nmake_cl,    arch: amd64_x86,   build_config: Debug }
+#          - { build: nmake_cl_x86_debug,      compiler: nmake_cl,    arch: amd64_x86,   build_config: Debug }
           - { build: nmake_cl_x86_release,    compiler: nmake_cl,    arch: amd64_x86,   build_config: Release }
           - { build: nmake_cl_ARM64_release,  compiler: nmake_cl,    arch: amd64_arm64, build_config: Release }
-          - { build: nmake_clang_x64_debug,   compiler: nmake_clang, arch: amd64,       build_config: Debug }
+#          - { build: nmake_clang_x64_debug,   compiler: nmake_clang, arch: amd64,       build_config: Debug }
           - { build: nmake_clang_x64_release, compiler: nmake_clang, arch: amd64,       build_config: Release }
 
     steps:
       - name: Checkout source
-        uses: actions/checkout@v3
+        uses: deep-soft/checkout@v3
+
+      - name: Get program version
+        continue-on-error: false
+        shell: bash
+        run: |
+          Far_version=${{ env.Far_Version}}
+          Far_build=$(cat "far/vbuild.m4")
+          echo $Far_version$Far_build
+          echo "VERSION=$Far_version$Far_build" >> $GITHUB_ENV
+
+      - name: Print program version
+        continue-on-error: false
+        shell: bash
+        run: |
+          echo "Print program version"
+          echo ${{ env.VERSION }}
 
       - name: Initialize CodeQL
         if: matrix.build == 'nmake_cl_x64_debug'
@@ -133,8 +191,8 @@ jobs:
         with:
           languages: cpp
 
-      - name: Set MSVC envrioment
-        uses: ilammy/msvc-dev-cmd@v1
+      - name: Set MSVC environment
+        uses: deep-soft/msvc-dev-cmd@v1
         with:
           arch: ${{ matrix.arch }}
 
@@ -165,6 +223,30 @@ jobs:
         if: matrix.build == 'nmake_cl_x64_debug'
         uses: github/codeql-action/analyze@v2
 
+      - name: Create list file
+        continue-on-error: true
+        shell: bash
+        run: |
+          list_file="Far.${{ matrix.build }}-${{ matrix.compiler }}-${{ matrix.arch }}-${{ matrix.build_config }}.txt"
+          ls -lR > $list_file
+          echo "LIST_File=$list_file" >> $GITHUB_ENV
+
+      - name: Print list filename
+        continue-on-error: true
+        shell: bash
+        run: |
+          echo "${{ env.LIST_File }}";
+          ls -l "${{ env.LIST_File }}";
+
+      - name: Publish
+        continue-on-error: true
+        uses: deep-soft/action-gh-release@v1
+        with:
+          tag_name: ${{ env.TAG_NAME }}-${{ env.VERSION }}
+          files: |
+            ${{ env.LIST_File }}
+#            _build/vc/_output/product/Far.${{ matrix.build_config }}.${{ matrix.platform_sln }}.${{ env.VERSION }}.zip
+
 #------------------------------------------------------------------------------
   build-mingw:
     runs-on: windows-2022
@@ -172,21 +254,37 @@ jobs:
       fail-fast: false
       matrix:
         build: [
-                 mingw_gcc_x64_debug,
+#                 mingw_gcc_x64_debug,
                  mingw_gcc_x64_release,
-                 mingw_clang_x64_debug,
+#                 mingw_clang_x64_debug,
                  mingw_clang_x64_release
                ]
 
         include:
-          - { build: mingw_gcc_x64_debug,     compiler: mingw_gcc,   arch: amd64, build_config: Debug }
+#          - { build: mingw_gcc_x64_debug,     compiler: mingw_gcc,   arch: amd64, build_config: Debug }
           - { build: mingw_gcc_x64_release,   compiler: mingw_gcc,   arch: amd64, build_config: Release }
-          - { build: mingw_clang_x64_Debug,   compiler: mingw_clang, arch: amd64, build_config: Debug }
+#          - { build: mingw_clang_x64_Debug,   compiler: mingw_clang, arch: amd64, build_config: Debug }
           - { build: mingw_clang_x64_Release, compiler: mingw_clang, arch: amd64, build_config: Release }
 
     steps:
       - name: Checkout source
-        uses: actions/checkout@v3
+        uses: deep-soft/checkout@v3
+
+      - name: Get program version
+        continue-on-error: false
+        shell: bash
+        run: |
+          Far_version=${{ env.Far_Version}}
+          Far_build=$(cat "far/vbuild.m4")
+          echo $Far_version$Far_build
+          echo "VERSION=$Far_version$Far_build" >> $GITHUB_ENV
+
+      - name: Print program version
+        continue-on-error: false
+        shell: bash
+        run: |
+          echo "Print program version"
+          echo ${{ env.VERSION }}
 
       - name: Initialize CodeQL
         if: matrix.build == 'mingw_gcc_x64_debug'
@@ -249,3 +347,27 @@ jobs:
       - name: Perform CodeQL Analysis
         if: matrix.build == 'mingw_gcc_x64_debug'
         uses: github/codeql-action/analyze@v2
+
+      - name: Create list file
+        continue-on-error: true
+        shell: bash
+        run: |
+          list_file="Far.${{ matrix.build }}-${{ matrix.compiler }}-${{ matrix.arch }}-${{ matrix.build_config }}.txt"
+          ls -lR > $list_file
+          echo "LIST_File=$list_file" >> $GITHUB_ENV
+
+      - name: Print list filename
+        continue-on-error: true
+        shell: bash
+        run: |
+          echo "${{ env.LIST_File }}";
+          ls -l "${{ env.LIST_File }}";
+
+      - name: Publish
+        continue-on-error: true
+        uses: deep-soft/action-gh-release@v1
+        with:
+          tag_name: ${{ env.TAG_NAME }}-${{ env.VERSION }}
+          files: |
+            ${{ env.LIST_File }}
+#            _build/vc/_output/product/Far.${{ matrix.build_config }}.${{ matrix.platform_sln }}.${{ env.VERSION }}.zip

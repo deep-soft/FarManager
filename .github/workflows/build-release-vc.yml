@@ -1,0 +1,150 @@
+# 2023-04-30 17:50
+name: Build release VC
+
+on:
+#  push:
+#    branches: [ master ]
+#  pull_request:
+#    branches: [ master ]
+  workflow_dispatch:    
+
+env:
+  TAG_NAME: "Far-release"
+  Far_version: "3.0.0"
+
+jobs:
+#------------------------------------------------------------------------------
+  code-style-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: deep-soft/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+
+      - name: Run checks
+        working-directory: far
+        run: python tools/source_validator.py
+
+#------------------------------------------------------------------------------
+  hlf-checks:
+    runs-on: windows-2022
+    steps:
+      - name: Checkout source
+        uses: deep-soft/checkout@v3
+
+      - uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '6.0'
+
+      - name: Build and run ChangelogChecker
+        working-directory: misc/build-checks/ChangelogChecker
+        run: dotnet run --project ./ChangelogChecker.csproj --configuration Release --property UseSharedCompilation=false
+
+      - name: Build and run HlfChecker
+        working-directory: misc/build-checks/HlfChecker
+        run: dotnet run --project ./HlfChecker.csproj --configuration Release --property UseSharedCompilation=false -- Verbose
+
+#------------------------------------------------------------------------------
+  build-msbuild:
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        build: [ 
+#                 msbuild_cl_x64_debug,
+                 msbuild_cl_x64_release,
+#                 msbuild_cl_x86_debug,
+                 msbuild_cl_x86_release,
+                 msbuild_cl_ARM64_release,
+               ]
+  
+        include:
+#          - { build: msbuild_cl_x64_debug,     compiler: msbuild_cl, arch: amd64,       platform_sln: x64,   platform_name: x64,   build_config: Debug }
+          - { build: msbuild_cl_x64_release,   compiler: msbuild_cl, arch: amd64,       platform_sln: x64,   platform_name: x64,   build_config: Release }
+#          - { build: msbuild_cl_x86_debug,     compiler: msbuild_cl, arch: amd64_x86,   platform_sln: Win32, platform_name: x86,   build_config: Debug }
+          - { build: msbuild_cl_x86_release,   compiler: msbuild_cl, arch: amd64_x86,   platform_sln: Win32, platform_name: x86,   build_config: Release }
+          - { build: msbuild_cl_ARM64_release, compiler: msbuild_cl, arch: amd64_arm64, platform_sln: ARM64, platform_name: ARM64, build_config: Release }
+
+    steps:
+      - name: Checkout source
+        uses: deep-soft/checkout@v3
+
+      - name: Get program version
+        continue-on-error: false
+        shell: bash
+        run: |
+          Far_version=${{ env.Far_Version}}
+          Far_build=$(cat "far/vbuild.m4")
+          echo $Far_version$Far_build
+          echo "VERSION=$Far_version$Far_build" >> $GITHUB_ENV
+
+      - name: Print program version
+        continue-on-error: false
+        shell: bash
+        run: |
+          echo "Print program version"
+          echo ${{ env.VERSION }}
+
+      - name: Initialize CodeQL
+        if: matrix.build == 'msbuild_cl_x64_debug'
+        uses: github/codeql-action/init@v2
+        with:
+          languages: cpp
+
+      - name: Set MSVC envrioment
+        uses: deep-soft/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.arch }}
+
+      - name: Set environment for debug build
+        if: matrix.build_config  == 'Debug'
+        run: Add-Content -Path $env:GITHUB_ENV -Value "DEBUG=1"
+
+      - name: Build (cl)
+        working-directory: _build/vc
+        run: msbuild -m /property:Configuration=${{ matrix.build_config }} /property:Platform=${{ matrix.platform_sln }} all.sln
+
+      - name: Perform CodeQL Analysis
+        if: matrix.build == 'msbuild_cl_x64_debug'
+        uses: github/codeql-action/analyze@v2
+
+      - name: Create zip
+        continue-on-error: true
+        working-directory: _build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}
+        run: |
+          dir ./
+          Compress-Archive . ../Far.${{ matrix.build_config }}.${{ matrix.platform_sln }}.${{ env.VERSION }}.zip
+          dir ../
+
+      - name: Upload zip
+        continue-on-error: true
+        uses: deep-soft/upload-artifact@main
+        with:
+          name: Far.${{ matrix.build_config }}.${{ matrix.platform_name }}.${{ env.VERSION }}.zip
+          path: _build/vc/_output/product/Far.${{ matrix.build_config }}.${{ matrix.platform_sln }}.${{ env.VERSION }}.zip
+
+#      - name: Upload folder
+#        continue-on-error: true
+#        uses: deep-soft/upload-artifact@main
+#        with:
+#          name: Far.${{ matrix.build_config }}.${{ matrix.platform_name }}
+#          path: _build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}
+
+      - name: Create list file
+        continue-on-error: true
+        shell: bash
+        run: |
+          list_file="Far.${( matrix.build }}-${( matrix.compiler }}-${( matrix.arch }}-${( matrix.platform_sln }}-${( matrix.platform_name }}-${( matrix.build_config }}.txt"
+          ls -lR > $list_file
+          echo "LIST_File=$list_file" >> GITHUB.ENV
+
+      - name: Publish
+        continue-on-error: true
+        uses: deep-soft/action-gh-release@v1
+        with:
+          tag_name: ${{ env.TAG_NAME }}-${{ env.VERSION }}
+          files: |
+            _build/vc/_output/product/Far.${{ matrix.build_config }}.${{ matrix.platform_sln }}.${{ env.VERSION }}.zip
+            ${{ env.LIST_File }}
