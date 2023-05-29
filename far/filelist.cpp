@@ -5623,7 +5623,7 @@ bool FileList::PopPlugin(int EnableRestoreViewMode)
 		return false;
 	}
 
-	const std::wstring cached_hostfile = m_CachedOpenPanelInfo.HostFile ? m_CachedOpenPanelInfo.HostFile : L"";
+	const string cached_hostfile = NullToEmpty(m_CachedOpenPanelInfo.HostFile);
 	const auto cached_Flags = m_CachedOpenPanelInfo.Flags;
 	const auto CurPlugin = std::move(PluginsList.back());
 	PluginsList.pop_back();
@@ -5638,6 +5638,8 @@ bool FileList::PopPlugin(int EnableRestoreViewMode)
 		Global->CtrlObject->Plugins->ClosePanel(std::move(CurPlugin->m_Plugin));
 	}
 
+	char del_mode = '\0';
+	//
 	if (!PluginsList.empty())
 	{
 		if (EnableRestoreViewMode)
@@ -5667,23 +5669,25 @@ bool FileList::PopPlugin(int EnableRestoreViewMode)
 			FarChDir(strSaveDir);
 		}
 
-
 		Global->CtrlObject->Plugins->GetOpenPanelInfo(GetPluginHandle(), &m_CachedOpenPanelInfo);
 		if (!(m_CachedOpenPanelInfo.Flags & OPIF_REALNAMES) && !CurPlugin->m_HostFile.empty()) // remove previous plugin host-file/directory
 		{
-			char del_mode = 'd'; // old way - always remove directory on plugin panel pop
-			if ((cached_Flags & OPIF_RECURSIVEPANEL) && !(cached_Flags & OPIF_DELETEDIRONCLOSE)) // new way - controlled by flags
-				del_mode = (cached_Flags & OPIF_DELETEFILEONCLOSE) ? 'f' : '\0';
-
 			if (cached_hostfile == CurPlugin->m_HostFile) // just in case
 			{
-				if (del_mode == 'd') DeleteFileWithFolder(CurPlugin->m_HostFile);
-				if (del_mode == 'f') std::ignore = os::fs::delete_file(CurPlugin->m_HostFile);
+				const bool new_way = (cached_Flags & (OPIF_RECURSIVEPANEL | OPIF_DELETEFILEONCLOSE | OPIF_DELETEDIRONCLOSE)) != 0;
+				if (!new_way || (cached_Flags & OPIF_DELETEDIRONCLOSE) != 0) del_mode = 'd';
+				else if (new_way && (cached_Flags & OPIF_DELETEFILEONCLOSE) != 0) del_mode = 'f';
 			}
 		}
 	}
 	else
 	{
+		if (!(cached_Flags & OPIF_REALNAMES) && !cached_hostfile.empty())         // NEW feature
+		{
+			if ((cached_Flags & OPIF_DELETEDIRONCLOSE) != 0) del_mode = 'd';       //  new flags - new way
+			else if ((cached_Flags & OPIF_DELETEFILEONCLOSE) != 0) del_mode = 'f'; //
+		}
+
 		m_PanelMode = panel_mode::NORMAL_PANEL;
 
 		if (EnableRestoreViewMode)
@@ -5693,6 +5697,12 @@ bool FileList::PopPlugin(int EnableRestoreViewMode)
 			m_ReverseSortOrder = CurPlugin->m_PrevSortOrder;
 			m_DirectoriesFirst = CurPlugin->m_PrevDirectoriesFirst;
 		}
+	}
+	//
+	if (del_mode)
+	{
+		if (del_mode == 'd') DeleteFileWithFolder(cached_hostfile);
+		if (del_mode == 'f') std::ignore = os::fs::delete_file(cached_hostfile);
 	}
 
 	if (EnableRestoreViewMode)
@@ -7279,7 +7289,7 @@ void FileList::MoveSelection(list_data& From, list_data& To)
 	std::vector<size_t> OldPositions;
 	OldPositions.reserve(To.size());
 
-	std::set<decltype(From.begin())> MatchedNames;
+	std::vector<decltype(From.begin())> MatchedNames;
 
 	const auto npos = static_cast<size_t>(-1);
 
@@ -7293,10 +7303,12 @@ void FileList::MoveSelection(list_data& From, list_data& To)
 			return EqualRange.begin();
 
 		MatchedNames.clear();
+		reserve_exp_noshrink(MatchedNames, EqualRange.size());
+
 		for (auto Iterator = EqualRange.begin(); Iterator != EqualRange.end(); ++Iterator)
 		{
 			if (!Iterator->FileName.empty())
-				MatchedNames.insert(Iterator);
+				MatchedNames.push_back(Iterator);
 		}
 
 		const auto filter = [&](const auto& Predicate)
