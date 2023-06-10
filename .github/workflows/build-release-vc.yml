@@ -1,4 +1,4 @@
-# 2023-06-10 21:40
+# 2023-06-10 22:00
 name: Build release VC
 
 on:
@@ -93,7 +93,7 @@ jobs:
         with:
           languages: cpp
 
-      - name: Set MSVC envrioment
+      - name: Set MSVC environment
         uses: deep-soft/msvc-dev-cmd@v1
         with:
           arch: ${{ matrix.arch }}
@@ -110,22 +110,22 @@ jobs:
         if: matrix.build == 'msbuild_cl_x64_debug'
         uses: github/codeql-action/analyze@v2
 
-      - name: Create zip
-        continue-on-error: true
-        working-directory: _build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}
-        run: |
-          dir ./
-          Compress-Archive . ../Far.${{ matrix.build_config }}.${{ matrix.platform_sln }}.${{ env.VERSION }}.zip
-          dir ../
+#       - name: Create zip
+#         continue-on-error: true
+#         working-directory: _build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}
+#         run: |
+#           dir ./
+#           Compress-Archive . ../Far.${{ matrix.build_config }}.${{ matrix.platform_sln }}.${{ env.VERSION }}.zip
+#           dir ../
 
       - name: Create Zip Archive Release
-        uses: deep-soft/zip-release@v1
+        uses: deep-soft/zip-release@v2
         with:
           type: 'zip'
           filename: '../Far.${{ matrix.build_config }}.${{ matrix.platform_sln }}.${{ env.VERSION }}.zip'
           directory: '_build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}'
+          recursive_exclusions: '*.map *.pdb changelog *Bel* *Cze* *Ger.* *Hun.* *Ita.* *Lit.* *Pol.* *Rus.* *Sky.* *Spa.* *Ukr.*'
           path: '.'
-          exclusions: '*.map *.pdb changelog *Bel* *Cze* *Ger.* *Hun.* *Ita.* *Lit.* *Pol.* *Rus.* *Sky.* *Spa.* *Ukr.*'
 
       - name: Upload zip
         continue-on-error: true
@@ -145,7 +145,7 @@ jobs:
         continue-on-error: true
         shell: bash
         run: |
-          list_file="Far.${( matrix.build }}-${( matrix.compiler }}-${( matrix.arch }}-${( matrix.platform_sln }}-${( matrix.platform_name }}-${( matrix.build_config }}.txt"
+          list_file="Far.${{ matrix.build }}-${{ matrix.compiler }}-${{ matrix.arch }}-${{ matrix.platform_sln }}-${{ matrix.platform_name }}-${{ matrix.build_config }}.txt"
           ls -lR > $list_file
           echo "LIST_File=$list_file" >> GITHUB.ENV
 
