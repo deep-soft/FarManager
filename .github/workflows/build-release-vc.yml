@@ -1,4 +1,4 @@
-# 2023-04-30 17:50
+# 2023-06-10 21:40
 name: Build release VC
 
 on:
@@ -10,7 +10,7 @@ on:
 
 env:
   TAG_NAME: "Far-release"
-  Far_version: "3.0.0"
+  Far_version: "3.0."
 
 jobs:
 #------------------------------------------------------------------------------
@@ -78,7 +78,7 @@ jobs:
           Far_version=${{ env.Far_Version}}
           Far_build=$(cat "far/vbuild.m4")
           echo $Far_version$Far_build
-          echo "VERSION=$Far_version$Far_build" >> $GITHUB_ENV
+          echo "VERSION=$Far_version$Far_build.0" >> $GITHUB_ENV
 
       - name: Print program version
         continue-on-error: false
@@ -117,6 +117,15 @@ jobs:
           dir ./
           Compress-Archive . ../Far.${{ matrix.build_config }}.${{ matrix.platform_sln }}.${{ env.VERSION }}.zip
           dir ../
+
+      - name: Create Zip Archive Release
+        uses: deep-soft/zip-release@v1
+        with:
+          type: 'zip'
+          filename: '../Far.${{ matrix.build_config }}.${{ matrix.platform_sln }}.${{ env.VERSION }}.zip'
+          directory: '_build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}'
+          path: '.'
+          exclusions: '*.map *.pdb changelog *Bel* *Cze* *Ger.* *Hun.* *Ita.* *Lit.* *Pol.* *Rus.* *Sky.* *Spa.* *Ukr.*'
 
       - name: Upload zip
         continue-on-error: true
