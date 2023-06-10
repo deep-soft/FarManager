@@ -1,4 +1,4 @@
-# 2023-06-10 22:00
+# 2023-06-10 22:20
 name: Build release VC
 
 on:
@@ -124,7 +124,8 @@ jobs:
           type: 'zip'
           filename: '../Far.${{ matrix.build_config }}.${{ matrix.platform_sln }}.${{ env.VERSION }}.zip'
           directory: '_build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}'
-          recursive_exclusions: '*.map *.pdb changelog *Bel* *Cze* *Ger.* *Hun.* *Ita.* *Lit.* *Pol.* *Rus.* *Sky.* *Spa.* *Ukr.*'
+          exclusions: '*.map *.pdb'
+          recursive_exclusions: '*.map *.pdb changelog *Bel* *Cze* *Ger* *Hun* *Ita* *Lit* *Pol* *Rus* *Sky* *Spa* *Ukr*'
           path: '.'
 
       - name: Upload zip
