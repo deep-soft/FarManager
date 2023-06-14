@@ -1275,7 +1275,7 @@ void Dialog::GetDialogObjectsExpandData()
 					EditPtr->SetString(strData);
 					EditPtr->SetCallbackState(true);
 
-					i.strData = strData;
+					i.strData = std::move(strData);
 				}
 
 				break;
@@ -6078,6 +6078,10 @@ class dialogs_set: public singleton<dialogs_set>
 
 public:
 	std::unordered_set<Dialog*> Set;
+
+private:
+	dialogs_set() = default;
+	~dialogs_set() = default;
 };
 
 void Dialog::AddToList()
