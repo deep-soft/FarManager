@@ -7,17 +7,17 @@ on:
 #  pull_request:
 #    branches: [ master ]
   workflow_dispatch:
-  inputs:
-    code-style-checks:
-      default: true
-    hlf-checks:
-      default: true
-    msbuild_cl_x64_release:
-      default: true
-    msbuild_cl_x86_release:
-      default: true
-    msbuild_cl_ARM64_release:
-      default: true
+    inputs:
+      code-style-checks:
+        default: true
+      hlf-checks:
+        default: true
+      msbuild_cl_x64_release:
+        default: true
+      msbuild_cl_x86_release:
+        default: true
+      msbuild_cl_ARM64_release:
+        default: true
 
 env:
   TAG_NAME: "Far-release"
