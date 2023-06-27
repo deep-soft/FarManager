@@ -1,4 +1,4 @@
-# 2023-06-10 23:50
+# 2023-06-27 06:40
 name: Build release VC
 
 on:
@@ -6,7 +6,18 @@ on:
 #    branches: [ master ]
 #  pull_request:
 #    branches: [ master ]
-  workflow_dispatch:    
+  workflow_dispatch:
+  inputs:
+    code-style-checks:
+      default: true
+    hlf-checks:
+      default: true
+    msbuild_cl_x64_release:
+      default: true
+    msbuild_cl_x86_release:
+      default: true
+    msbuild_cl_ARM64_release:
+      default: true
 
 env:
   TAG_NAME: "Far-release"
@@ -16,6 +27,7 @@ jobs:
 #------------------------------------------------------------------------------
   code-style-checks:
     runs-on: ubuntu-latest
+    if: ${{ inputs.code-style-checks }}
     steps:
       - name: Checkout source
         uses: deep-soft/checkout@v3
@@ -30,6 +42,7 @@ jobs:
 #------------------------------------------------------------------------------
   hlf-checks:
     runs-on: windows-2022
+    if: ${{ inputs.hlf-checks }}
     steps:
       - name: Checkout source
         uses: deep-soft/checkout@v3
@@ -122,7 +135,7 @@ jobs:
         uses: deep-soft/zip-release@v2
         with:
           type: 'zip'
-          filename: '../Far.${{ matrix.build_config }}.${{ matrix.platform_sln }}.${{ env.VERSION }}.zip'
+          filename: 'Far.${{ matrix.build_config }}.${{ matrix.platform_sln }}.${{ env.VERSION }}.zip'
           directory: '_build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}'
           exclusions: '*.map *.pdb'
           recursive_exclusions: '*.map *.pdb changelog *Bel* *Cze* *Ger* *Hun* *Ita* *Lit* *Pol* *Rus* *Sky* *Spa* *Ukr*'
@@ -133,7 +146,8 @@ jobs:
         uses: deep-soft/upload-artifact@main
         with:
           name: Far.${{ matrix.build_config }}.${{ matrix.platform_name }}.${{ env.VERSION }}.zip
-          path: _build/vc/_output/product/Far.${{ matrix.build_config }}.${{ matrix.platform_sln }}.${{ env.VERSION }}.zip
+          #path: _build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}/Far.${{ matrix.build_config }}.${{ matrix.platform_sln }}.${{ env.VERSION }}.zip
+          path: ${{ env.ZIP_RELEASE_ARCHIVE }}
 
 #      - name: Upload folder
 #        continue-on-error: true
@@ -148,7 +162,7 @@ jobs:
         run: |
           list_file="Far.${{ matrix.build }}-${{ matrix.compiler }}-${{ matrix.arch }}-${{ matrix.platform_sln }}-${{ matrix.platform_name }}-${{ matrix.build_config }}.txt"
           ls -lR > $list_file
-          echo "LIST_File=$list_file" >> GITHUB.ENV
+          echo "LIST_File=$list_file" >> GITHUB_ENV
 
       - name: Publish
         continue-on-error: true
@@ -156,5 +170,7 @@ jobs:
         with:
           tag_name: ${{ env.TAG_NAME }}-${{ env.VERSION }}
           files: |
-            _build/vc/_output/product/Far.${{ matrix.build_config }}.${{ matrix.platform_sln }}.${{ env.VERSION }}.zip
+            #_build/vc/_output/product/Far.${{ matrix.build_config }}.${{ matrix.platform_sln }}.${{ env.VERSION }}.zip
+            #_build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}/Far.${{ matrix.build_config }}.${{ matrix.platform_sln }}.${{ env.VERSION }}.zip
+            ${{ env.ZIP_RELEASE_ARCHIVE }}
             ${{ env.LIST_File }}
