@@ -10,14 +10,19 @@ on:
     inputs:
       code-style-checks:
         default: true
+        type: boolean
       hlf-checks:
         default: true
+        type: boolean
       msbuild_cl_x64_release:
         default: true
+        type: boolean
       msbuild_cl_x86_release:
         default: true
+        type: boolean
       msbuild_cl_ARM64_release:
         default: true
+        type: boolean
 
 env:
   TAG_NAME: "Far-release"
