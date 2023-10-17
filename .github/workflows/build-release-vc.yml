@@ -219,5 +219,5 @@ jobs:
           tag_name: ${{ env.PROG_NAME }}-latest
           body: "${{ env.PROG_NAME }} latest: v${{ env.VERSION }}"
           files: |
-            ${{ env.PROG_NAME }}.${{ env.$platform_name }}.zip
+            ${{ env.PROG_NAME }}.${{ env.platform_name }}.zip
             ${{ env.PROG_NAME }}-latest.txt
