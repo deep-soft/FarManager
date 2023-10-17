@@ -208,7 +208,7 @@ jobs:
         continue-on-error: false
         shell: bash
         run: |
-          mv ${{ env.ZIP_RELEASE_ARCHIVE }} ${{ env.PROG_NAME }}.${{ env.$platform_name }}.zip
+          mv ${{ env.ZIP_RELEASE_ARCHIVE }} ${{ env.PROG_NAME }}.${{ env.platform_name }}.zip
           echo "${{ env.VERSION }}" > ${{ env.PROG_NAME }}-latest.txt
 
       - name: Publish latest Release
