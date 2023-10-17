@@ -1,4 +1,4 @@
-# 2023-06-27 06:40
+# 2023-10-17 12:00
 name: Build release VC
 
 on:
@@ -25,6 +25,7 @@ on:
         type: boolean
 
 env:
+  PROG_NAME: "Far3"
   TAG_NAME: "Far-release"
   Far_version: "3.0."
 
@@ -136,6 +137,20 @@ jobs:
 #           Compress-Archive . ../Far.${{ matrix.build_config }}.${{ matrix.platform_sln }}.${{ env.VERSION }}.zip
 #           dir ../
 
+      - name: Add extra plugins NetBox and Colorer
+        shell: bash
+        run: |
+          pushd '_build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}/Plugins'
+          for extra_plug in Far-NetBox Far-Colorer ; do
+            mkdir $extra_plug
+            cd $extra_plug
+            curl -LOJ "https://github.com/deep-soft/$extra_plug/releases/download/$extra_plug-latest/$extra_plug.${{ env.platform_name }}.7z"
+            7z x $extra_plug.${{ env.platform_name }}.7z
+            rm $extra_plug.${{ env.platform_name }}.7z
+            cd ..
+          done
+          popd
+
       - name: Create Zip Archive Release
         uses: deep-soft/zip-release@v2
         with:
@@ -179,3 +194,30 @@ jobs:
             #_build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}/Far.${{ matrix.build_config }}.${{ matrix.platform_sln }}.${{ env.VERSION }}.zip
             ${{ env.ZIP_RELEASE_ARCHIVE }}
             ${{ env.LIST_File }}
+
+      - name: Publish latest
+        continue-on-error: true
+        uses: deep-soft/action-gh-release@v1
+        with:
+          tag_name: ${{ env.PROG_NAME }}-latest
+          files: |
+            ${{ env.ZIP_RELEASE_ARCHIVE }}
+            ${{ env.LIST_File }}
+
+      - name: Prepare latest Release
+        continue-on-error: false
+        shell: bash
+        run: |
+          mv ${{ env.ZIP_RELEASE_ARCHIVE }} ${{ env.PROG_NAME }}.${{ env.$platform_name }}.zip
+          echo "${{ env.VERSION }}" > ${{ env.PROG_NAME }}-latest.txt
+
+      - name: Publish latest Release
+        continue-on-error: false
+        uses: deep-soft/action-gh-release@v1
+        with:
+          draft: false
+          tag_name: ${{ env.PROG_NAME }}-latest
+          body: "${{ env.PROG_NAME }} latest: v${{ env.VERSION }}"
+          files: |
+            ${{ env.PROG_NAME }}.${{ env.$platform_name }}.zip
+            ${{ env.PROG_NAME }}-latest.txt
