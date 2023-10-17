@@ -176,33 +176,23 @@ jobs:
 #          name: Far.${{ matrix.build_config }}.${{ matrix.platform_name }}
 #          path: _build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}
 
-      - name: Create list file
-        continue-on-error: true
-        shell: bash
-        run: |
-          list_file="Far.${{ matrix.build }}-${{ matrix.compiler }}-${{ matrix.arch }}-${{ matrix.platform_sln }}-${{ matrix.platform_name }}-${{ matrix.build_config }}.txt"
-          ls -lR > $list_file
-          echo "LIST_File=$list_file" >> GITHUB_ENV
+#      - name: Create list file
+#        continue-on-error: true
+#        shell: bash
+#        run: |
+#          list_file="Far.${{ matrix.build }}-${{ matrix.compiler }}-${{ matrix.arch }}-${{ matrix.platform_sln }}-${{ matrix.platform_name }}-${{ matrix.build_config }}.txt"
+#          ls -lR > $list_file
+#          echo "LIST_File=$list_file" >> $GITHUB_ENV
 
       - name: Publish
         continue-on-error: true
         uses: deep-soft/action-gh-release@v1
         with:
           tag_name: ${{ env.TAG_NAME }}-${{ env.VERSION }}
-          files: |
-            #_build/vc/_output/product/Far.${{ matrix.build_config }}.${{ matrix.platform_sln }}.${{ env.VERSION }}.zip
-            #_build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}/Far.${{ matrix.build_config }}.${{ matrix.platform_sln }}.${{ env.VERSION }}.zip
-            ${{ env.ZIP_RELEASE_ARCHIVE }}
-            ${{ env.LIST_File }}
-
-      - name: Publish latest
-        continue-on-error: true
-        uses: deep-soft/action-gh-release@v1
-        with:
-          tag_name: ${{ env.PROG_NAME }}-latest
+#          files: |
+#            ${{ env.LIST_File }}
           files: |
             ${{ env.ZIP_RELEASE_ARCHIVE }}
-            ${{ env.LIST_File }}
 
       - name: Prepare latest Release
         continue-on-error: false
