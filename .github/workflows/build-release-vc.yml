@@ -143,7 +143,7 @@ jobs:
           filename: 'Far.${{ matrix.build_config }}.${{ matrix.platform_sln }}.${{ env.VERSION }}.zip'
           directory: '_build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}'
           exclusions: '*.map *.pdb'
-          recursive_exclusions: '*.map *.pdb changelog *Bel* *Cze* *Ger* *Hun* *Ita* *Lit* *Pol* *Rus* *Sky* *Spa* *Ukr*'
+          recursive_exclusions: '*.map *.pdb changelog *Bel.lng *Cze.lng *Ger.lng *Hun.lng *Ita.lng *Lit.lng *Pol.lng *Rus.lng *Sky.lng *Spa.lng *Ukr* *Bel.hlf *Cze.hlf *Ger.hlf *Hun.hlf *Ita.hlf *Lit.hlf *Pol.hlf *Rus.hlf *Sky.hlf *Spa.hlf *Ukr*'
           path: '.'
 
       - name: Upload zip
