@@ -151,6 +151,16 @@ jobs:
           done
           popd
 
+      - name: Sign Windows exe and dll files
+        uses: deep-soft/code-sign-action@master
+        with:
+          certificate: '${{ secrets.WINDOWS_PFX_BASE64 }}'
+          password: '${{ secrets.WINDOWS_PFX_PASSWORD }}'
+          certificatesha1: '${{ secrets.WINDOWS_PFX_SHA1_THUMBPRINT }}'
+          # certificatename: '${{ secrets.CERTNAME }}'
+          folder: './Release/'
+          recursive: true
+
       - name: Create Zip Archive Release
         uses: deep-soft/zip-release@v2
         with:
