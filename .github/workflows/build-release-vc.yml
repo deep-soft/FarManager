@@ -158,7 +158,7 @@ jobs:
           password: '${{ secrets.WINDOWS_PFX_PASSWORD }}'
           certificatesha1: '${{ secrets.WINDOWS_PFX_SHA1_THUMBPRINT }}'
           # certificatename: '${{ secrets.CERTNAME }}'
-          folder: './Release/'
+          folder: '_build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}'
           recursive: true
 
       - name: Create Zip Archive Release
