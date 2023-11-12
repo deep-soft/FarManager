@@ -1,4 +1,4 @@
-# 2023-10-17 12:00
+# 2023-11-12 13:00
 name: Build release VC
 
 on:
@@ -138,6 +138,7 @@ jobs:
 #           dir ../
 
       - name: Add extra plugins NetBox and Colorer
+        continue-on-error: true
         shell: bash
         run: |
           pushd '_build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}/Plugins'
@@ -152,6 +153,7 @@ jobs:
           popd
 
       - name: Sign Windows exe and dll files
+        continue-on-error: true
         uses: deep-soft/code-sign-action@master
         with:
           certificate: '${{ secrets.WINDOWS_PFX_BASE64 }}'
@@ -221,3 +223,74 @@ jobs:
           files: |
             ${{ env.PROG_NAME }}.${{ matrix.platform_name }}.zip
             ${{ env.PROG_NAME }}-latest.txt
+
+# add extra plugins and Profile - begin
+#         if: matrix.platform_sln == 'x64'
+
+      - name: Add extra plugins and Profile
+        if: matrix.platform_sln == 'x64'
+        continue-on-error: true
+        shell: bash
+        run: |
+          pushd '_build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}'
+          curl -LOJ "https://github.com/deep-soft/DS-Progs/raw/main/bin/Far3-Plugins-Extra.zip"
+          curl -LOJ "https://github.com/deep-soft/DS-Progs/raw/main/bin/Far3-Profile.zip"
+          7z x Far3-Plugins-Extra.zip
+          7z x Far3-Profile.zip
+          rm Far3-Plugins-Extra.zip
+          rm Far3-Profile.zip
+          popd
+
+      - name: Sign Windows exe and dll files
+        if: matrix.platform_sln == 'x64'
+        continue-on-error: true
+        uses: deep-soft/code-sign-action@master
+        with:
+          certificate: '${{ secrets.WINDOWS_PFX_BASE64 }}'
+          password: '${{ secrets.WINDOWS_PFX_PASSWORD }}'
+          certificatesha1: '${{ secrets.WINDOWS_PFX_SHA1_THUMBPRINT }}'
+          # certificatename: '${{ secrets.CERTNAME }}'
+          folder: '_build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}'
+          recursive: true
+
+      - name: Create Zip Archive Release
+        if: matrix.platform_sln == 'x64'
+        uses: deep-soft/zip-release@v2
+        with:
+          type: 'zip'
+          filename: 'Far.${{ matrix.build_config }}.${{ matrix.platform_sln }}.${{ env.VERSION }}-extra.zip'
+          directory: '_build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}'
+          exclusions: '*.map *.pdb'
+          recursive_exclusions: '*.map *.pdb changelog *Bel.lng *Cze.lng *Ger.lng *Hun.lng *Ita.lng *Lit.lng *Pol.lng *Rus.lng *Sky.lng *Spa.lng *Ukr* *Bel.hlf *Cze.hlf *Ger.hlf *Hun.hlf *Ita.hlf *Lit.hlf *Pol.hlf *Rus.hlf *Sky.hlf *Spa.hlf *Ukr*'
+          path: '.'
+
+      - name: Publish
+        if: matrix.platform_sln == 'x64'
+        continue-on-error: true
+        uses: deep-soft/action-gh-release@v1
+        with:
+          tag_name: ${{ env.TAG_NAME }}-${{ env.VERSION }}
+          files: |
+            ${{ env.ZIP_RELEASE_ARCHIVE }}
+
+      - name: Prepare latest Release
+        if: matrix.platform_sln == 'x64'
+        continue-on-error: false
+        shell: bash
+        run: |
+          mv ${{ env.ZIP_RELEASE_ARCHIVE }} ${{ env.PROG_NAME }}.${{ matrix.platform_name }}-extra.zip
+          echo "${{ env.VERSION }}" > ${{ env.PROG_NAME }}-extra-latest.txt
+
+      - name: Publish latest Release
+        if: matrix.platform_sln == 'x64'
+        continue-on-error: false
+        uses: deep-soft/action-gh-release@v1
+        with:
+          draft: false
+          tag_name: ${{ env.PROG_NAME }}-latest
+          body: "${{ env.PROG_NAME }} latest: v${{ env.VERSION }}"
+          files: |
+            ${{ env.PROG_NAME }}.${{ matrix.platform_name }}-extra.zip
+            ${{ env.PROG_NAME }}-extra-latest.txt
+
+# add extra plugins and Profile - end
