@@ -228,10 +228,10 @@ jobs:
             ${{ env.PROG_NAME }}-latest.txt
 
 # add extra plugins and Profile - begin
-#         if: matrix.platform_sln == 'x64'
+#         if: ${{ matrix.platform_sln == 'x64' && inputs.extra_plugins_profile == 'true' }}
 
       - name: extra - Add plugins and Profile
-        if: ${{ matrix.platform_sln == 'x64' && inputs.extra_plugins_profile == 'true }}
+        if: ${{ matrix.platform_sln == 'x64' && inputs.extra_plugins_profile == 'true' }}
         continue-on-error: true
         shell: bash
         run: |
