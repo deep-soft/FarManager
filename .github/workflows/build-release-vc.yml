@@ -90,6 +90,11 @@ jobs:
           - { build: msbuild_cl_ARM64_release, compiler: msbuild_cl, arch: amd64_arm64, platform_sln: ARM64, platform_name: ARM64, build_config: Release }
 
     steps:
+      - name: test var
+        if: always() && inputs.extra_plugins_profile && matrix.platform_sln == 'x64'
+        run: |
+          echo " if: always() && inputs.extra_plugins_profile && matrix.platform_sln == 'x64'"
+
       - name: Checkout source
         uses: deep-soft/checkout@v3
 
@@ -232,7 +237,7 @@ jobs:
 #        if: ${{ inputs.extra_plugins_profile }} && ${{ matrix.platform_sln == 'x64' }}
 
       - name: extra - Add plugins and Profile
-        if: ${{ inputs.extra_plugins_profile }} && ${{ matrix.platform_sln == 'x64' }}
+        if: always() && inputs.extra_plugins_profile && matrix.platform_sln == 'x64'
         continue-on-error: true
         shell: bash
         run: |
@@ -246,7 +251,7 @@ jobs:
           popd
 
       - name: extra - Sign Windows exe and dll files
-        if: ${{ inputs.extra_plugins_profile }} && ${{ matrix.platform_sln == 'x64' }}
+        if: always() && inputs.extra_plugins_profile && matrix.platform_sln == 'x64'
         continue-on-error: true
         uses: deep-soft/code-sign-action@master
         with:
@@ -258,7 +263,7 @@ jobs:
           recursive: true
 
       - name: extra - Create Zip Archive Release
-        if: ${{ inputs.extra_plugins_profile }} && ${{ matrix.platform_sln == 'x64' }}
+        if: always() && inputs.extra_plugins_profile && matrix.platform_sln == 'x64'
         uses: deep-soft/zip-release@v2
         with:
           type: 'zip'
@@ -269,7 +274,7 @@ jobs:
           path: '.'
 
       - name: extra - Publish
-        if: ${{ inputs.extra_plugins_profile }} && ${{ matrix.platform_sln == 'x64' }}
+        if: always() && inputs.extra_plugins_profile && matrix.platform_sln == 'x64'
         continue-on-error: true
         uses: deep-soft/action-gh-release@v1
         with:
@@ -286,7 +291,7 @@ jobs:
           echo "${{ env.VERSION }}" > ${{ env.PROG_NAME }}-extra-latest.txt
 
       - name: extra - Publish latest Release
-        if: ${{ inputs.extra_plugins_profile }} && ${{ matrix.platform_sln == 'x64' }}
+        if: always() && inputs.extra_plugins_profile && matrix.platform_sln == 'x64'
         continue-on-error: false
         uses: deep-soft/action-gh-release@v1
         with:
