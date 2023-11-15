@@ -8,6 +8,9 @@ on:
 #    branches: [ master ]
   workflow_dispatch:
     inputs:
+      extra_plugins_profile:
+        default: true
+        type: boolean
       code-style-checks:
         default: true
         type: boolean
@@ -227,8 +230,8 @@ jobs:
 # add extra plugins and Profile - begin
 #         if: matrix.platform_sln == 'x64'
 
-      - name: Add extra plugins and Profile
-        if: matrix.platform_sln == 'x64'
+      - name: extra - Add plugins and Profile
+        if: ${{ matrix.platform_sln == 'x64' && inputs.extra_plugins_profile == 'true }}
         continue-on-error: true
         shell: bash
         run: |
@@ -241,8 +244,8 @@ jobs:
           rm Far3-Profile.zip
           popd
 
-      - name: Sign Windows exe and dll files
-        if: matrix.platform_sln == 'x64'
+      - name: extra - Sign Windows exe and dll files
+        if: ${{ matrix.platform_sln == 'x64' && inputs.extra_plugins_profile == 'true }}
         continue-on-error: true
         uses: deep-soft/code-sign-action@master
         with:
@@ -253,8 +256,8 @@ jobs:
           folder: '_build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}'
           recursive: true
 
-      - name: Create Zip Archive Release
-        if: matrix.platform_sln == 'x64'
+      - name: extra - Create Zip Archive Release
+        if: ${{ matrix.platform_sln == 'x64' && inputs.extra_plugins_profile == 'true }}
         uses: deep-soft/zip-release@v2
         with:
           type: 'zip'
@@ -264,8 +267,8 @@ jobs:
           recursive_exclusions: '*.map *.pdb changelog *Bel.lng *Cze.lng *Ger.lng *Hun.lng *Ita.lng *Lit.lng *Pol.lng *Rus.lng *Sky.lng *Spa.lng *Ukr* *Bel.hlf *Cze.hlf *Ger.hlf *Hun.hlf *Ita.hlf *Lit.hlf *Pol.hlf *Rus.hlf *Sky.hlf *Spa.hlf *Ukr*'
           path: '.'
 
-      - name: Publish
-        if: matrix.platform_sln == 'x64'
+      - name: extra - Publish
+        if: ${{ matrix.platform_sln == 'x64' && inputs.extra_plugins_profile == 'true }}
         continue-on-error: true
         uses: deep-soft/action-gh-release@v1
         with:
@@ -273,16 +276,16 @@ jobs:
           files: |
             ${{ env.ZIP_RELEASE_ARCHIVE }}
 
-      - name: Prepare latest Release
-        if: matrix.platform_sln == 'x64'
+      - name: extra - Prepare latest Release
+        if: ${{ matrix.platform_sln == 'x64' && inputs.extra_plugins_profile == 'true }}
         continue-on-error: false
         shell: bash
         run: |
           mv ${{ env.ZIP_RELEASE_ARCHIVE }} ${{ env.PROG_NAME }}.${{ matrix.platform_name }}-extra.zip
           echo "${{ env.VERSION }}" > ${{ env.PROG_NAME }}-extra-latest.txt
 
-      - name: Publish latest Release
-        if: matrix.platform_sln == 'x64'
+      - name: extra - Publish latest Release
+        if: ${{ matrix.platform_sln == 'x64' && inputs.extra_plugins_profile == 'true }}
         continue-on-error: false
         uses: deep-soft/action-gh-release@v1
         with:
