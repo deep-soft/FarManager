@@ -283,7 +283,7 @@ jobs:
             ${{ env.ZIP_RELEASE_ARCHIVE }}
 
       - name: extra - Prepare latest Release
-        if: ${{ inputs.extra_plugins_profile }} && ${{ matrix.platform_sln == 'x64' }}
+        if: always() && inputs.extra_plugins_profile && matrix.platform_sln == 'x64'
         continue-on-error: false
         shell: bash
         run: |
