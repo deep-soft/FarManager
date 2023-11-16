@@ -36,30 +36,6 @@ local function assert_range(val, low, high)
   return true
 end
 
-local function CmpName(mask, name, flags)
-  return far.ProcessName("PN_CMPNAME", mask, name, flags)
-end
-
-far.CmpName = CmpName
-
-local function CmpNameList(mask, name, flags)
-  return far.ProcessName("PN_CMPNAMELIST", mask, name, flags)
-end
-
-far.CmpNameList = CmpNameList
-
-local function GenerateName(mask, name, size)
-  return far.ProcessName("PN_GENERATENAME", mask, name, 0, size)
-end
-
-far.GenerateName = GenerateName
-
-local function CheckMask(mask)
-  return far.ProcessName("PN_CHECKMASK", mask)
-end
-
-far.CheckMask = CheckMask
-
 local MT = {} -- "macrotest", this module
 local F = far.Flags
 local band, bor, bnot = bit64.band, bit64.bor, bit64.bnot
@@ -1274,6 +1250,8 @@ end
 
 -- N=Panel.Select(panelType,Action[,Mode[,Items]])
 local function Test_Panel_Select()
+  local adir_old = panel.GetPanelDirectory(nil,1) -- store active panel directory
+
   local PS = assert_func(Panel.Select)
   local RM,ADD,INV,RST = 0,1,2,3 -- Action
   local MODE
@@ -1364,6 +1342,8 @@ local function Test_Panel_Select()
   assert_eq(count,PS(0,INV,MODE,mask))
   pi = assert_table(panel.GetPanelInfo(1))
   assert_eq(0, pi.SelectedItemsNumber)
+
+  panel.SetPanelDirectory(nil,1,adir_old) -- restore active panel directory
 end
 
 function MT.test_Panel()
