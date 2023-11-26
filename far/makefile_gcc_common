@@ -79,6 +79,12 @@ ifndef DIRBIT
   endif
  endif
 endif # DIRBIT
+
+ifdef CLANG
+DIRSUFFIX=clang
+else # CLANG
+DIRSUFFIX=gcc
+endif # CLANG
 # Output directory setup end
 
 # Main flags setup
@@ -165,7 +171,6 @@ else # DEBUG
 CFLAGS += \
 	-DNDEBUG \
 	-O3 \
-	-fomit-frame-pointer \
 
 ifeq ($(USE_LTO),1)
 CFLAGS += \
@@ -175,7 +180,7 @@ CFLAGS += \
 endif # USE_LTO
 
 LNKFLAGS += \
-	-Xlinker --gc-sections
+	-Xlinker --gc-sections \
 
 endif # DEBUG
 # Configuration-specific flags end
@@ -194,6 +199,17 @@ endif
 # Platform-specific flags end
 
 # Compiler-specific flags
+PDB_FLAGS = \
+	-g \
+	-gcodeview \
+
+LLD_FLAGS = \
+	-fuse-ld=lld \
+	-Xlinker --allow-multiple-definition \
+	-Xlinker -Map \
+	-Xlinker $(MAP) \
+	-Xlinker --pdb= \
+
 ifdef CLANG
 ifeq ($(DIRBIT), 32)
 CLANG_TARGET = i686-pc-windows-gnu
@@ -205,36 +221,37 @@ CLANG_FLAGS = \
 	-target $(CLANG_TARGET) \
 	-Wno-unknown-warning-option \
 	-fms-extensions \
+	-fno-emulated-tls \
 	-Weverything \
+	$(PDB_FLAGS)
 
 CFLAGS += $(CLANG_FLAGS)
 
 LNKFLAGS += \
 	$(CLANG_FLAGS) \
-	-fuse-ld=lld \
-	-Xlinker --allow-multiple-definition \
-	-Xlinker -Map \
-	-Xlinker $(MAP) \
-
-ifndef DEBUG
-LNKFLAGS += \
-	-Xlinker --strip-all \
-
-endif
+	$(LLD_FLAGS) \
 
 else
+ifndef USE_LLD
 # LD map files are unusable for tracing,
 # so we keep the symbols, objdump them and strip manually.
 # LLD, on the contrary, generates good maps and doesn't need this trickery.
 USE_OBJDUMP_MAPS=1
 endif
+endif
 # Compiler-specific flags end
 
-ifdef USE_LLD
+ifndef USE_OBJDUMP_MAPS
+ifdef DEBUG
 LNKFLAGS += \
-	-fuse-ld=lld \
-	-Xlinker --allow-multiple-definition \
+	-Xlinker --strip-all \
 
+endif
+endif
+
+ifdef USE_LLD
+CFLAGS += $(PDB_FLAGS)
+LNKFLAGS += $(LLD_FLAGS)
 endif
 
 ifeq ($(findstring ----,---$(strip $(MAKEFLAGS))-),)
