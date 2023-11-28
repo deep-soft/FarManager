@@ -342,33 +342,37 @@ void Edit::FastShow(const ShowInfo* Info)
 		{
 			const auto Cr = L'♪', Lf = L'◙';
 
-			if (m_Eol == eol::mac)
+			switch (get_eol())
 			{
+			case eol::eol_type::none:
+				break;
+
+			case eol::eol_type::mac:
 				OutStr.push_back(Cr);
-			}
-			else if (m_Eol == eol::unix)
-			{
+				break;
+
+			case eol::eol_type::unix:
 				OutStr.push_back(Lf);
-			}
-			else if (m_Eol == eol::win)
-			{
+				break;
+
+			case eol::eol_type::win:
 				OutStr.push_back(Cr);
 				if(OutStr.size() < EditLength)
-				{
 					OutStr.push_back(Lf);
-				}
-			}
-			else if (m_Eol == eol::bad_win)
-			{
+				break;
+
+			case eol::eol_type::bad_win:
 				OutStr.push_back(Cr);
 				if(OutStr.size() < EditLength)
 				{
 					OutStr.push_back(Cr);
 					if(OutStr.size() < EditLength)
-					{
 						OutStr.push_back(Lf);
-					}
 				}
+				break;
+
+			default:
+				std::unreachable();
 			}
 		}
 
@@ -397,7 +401,8 @@ void Edit::FastShow(const ShowInfo* Info)
 		if (m_Flags.Check(FEDITLINE_EDITORMODE))
 		{
 			// Editor highlight
-			ApplyColor(XPos, FocusedLeftPos, RealToVisual);
+			if (const auto Colors = GetEditor()->GetColors(this); Colors)
+				ApplyColor(*Colors, XPos, FocusedLeftPos, RealToVisual);
 		}
 
 		if (TabSelStart == -1)
@@ -1522,12 +1527,12 @@ void Edit::SetHiString(string_view const Str)
 
 void Edit::SetEOL(eol Eol)
 {
-	m_Eol = Eol;
+	set_eol(Eol.type());
 }
 
 eol Edit::GetEOL() const
 {
-	return m_Eol;
+	return get_eol();
 }
 
 /* $ 25.07.2000 tran
@@ -1560,7 +1565,7 @@ void Edit::SetString(string_view Str, bool const KeepSelection)
 	{
 		if (Str.ends_with(L'\r'))
 		{
-			m_Eol = eol::mac;
+			set_eol(eol::eol_type::mac);
 			Str.remove_suffix(1);
 		}
 		else
@@ -1576,16 +1581,16 @@ void Edit::SetString(string_view Str, bool const KeepSelection)
 					if (Str.ends_with(L'\r'))
 					{
 						Str.remove_suffix(1);
-						m_Eol = eol::bad_win;
+						set_eol(eol::eol_type::bad_win);
 					}
 					else
-						m_Eol = eol::win;
+						set_eol(eol::eol_type::win);
 				}
 				else
-					m_Eol = eol::unix;
+					set_eol(eol::eol_type::unix);
 			}
 			else
-				m_Eol = eol::none;
+				set_eol(eol::eol_type::none);
 		}
 	}
 
@@ -2056,32 +2061,11 @@ void Edit::DeleteBlock()
 	Changed(true);
 }
 
-void Edit::AddColor(const ColorItem& col)
-{
-	ColorList.insert(col);
-}
-
-void Edit::DeleteColor(delete_color_condition const Condition)
-{
-	std::erase_if(ColorList, Condition);
-}
-
-bool Edit::GetColor(ColorItem& col, size_t Item) const
-{
-	if (Item >= ColorList.size())
-		return false;
-
-	auto it = ColorList.begin();
-	std::advance(it, Item);
-	col = *it;
-	return true;
-}
-
-void Edit::ApplyColor(int XPos, int FocusedLeftPos, positions_cache& RealToVisual)
+void Edit::ApplyColor(std::multiset<ColorItem> const& Colors, int XPos, int FocusedLeftPos, positions_cache& RealToVisual)
 {
 	const auto Width = ObjWidth();
 
-	for (const auto& CurItem: ColorList)
+	for (const auto& CurItem: Colors)
 	{
 		// Skip invalid
 		if (CurItem.StartPos > CurItem.EndPos)
@@ -2345,6 +2329,19 @@ bool Edit::is_valid_surrogate_pair_at(size_t const Position) const
 {
 	string_view const Str(m_Str);
 	return Position < Str.size() && is_valid_surrogate_pair(Str.substr(Position));
+}
+
+static constexpr auto eol_shift = std::countr_zero(as_unsigned(std::to_underlying(FEDITLINE_EOL_MASK)));
+
+eol::eol_type Edit::get_eol() const
+{
+	return static_cast<eol::eol_type>((m_Flags.Flags() & FEDITLINE_EOL_MASK) >> eol_shift);
+}
+
+void Edit::set_eol(eol::eol_type const Eol)
+{
+	m_Flags.Clear(FEDITLINE_EOL_MASK);
+	m_Flags.Set(std::to_underlying(Eol) << eol_shift);
 }
 
 bool Edit::is_clear_selection_key(unsigned const Key)
