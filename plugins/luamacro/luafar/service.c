@@ -9,7 +9,6 @@
 #include "luafar.h"
 #include "util.h"
 #include "ustring.h"
-#include "compat52.h"
 
 #ifndef LUADLL
 # if LUA_VERSION_NUM == 501
@@ -5503,8 +5502,8 @@ static int far_FormatFileSize(lua_State *L)
 {
 	uint64_t Size = (uint64_t) luaL_checknumber(L, 1);
 	intptr_t Width = luaL_checkinteger(L, 2);
-	if (abs(Width) > 0x20000)
-		return luaL_error(L, "the 'Width' argument exceeds 128 KBytes");
+	if (abs(Width) > 10000)
+		return luaL_error(L, "the 'Width' argument exceeds 10000");
 
 	UINT64 Flags = OptFlags(L, 3, 0) & ~FFFS_MINSIZEINDEX_MASK;
 	Flags |= luaL_optinteger(L, 4, 0) & FFFS_MINSIZEINDEX_MASK;
