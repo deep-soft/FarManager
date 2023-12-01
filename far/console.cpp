@@ -1125,7 +1125,7 @@ protected:
 		for_submatrix(Buffer, SubRect, [&](FAR_CHAR_INFO& i)
 		{
 			const auto& Cell = *ConsoleBufferIterator++;
-			i = { replace_replacement_if_needed(Cell), colors::unresolve_defaults(colors::NtColorToFarColor(Cell.Attributes)) };
+			i = { replace_replacement_if_needed(Cell), {}, {}, colors::unresolve_defaults(colors::NtColorToFarColor(Cell.Attributes)) };
 		});
 
 		return true;
@@ -1429,9 +1429,9 @@ WARNING_POP()
 				LastColor = Cell.Attributes;
 			}
 
-			if (CharWidthEnabled && Cell.Char == encoding::replace_char && Cell.Attributes.Reserved > std::numeric_limits<wchar_t>::max())
+			if (CharWidthEnabled && Cell.Char == encoding::replace_char && Cell.Reserved1 > std::numeric_limits<wchar_t>::max())
 			{
-				const auto Pair = encoding::utf16::to_surrogate(Cell.Attributes.Reserved);
+				const auto Pair = encoding::utf16::to_surrogate(Cell.Reserved1);
 				append(Str, Pair.first, Pair.second);
 
 				if (char_width::is_half_width_surrogate_broken())
@@ -2591,7 +2591,7 @@ TEST_CASE("console.vt_color")
 
 TEST_CASE("console.vt_sequence")
 {
-	FAR_CHAR_INFO const def{ L' ', colors::default_color() };
+	FAR_CHAR_INFO const def{ L' ', {}, {}, colors::default_color() };
 
 	const auto check = [](span<FAR_CHAR_INFO> const Buffer, string_view const Expected)
 	{
