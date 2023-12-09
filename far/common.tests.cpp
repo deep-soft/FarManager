@@ -185,7 +185,7 @@ TEST_CASE("2d.algorithm")
 		21, 22, 23, 24, 25,
 	};
 
-	REQUIRE(std::equal(ALL_CONST_RANGE(Data), ALL_CONST_RANGE(Expected)));
+	REQUIRE(std::ranges::equal(Data, Expected));
 	REQUIRE(Value == StartValue + 3 * 3);
 }
 
@@ -208,7 +208,7 @@ TEST_CASE("algorithm.apply_permutation")
 {
 	{
 		std::vector<int> Data, Indices;
-		apply_permutation(ALL_RANGE(Data), Indices.begin());
+		apply_permutation(Data, Indices.begin());
 		REQUIRE(Data.empty());
 		REQUIRE(Indices.empty());
 	}
@@ -221,7 +221,7 @@ TEST_CASE("algorithm.apply_permutation")
 			std::size(Data) == std::size(Expected) &&
 			std::size(Data) == std::size(Indices)
 		);
-		apply_permutation(ALL_RANGE(Data), Indices.begin());
+		apply_permutation(Data, Indices.begin());
 		REQUIRE(Data == Expected);
 	}
 }
@@ -383,7 +383,7 @@ TEST_CASE("base64.random.roundtrip")
 	std::uniform_int_distribution CharDist(0, UCHAR_MAX);
 
 	char RandomInput[256];
-	std::generate(ALL_RANGE(RandomInput), [&]{ return CharDist(mt); });
+	std::ranges::generate(RandomInput, [&]{ return CharDist(mt); });
 
 	const auto Encoded = base64::encode(view_bytes(RandomInput));
 	REQUIRE(base64::decode(Encoded) == view_bytes(RandomInput));
@@ -1825,9 +1825,9 @@ TEST_CASE("utility.hash_range")
 	const auto s2 = L"12345"s;
 	const auto s3 = L"abcde"s;
 
-	const auto h1 = hash_range(ALL_CONST_RANGE(s1));
-	const auto h2 = hash_range(ALL_CONST_RANGE(s2));
-	const auto h3 = hash_range(ALL_CONST_RANGE(s3));
+	const auto h1 = hash_range(s1);
+	const auto h2 = hash_range(s2);
+	const auto h3 = hash_range(s3);
 
 	REQUIRE(h1 == h2);
 	REQUIRE(h2 != h3);

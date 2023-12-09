@@ -282,7 +282,7 @@ public:
 	void SortItems(predicate Pred, bool Reverse = false, int Offset = 0)
 	{
 		SortItemParam Param { Reverse, Offset };
-		std::sort(ALL_RANGE(Items), [&](const auto& a, const auto& b) { return Pred(a, b, Param); });
+		std::ranges::sort(Items, [&](const auto& a, const auto& b) { return Pred(a, b, Param); });
 
 		// скорректируем SelectPos
 		UpdateSelectPos();
@@ -308,7 +308,7 @@ private:
 	bool CheckKeyHiOrAcc(DWORD Key, int Type, bool Translate, bool ChangePos, int& NewPos);
 	int CheckHighlights(wchar_t CheckSymbol,int StartPos=0) const;
 	wchar_t GetHighlights(const MenuItemEx *Item) const;
-	size_t GetItemMaxShowPos(int Item);
+	size_t GetItemMaxShowPos(int Item) const;
 	bool SetItemShowPos(int Item, int NewShowPos); // Negative NewShowPos is relative to the right side; -1 aligns the item to the right
 	bool ShiftItemShowPos(int Item,int Shift); // Shifts item's ShowPos; if Shift is positive, the item visually moves left
 	bool SetAllItemsShowPos(int NewShowPos);
