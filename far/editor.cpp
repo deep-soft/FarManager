@@ -3533,7 +3533,7 @@ void Editor::DoSearchReplace(const SearchReplaceDisposition Disposition)
 
 					TmpPtr=m_it_CurLine=CurPtr;
 
-					for ([[maybe_unused]] const auto& i: irange(FromTop))
+					for ([[maybe_unused]] const auto i: std::views::iota(0, FromTop))
 					{
 						if (TmpPtr != Lines.begin())
 							--TmpPtr;
@@ -5497,7 +5497,7 @@ int Editor::EditorControl(int Command, intptr_t Param1, void *Param2)
 			{
 				BeginStreamMarking(CurPtr);
 
-				for (const auto& i: irange(Sel->BlockHeight))
+				for (const auto i: std::views::iota(0, Sel->BlockHeight))
 				{
 					const auto SelStart = i? 0 : Sel->BlockStartPos;
 					const auto SelEnd = (i < Sel->BlockHeight - 1)? -1 : Sel->BlockStartPos + Sel->BlockWidth;
@@ -6161,7 +6161,7 @@ Editor::numbered_iterator Editor::GetStringByNumber(int DestLine)
 
 	if(Forward)
 	{
-		for ([[maybe_unused]] const auto& Line: irange(DestLine - CurPtr.Number()))
+		for ([[maybe_unused]] const auto Line: std::views::iota(0, DestLine - CurPtr.Number()))
 		{
 			++CurPtr;
 			if (CurPtr == Lines.end())
@@ -6173,7 +6173,7 @@ Editor::numbered_iterator Editor::GetStringByNumber(int DestLine)
 	}
 	else
 	{
-		for ([[maybe_unused]] const auto& Line: irange(CurPtr.Number() - DestLine))
+		for ([[maybe_unused]] const auto Line: std::views::iota(0, CurPtr.Number() - DestLine))
 		{
 			if (CurPtr == Lines.begin())
 				CurPtr = EndIterator();
@@ -6643,17 +6643,17 @@ static std::string_view GetLineBytes(string_view const Str, std::vector<char>& B
 	}
 }
 
-bool Editor::SetLineCodePage(iterator const& Iterator, uintptr_t CurrentCodepage, uintptr_t const NewCodepage, bool const Validate)
+bool Editor::SetLineCodePage(Edit& Line, uintptr_t CurrentCodepage, uintptr_t const NewCodepage, bool const Validate)
 {
-	if (Iterator->m_Str.empty())
+	if (Line.m_Str.empty())
 		return true;
 
 	encoding::diagnostics Diagnostics;
-	const auto Bytes = GetLineBytes(Iterator->m_Str, decoded, CurrentCodepage, Validate? &Diagnostics : nullptr);
+	const auto Bytes = GetLineBytes(Line.m_Str, decoded, CurrentCodepage, Validate? &Diagnostics : nullptr);
 	auto Result = !Bytes.empty() && !Diagnostics.ErrorPosition;
-	encoding::get_chars(NewCodepage, Bytes, Iterator->m_Str, &Diagnostics);
-	Result = Result && !Iterator->m_Str.empty() && !Diagnostics.ErrorPosition;
-	Iterator->Changed();
+	encoding::get_chars(NewCodepage, Bytes, Line.m_Str, &Diagnostics);
+	Result = Result && !Line.m_Str.empty() && !Diagnostics.ErrorPosition;
+	Line.Changed();
 
 	return Result;
 }
@@ -6715,7 +6715,7 @@ bool Editor::SetCodePage(uintptr_t const CurrentCodepage, uintptr_t const NewCod
 
 	auto Result = true;
 
-	FOR_RANGE(Lines, i)
+	for(auto& i: Lines)
 	{
 		if (!SetLineCodePage(i, CurrentCodepage, NewCodepage, Result))
 			Result = false;
