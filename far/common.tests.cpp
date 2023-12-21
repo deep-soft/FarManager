@@ -894,37 +894,6 @@ TEST_CASE("placement")
 
 #include "common/preprocessor.hpp"
 
-TEST_CASE("preprocessor.types")
-{
-	{
-		using type = std::vector<int>;
-		type v;
-
-		STATIC_REQUIRE(std::same_as<REFERENCE(v),              type::reference>);
-		STATIC_REQUIRE(std::same_as<CONST_REFERENCE(v),        type::const_reference>);
-		STATIC_REQUIRE(std::same_as<VALUE_TYPE(v),             type::value_type>);
-		STATIC_REQUIRE(std::same_as<CONST_VALUE_TYPE(v),       type::value_type const>);
-		STATIC_REQUIRE(std::same_as<ITERATOR(v),               type::iterator>);
-		STATIC_REQUIRE(std::same_as<CONST_ITERATOR(v),         type::const_iterator>);
-		STATIC_REQUIRE(std::same_as<REVERSE_ITERATOR(v),       type::reverse_iterator>);
-		STATIC_REQUIRE(std::same_as<CONST_REVERSE_ITERATOR(v), type::const_reverse_iterator>);
-	}
-
-	{
-		using type = int[2];
-		type v;
-
-		STATIC_REQUIRE(std::same_as<REFERENCE(v),              int&>);
-		STATIC_REQUIRE(std::same_as<CONST_REFERENCE(v),        int const&>);
-		STATIC_REQUIRE(std::same_as<VALUE_TYPE(v),             int>);
-		STATIC_REQUIRE(std::same_as<CONST_VALUE_TYPE(v),       int const>);
-		STATIC_REQUIRE(std::same_as<ITERATOR(v),               int*>);
-		STATIC_REQUIRE(std::same_as<CONST_ITERATOR(v),         int const*>);
-		STATIC_REQUIRE(std::same_as<REVERSE_ITERATOR(v),       std::reverse_iterator<int*>>);
-		STATIC_REQUIRE(std::same_as<CONST_REVERSE_ITERATOR(v), std::reverse_iterator<int const*>>);
-	}
-}
-
 TEST_CASE("preprocessor.copy-move")
 {
 	{
@@ -1644,10 +1613,21 @@ TEST_CASE("string_utils.split")
 	}
 }
 
-TEST_CASE("string_utils.misc")
+TEST_CASE("string_utils.null_terminated")
 {
-	REQUIRE(!null_terminated(L"12345"sv.substr(0, 2)).c_str()[2]);
+	const auto Str = L"12345"sv;
 
+	const auto LuckyCase = null_terminated(Str.substr(1));
+	REQUIRE(!LuckyCase.c_str()[4]);
+	REQUIRE(LuckyCase.c_str() == Str.data() + 1);
+
+	const auto UnluckyCase = null_terminated(Str.substr(0, 2));
+	REQUIRE(!UnluckyCase.c_str()[2]);
+	REQUIRE(UnluckyCase.c_str() != Str.data());
+}
+
+TEST_CASE("string_utils.string_copyref")
+{
 	{
 		auto Str = L"Sempre assim em cima, em cima, em cima, em cima"s;
 		string_copyref StrCr1(Str);
@@ -1670,6 +1650,15 @@ TEST_CASE("string_utils.misc")
 		STATIC_REQUIRE(!std::is_move_constructible_v<string_copyref>);
 		STATIC_REQUIRE(!std::is_move_assignable_v<string_copyref>);
 	}
+}
+
+TEST_CASE("string_utils.concat")
+{
+	{
+		auto Str = L"ba"s;
+		append(Str, L"nan"sv, L'a');
+		REQUIRE(Str == L"banana"sv);
+	}
 
 	REQUIRE(concat(L'a', L"bc", L"def"sv, L"1234"s) == L"abcdef1234"sv);
 	REQUIRE(concat(L""sv, L""sv).empty());
@@ -1681,7 +1670,15 @@ TEST_CASE("string_utils.misc")
 	REQUIRE(L"123"sv + L"45"sv == L"12345"sv);
 }
 
-#ifdef __cpp_lib_generic_unordered_lookup
+TEST_CASE("string_utils.lvalue_string_view")
+{
+	STATIC_REQUIRE(std::constructible_from<lvalue_string_view, string_view>);
+	STATIC_REQUIRE(std::constructible_from<lvalue_string_view, string const&>);
+	STATIC_REQUIRE(std::constructible_from<lvalue_string_view, string&>);
+	STATIC_REQUIRE(!std::constructible_from<lvalue_string_view, string&&>);
+	STATIC_REQUIRE(!std::constructible_from<lvalue_string_view, string>);
+}
+
 TEST_CASE("string_utils.generic_lookup")
 {
 	const unordered_string_map<int> Map
@@ -1692,7 +1689,6 @@ TEST_CASE("string_utils.generic_lookup")
 	REQUIRE(Map.find(L"123"sv) != Map.cend());
 	REQUIRE(Map.find(L"123") != Map.cend());
 }
-#endif
 
 //----------------------------------------------------------------------------
 
@@ -1702,82 +1698,6 @@ TEST_CASE("type_traits")
 {
 	STATIC_REQUIRE(is_one_of_v<int, char, bool, int>);
 	STATIC_REQUIRE(!is_one_of_v<int, char, bool, unsigned int>);
-
-
-	STATIC_REQUIRE(range_like<range<int*>>);
-	STATIC_REQUIRE(range_like<span<int>>);
-	STATIC_REQUIRE(range_like<int[1]>);
-	STATIC_REQUIRE(range_like<std::initializer_list<int>>);
-	STATIC_REQUIRE(range_like<std::vector<int>>);
-	STATIC_REQUIRE(range_like<std::string_view>);
-	STATIC_REQUIRE(range_like<std::string>);
-	STATIC_REQUIRE(range_like<std::list<int>>);
-	STATIC_REQUIRE(range_like<std::set<int>>);
-	STATIC_REQUIRE(!range_like<int>);
-	STATIC_REQUIRE(!range_like<void>);
-
-
-	STATIC_REQUIRE(span_like<span<int>>);
-	STATIC_REQUIRE(span_like<range<int*>>);
-	STATIC_REQUIRE(span_like<int[1]>);
-	STATIC_REQUIRE(span_like<std::initializer_list<int>>);
-	STATIC_REQUIRE(span_like<std::vector<int>>);
-	STATIC_REQUIRE(span_like<std::string_view>);
-	STATIC_REQUIRE(span_like<std::string>);
-	STATIC_REQUIRE(!span_like<std::list<int>>);
-	STATIC_REQUIRE(!span_like<std::set<int>>);
-	STATIC_REQUIRE(!span_like<int>);
-	STATIC_REQUIRE(!span_like<void>);
-
-
-	STATIC_REQUIRE(std::same_as<int, value_type<std::vector<int>>>);
-	STATIC_REQUIRE(std::same_as<int, value_type<std::list<int>>>);
-	STATIC_REQUIRE(std::same_as<int, value_type<int[1]>>);
-	STATIC_REQUIRE_ERROR(int, typename value_type<TestType>);
-
-	{
-		struct test_type
-		{
-			using value_type = char;
-
-			int* begin()  const { return {}; }
-			int* end()    const { return {}; }
-
-			bool* data()  const { return {}; }
-			size_t size() const { return {}; }
-		};
-
-		STATIC_REQUIRE(std::same_as<char, value_type<test_type>>);
-		STATIC_REQUIRE(range_like<test_type>);
-		STATIC_REQUIRE(span_like<test_type>);
-	}
-
-	{
-		struct test_type
-		{
-			int* begin()  const { return {}; }
-			int* end()    const { return {}; }
-
-			bool* data()  const { return {}; }
-			size_t size() const { return {}; }
-		};
-
-		STATIC_REQUIRE(std::same_as<bool, value_type<test_type>>);
-		STATIC_REQUIRE(range_like<test_type>);
-		STATIC_REQUIRE(span_like<test_type>);
-	}
-
-	{
-		struct test_type
-		{
-			int* begin()  const { return {}; }
-			int* end()    const { return {}; }
-		};
-
-		STATIC_REQUIRE(std::same_as<int, value_type<test_type>>);
-		STATIC_REQUIRE(range_like<test_type>);
-		STATIC_REQUIRE(!span_like<test_type>);
-	}
 
 	enum class foo: int;
 	STATIC_REQUIRE(std::same_as<sane_underlying_type<foo>, int>);
