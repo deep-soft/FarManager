@@ -272,16 +272,13 @@ namespace colors
 				return;
 			}
 
-			const auto to_rgba = [](COLORREF const Color, bool const IsIndex)
+			const auto to_rgba = [&](COLORREF const Color, bool const IsIndex)
 			{
-				return colors::to_rgba(IsIndex? ConsoleIndexToTrueColor(Color) : Color);
+				return colors::to_rgba(IsIndex? ConsoleIndexToTrueColor(resolve_default(Color, Flag == FCF_FG_INDEX)) : Color);
 			};
 
-			const auto ResolvedTopValue = resolve_default(TopValue, Flag == FCF_FG_INDEX);
-			const auto ResolvedBottomValue = resolve_default(BottomValue, Flag == FCF_FG_INDEX);
-
-			const auto TopRGBA = to_rgba(ResolvedTopValue, (Top.Flags & Flag) != 0);
-			const auto BottomRGBA = to_rgba(ResolvedBottomValue, (Bottom.Flags & Flag) != 0);
+			const auto TopRGBA = to_rgba(TopValue, (Top.Flags & Flag) != 0);
+			const auto BottomRGBA = to_rgba(BottomValue, (Bottom.Flags & Flag) != 0);
 
 			const auto calc_channel = [&](unsigned char rgba::*Accessor)
 			{
@@ -454,7 +451,7 @@ namespace colors
 
 	static_assert(Index8ToRGB.size() == 256);
 
-	static uint8_t get_closest_palette_index(COLORREF const Color, span<COLORREF const> const Palette)
+	static uint8_t get_closest_palette_index(COLORREF const Color, std::span<COLORREF const> const Palette)
 	{
 		static std::unordered_map<COLORREF, uint8_t> Map16, Map256;
 		auto& Map = Palette.size() == index::nt_size? Map16 : Map256;
@@ -484,12 +481,12 @@ namespace colors
 		};
 
 		const auto Skip = Palette.size() == index::nt_size? 0 : index::nt_size;
-		const auto ClosestPointIterator = std::min_element(Palette.cbegin() + Skip, Palette.cend(), [&](COLORREF const Item1, COLORREF const Item2)
+		const auto ClosestPointIterator = std::ranges::min_element(Palette.begin() + Skip, Palette.end(), [&](COLORREF const Item1, COLORREF const Item2)
 		{
 			return distance(Item1) < distance(Item2);
 		});
 
-		const auto ClosestIndex = ClosestPointIterator - Palette.cbegin();
+		const auto ClosestIndex = ClosestPointIterator - Palette.begin();
 
 		Map.emplace(Color, ClosestIndex);
 
@@ -521,7 +518,7 @@ namespace colors
 		return Color | (Flags & FCF_RAWATTR_MASK);
 	}
 
-static index_color_256 FarColorToConsoleColor(FarColor Color, FarColor& LastColor, span<COLORREF const> const Palette)
+static index_color_256 FarColorToConsoleColor(FarColor Color, FarColor& LastColor, std::span<COLORREF const> const Palette)
 {
 	Color = resolve_defaults(Color);
 

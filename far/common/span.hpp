@@ -1,12 +1,12 @@
-﻿#ifndef LANG_HPP_BB6D2D7F_CD59_4D0F_B11D_2077A8A22947
-#define LANG_HPP_BB6D2D7F_CD59_4D0F_B11D_2077A8A22947
+﻿#ifndef SPAN_HPP_3B87674F_96D1_487D_B83E_43E43EFBA4D3
+#define SPAN_HPP_3B87674F_96D1_487D_B83E_43E43EFBA4D3
 #pragma once
 
 /*
-lang.hpp
+span.hpp
 */
 /*
-Copyright © 2010 Far Group
+Copyright © 2014 Far Group
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -32,29 +32,38 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-// Internal:
-#include "bootstrap/lang.inc"
-
-// Platform:
-
-// Common:
-
-// External:
+#include <span>
 
 //----------------------------------------------------------------------------
 
-constexpr lng operator+(lng Id, std::integral auto Shift)
+template<class span_value_type>
+class [[nodiscard]] span: public std::span<span_value_type>
 {
-	return static_cast<lng>(std::to_underlying(Id) + Shift);
-}
+	using base_span = std::span<span_value_type>;
+	// Can't use base_span alias here, Clang isn't smart enough.
+	using std::span<span_value_type>::span;
 
-inline lng operator++(lng& Id, int)
-{
-	const auto Value = Id;
-	Id = Id + 1;
-	return Value;
-}
+public:
+	template<std::ranges::contiguous_range SpanLike> requires requires { base_span(std::declval<SpanLike&>()); }
+	constexpr explicit(false) span(SpanLike&& Span) noexcept:
+		base_span(Span)
+	{
+	}
 
-const string& msg(lng Id);
+	// Design by committee
+	constexpr span(const std::initializer_list<span_value_type>& List) noexcept:
+		base_span(List)
+	{
+	}
+};
 
-#endif // LANG_HPP_BB6D2D7F_CD59_4D0F_B11D_2077A8A22947
+template<std::contiguous_iterator Iterator>
+span(Iterator Begin, size_t Size) -> span<std::remove_reference_t<decltype(*Begin)>>;
+
+template<std::ranges::contiguous_range container>
+span(container&& c) -> span<std::remove_reference_t<decltype(*std::begin(c))>>;
+
+template<typename value_type>
+span(const std::initializer_list<value_type>&) -> span<const value_type>;
+
+#endif // SPAN_HPP_3B87674F_96D1_487D_B83E_43E43EFBA4D3

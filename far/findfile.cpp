@@ -624,7 +624,7 @@ void FindFiles::SetPluginDirectory(string_view const DirName, const plugin_panel
 			// force plugin to update its file list (that can be empty at this time)
 			// if not done SetDirectory may fail
 			{
-				span<PluginPanelItem> PanelData;
+				std::span<PluginPanelItem> PanelData;
 
 				SCOPED_ACTION(std::scoped_lock)(PluginCS);
 				if (Global->CtrlObject->Plugins->GetFindData(hPlugin, PanelData, OPM_SILENT))
@@ -987,7 +987,7 @@ bool FindFiles::GetPluginFile(ArcListItem const* const ArcItem, const os::fs::fi
 	SetPluginDirectory(FindData.FileName,ArcItem->hPlugin,false,UserData);
 	const auto FileNameToFind = PointToName(FindData.FileName);
 	const auto FileNameToFindShort = FindData.HasAlternateFileName()? PointToName(FindData.AlternateFileName()) : string_view{};
-	span<PluginPanelItem> Items;
+	std::span<PluginPanelItem> Items;
 	bool nResult=false;
 
 	if (Global->CtrlObject->Plugins->GetFindData(ArcItem->hPlugin, Items, OPM_SILENT))
@@ -997,7 +997,7 @@ bool FindFiles::GetPluginFile(ArcListItem const* const ArcItem, const os::fs::fi
 			return FileNameToFind == NullToEmpty(Item.FileName) && FileNameToFindShort == NullToEmpty(Item.AlternateFileName);
 		});
 
-		if (It != Items.cend())
+		if (It != Items.end())
 		{
 			nResult = Global->CtrlObject->Plugins->GetFile(ArcItem->hPlugin, &*It, DestPath, strResultName, OPM_SILENT) != 0;
 		}
@@ -1891,7 +1891,7 @@ intptr_t FindFiles::FindDlgProc(Dialog* Dlg, intptr_t Msg, intptr_t Param1, void
 			DlgWidth += IncX;
 			DlgHeight += IncY;
 
-			for (const auto i: std::views::iota(size_t{}, FD_SEPARATOR1))
+			for (const auto i: std::views::iota(size_t{}, static_cast<size_t>(FD_SEPARATOR1)))
 			{
 				SMALL_RECT rect;
 				Dlg->SendMessage( DM_GETITEMPOSITION, i, &rect);
@@ -2428,7 +2428,7 @@ void background_searcher::DoScanTree(string_view const strRoot)
 
 void background_searcher::ScanPluginTree(plugin_panel* hPlugin, unsigned long long Flags, int& RecurseLevel)
 {
-	span<PluginPanelItem> PanelData;
+	std::span<PluginPanelItem> PanelData;
 	bool GetFindDataResult=false;
 
 	if(!Stopped())
@@ -2741,7 +2741,7 @@ bool FindFiles::FindFilesProcess()
 		FindDlg[FD_BUTTON_PANEL].Flags|=DIF_DISABLE;
 	}
 
-	const auto Dlg = Dialog::create(FindDlg, &FindFiles::FindDlgProc, this);
+	const auto Dlg = Dialog::create(FindDlg, std::bind_front(&FindFiles::FindDlgProc, this));
 	Dlg->SetHelp(L"FindFileResult"sv);
 	Dlg->SetPosition({ -1, -1, DlgWidth, DlgHeight });
 	Dlg->SetId(FindFileResultId);
@@ -3175,7 +3175,7 @@ FindFiles::FindFiles():
 		FindAskDlg[FAD_RADIO_TEXT].Selected = !m_SearchDlgParams.Hex.value();
 		FindAskDlg[FAD_RADIO_HEX].Selected = m_SearchDlgParams.Hex.value();
 		m_IsHexActive = m_SearchDlgParams.Hex.value();
-		const auto Dlg = Dialog::create(FindAskDlg, &FindFiles::MainDlgProc, this);
+		const auto Dlg = Dialog::create(FindAskDlg, std::bind_front(&FindFiles::MainDlgProc, this));
 		Dlg->SetAutomation(FAD_CHECKBOX_FILTER,FAD_BUTTON_FILTER,DIF_DISABLE,DIF_NONE,DIF_NONE,DIF_DISABLE);
 		Dlg->SetHelp(L"FindFile"sv);
 		Dlg->SetId(FindFileId);

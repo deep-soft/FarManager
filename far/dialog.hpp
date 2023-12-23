@@ -44,7 +44,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // Platform:
 
 // Common:
-#include "common/range.hpp"
 
 // External:
 
@@ -120,7 +119,7 @@ struct DialogItemEx: public FarDialogItem
 };
 
 bool IsKeyHighlighted(string_view Str, int Key, bool Translate, wchar_t CharKey = {});
-void ItemsToItemsEx(span<const FarDialogItem> Items, span<DialogItemEx> ItemsEx, bool Short = false);
+void ItemsToItemsEx(std::span<const FarDialogItem> Items, std::span<DialogItemEx> ItemsEx, bool Short = false);
 
 
 struct InitDialogItem
@@ -135,7 +134,7 @@ struct InitDialogItem
 	string_view Data;
 };
 
-std::vector<DialogItemEx> MakeDialogItems(span<const InitDialogItem> Items);
+std::vector<DialogItemEx> MakeDialogItems(std::span<const InitDialogItem> Items);
 
 template<size_t Size, size_t N>
 std::vector<DialogItemEx> MakeDialogItems(InitDialogItem const (&Items)[N])
@@ -158,22 +157,14 @@ protected:
 public:
 	using dialog_handler = std::function<intptr_t(Dialog* Dlg, intptr_t Msg, intptr_t Param1, void* Param2)>;
 
-	template<class T, class O>
-	static dialog_ptr create(T&& Src, intptr_t(O::*function)(Dialog*, intptr_t, intptr_t, void*), O* object, void* InitParam = nullptr)
-	{
-		auto Handler = (object && function)? [=](Dialog* Dlg, intptr_t Msg, intptr_t Param1, void* Param2) { return std::invoke(function, object, Dlg, Msg, Param1, Param2); } : dialog_handler();
-		return std::make_shared<Dialog>(private_tag(), span(Src), Handler, InitParam);
-	}
-
-	template<class T>
 	static dialog_ptr create(
-		T&& Src, const dialog_handler& handler = nullptr, void* InitParam = nullptr)
+		auto&& Src, const dialog_handler& handler = nullptr, void* InitParam = nullptr)
 	{
-		return std::make_shared<Dialog>(private_tag(), span(Src), handler, InitParam);
+		return std::make_shared<Dialog>(private_tag(), std::span(Src), handler, InitParam);
 	}
 
 	template<class T>
-	Dialog(private_tag, span<T> const Src, const dialog_handler& Handler, void* InitParam):
+	Dialog(private_tag, std::span<T> const Src, const dialog_handler& Handler, void* InitParam):
 		DataDialog(InitParam),
 		m_handler(Handler)
 	{
@@ -273,8 +264,8 @@ private:
 	void AddToList();
 	void RemoveFromList();
 
-	void Construct(span<DialogItemEx> SrcItems);
-	void Construct(span<const FarDialogItem> SrcItems);
+	void Construct(std::span<DialogItemEx> SrcItems);
+	void Construct(std::span<const FarDialogItem> SrcItems);
 	void Init();
 	void DeleteDialogObjects();
 	int LenStrItem(size_t ID, string_view Str) const;

@@ -87,15 +87,15 @@ static auto& operator|=(cdrom_device_capabilities& This, cdrom_device_capabiliti
 	return This = This | Rhs;
 }
 
-template<typename T, size_t N, size_t... I>
-static auto write_value_to_big_endian_impl(unsigned char (&Dest)[N], T const Value, std::index_sequence<I...>)
+template<size_t N, size_t... I>
+static auto write_value_to_big_endian_impl(unsigned char (&Dest)[N], auto const Value, std::index_sequence<I...>)
 {
 	static_assert(std::endian::native == std::endian::little, "No way");
 	(..., (Dest[N - I - 1] = (Value >> (8 * I) & 0xFF)));
 }
 
-template<typename T, size_t N>
-static auto write_value_to_big_endian(unsigned char (&Dest)[N], T const Value)
+template<size_t N>
+static auto write_value_to_big_endian(unsigned char (&Dest)[N], auto const Value)
 {
 	return write_value_to_big_endian_impl(Dest, Value, std::make_index_sequence<N>{});
 }
@@ -214,7 +214,7 @@ static auto capatibilities_from_scsi_configuration(const os::fs::file& Device)
 		return CAPABILITIES_NONE;
 	}
 
-	span const Buffer(Spt.DataBuf, Spt.DataTransferLength);
+	std::span const Buffer(Spt.DataBuf, Spt.DataTransferLength);
 
 	const auto ConfigurationHeader = view_as_opt<GET_CONFIGURATION_HEADER>(Buffer);
 	if (!ConfigurationHeader || Buffer.size() < sizeof(ConfigurationHeader->DataLength) + read_value_from_big_endian<size_t>(ConfigurationHeader->DataLength))
@@ -227,7 +227,7 @@ static auto capatibilities_from_scsi_configuration(const os::fs::file& Device)
 	if (read_value_from_big_endian<FEATURE_NUMBER>(FeatureList->Header.FeatureCode) != FeatureProfileList)
 		return CAPABILITIES_NONE;
 
-	const span Profiles(FeatureList->Profiles, FeatureList->Header.AdditionalLength / sizeof(*FeatureList->Profiles));
+	const std::span Profiles(FeatureList->Profiles, FeatureList->Header.AdditionalLength / sizeof(*FeatureList->Profiles));
 
 	return std::accumulate(ALL_CONST_RANGE(Profiles), CAPABILITIES_NONE, [](auto const Value, auto const& i)
 	{

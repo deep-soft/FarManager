@@ -1279,7 +1279,7 @@ bool KeyMacro::GetMacroSettings(int Key, unsigned long long& Flags, string_view 
 	MacroSettingsDlg[MS_EDIT_DESCR].strData = Descr.empty()? m_RecDescription : Descr;
 
 	DlgParam Param{ 0, 0, MACROAREA_OTHER };
-	const auto Dlg = Dialog::create(MacroSettingsDlg, &KeyMacro::ParamMacroDlgProc, this, &Param);
+	const auto Dlg = Dialog::create(MacroSettingsDlg, std::bind_front(&KeyMacro::ParamMacroDlgProc, this), &Param);
 	Dlg->SetPosition({ -1, -1, 73, 21 });
 	Dlg->SetHelp(L"KeyMacroSetting"sv);
 	Dlg->Process();
@@ -1389,6 +1389,7 @@ public:
 	std::vector<TVar> parseParams(size_t Count) const;
 	void PassBoolean(bool b) const;
 	void PassError(const wchar_t* str) const;
+	void PassPointer(void* ptr) const;
 	void PassValue(long long Int) const;
 	void PassValue(double dbl) const;
 	void PassValue(const wchar_t* str) const;
@@ -1467,14 +1468,20 @@ public:
 
 private:
 	void fattrFuncImpl(int Type) const;
+	void SendValue(FarMacroValue &val) const;
 
 	FarMacroCall* mData;
 };
 
+void FarMacroApi::SendValue(FarMacroValue &val) const
+{
+	mData->Callback(mData->CallbackData, &val, 1);
+}
+
 void FarMacroApi::PassValue(const wchar_t *str) const
 {
 	FarMacroValue val = NullToEmpty(str);
-	mData->Callback(mData->CallbackData, &val, 1);
+	SendValue(val);
 }
 
 void FarMacroApi::PassValue(const string& str) const
@@ -1486,13 +1493,13 @@ void FarMacroApi::PassError(const wchar_t *str) const
 {
 	FarMacroValue val = NullToEmpty(str);
 	val.Type = FMVT_ERROR;
-	mData->Callback(mData->CallbackData, &val, 1);
+	SendValue(val);
 }
 
 void FarMacroApi::PassValue(double dbl) const
 {
 	FarMacroValue val = dbl;
-	mData->Callback(mData->CallbackData, &val, 1);
+	SendValue(val);
 }
 
 void FarMacroApi::PassValue(long long Int) const
@@ -1502,13 +1509,19 @@ void FarMacroApi::PassValue(long long Int) const
 		return PassValue(Double);
 
 	FarMacroValue val = Int;
-	mData->Callback(mData->CallbackData, &val, 1);
+	SendValue(val);
 }
 
 void FarMacroApi::PassBoolean(bool const b) const
 {
 	FarMacroValue val = b;
-	mData->Callback(mData->CallbackData, &val, 1);
+	SendValue(val);
+}
+
+void FarMacroApi::PassPointer(void *ptr) const
+{
+	FarMacroValue val = ptr;
+	SendValue(val);
 }
 
 void FarMacroApi::PassValue(const TVar& Var) const
@@ -2198,11 +2211,7 @@ void KeyMacro::CallFar(intptr_t CheckCode, FarMacroCall* Data)
 
 			//в windows гарантируется, что не бывает указателей меньше 0x10000
 			if (reinterpret_cast<uintptr_t>(ResultCallPlugin) >= 0x10000 && ResultCallPlugin != INVALID_HANDLE_VALUE)
-			{
-				FarMacroValue Result(ResultCallPlugin);
-				Data->Callback(Data->CallbackData, &Result, 1);
-				return;
-			}
+				return api.PassPointer(ResultCallPlugin);
 
 			return api.PassBoolean(ResultCallPlugin != nullptr);
 		}
@@ -5119,7 +5128,7 @@ int KeyMacro::AssignMacroKey(DWORD &MacroKey, unsigned long long& Flags)
 
 	DlgParam Param{ Flags, 0, m_StartMode };
 	Global->IsProcessAssignMacroKey++;
-	const auto Dlg = Dialog::create(MacroAssignDlg, &KeyMacro::AssignMacroDlgProc, this, &Param);
+	const auto Dlg = Dialog::create(MacroAssignDlg, std::bind_front(&KeyMacro::AssignMacroDlgProc, this), &Param);
 	Dlg->SetPosition({ -1, -1, 34, 6 });
 	Dlg->SetHelp(L"KeyMacro"sv);
 	Dlg->Process();

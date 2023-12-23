@@ -45,7 +45,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // Common:
 #include "common.hpp"
 #include "common/function_ref.hpp"
-#include "common/range.hpp"
 #include "common/smart_ptr.hpp"
 #include "common/utility.hpp"
 
@@ -151,7 +150,7 @@ public:
 	auto ExportsNames() const { return m_ExportsNames; }
 
 protected:
-	span<const export_name> m_ExportsNames;
+	std::span<const export_name> m_ExportsNames;
 	PluginManager* const m_owner;
 	UUID m_Id{};
 };
@@ -275,10 +274,8 @@ public:
 
 	bool has(export_index id) const { return Exports[id] != nullptr; }
 
-	template<typename T>
-	bool has(const T& es) const
+	bool has(const std::derived_from<detail::ExecuteStruct> auto& es) const
 	{
-		static_assert(std::derived_from<T, detail::ExecuteStruct>);
 		return has(es.export_id);
 	}
 
@@ -363,8 +360,7 @@ private:
 	void increase_activity();
 	void decrease_activity();
 
-	template<typename T>
-	void SetInstance(T* Object) const
+	void SetInstance(auto* Object) const
 	{
 		Object->Instance = m_Instance->opaque();
 	}

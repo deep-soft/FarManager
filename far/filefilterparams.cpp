@@ -581,7 +581,7 @@ struct attribute_map
 struct context
 {
 	highlight::element* Colors;
-	span<attribute_map> Attributes;
+	std::span<attribute_map> Attributes;
 };
 
 // BUGBUG
@@ -619,7 +619,7 @@ static void FilterDlgRelativeDateItemsUpdate(Dialog* Dlg, bool bClear)
 	}
 }
 
-static bool AttributesDialog(span<attribute_map> const Attributes)
+static bool AttributesDialog(std::span<attribute_map> const Attributes)
 {
 	DialogBuilder Builder(lng::MSetAttrTitle);
 
@@ -990,7 +990,7 @@ bool FileFilterConfig(FileFilterParams& Filter, bool ColorConfig)
 	DateList.Items=TableItemDate;
 	DateList.ItemsNumber=FDATE_COUNT;
 
-	for (const auto i: std::views::iota(size_t{}, FDATE_COUNT))
+	for (const auto i: std::views::iota(size_t{}, static_cast<size_t>(FDATE_COUNT)))
 		TableItemDate[i].Text = msg(lng::MFileFilterWrited+i).c_str();
 
 	DWORD DateType;

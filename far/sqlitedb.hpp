@@ -43,7 +43,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // Common:
 #include "common/bytes_view.hpp"
 #include "common/preprocessor.hpp"
-#include "common/range.hpp"
 
 // External:
 
@@ -58,8 +57,7 @@ namespace sqlite
 class far_sqlite_exception final: public far_exception
 {
 public:
-	template<typename... args>
-	explicit far_sqlite_exception(int ErrorCode, args&&... Args) :
+	explicit far_sqlite_exception(int ErrorCode, auto&&... Args) :
 		far_exception(FWD(Args)...),
 		m_ErrorCode(ErrorCode)
 	{}
@@ -114,8 +112,7 @@ protected:
 		bool Step() const;
 		void Execute() const;
 
-		template<typename... args>
-		auto& Bind(args&&... Args)
+		auto& Bind(auto&&... Args)
 		{
 			(..., BindImpl(FWD(Args)));
 			return *this;
@@ -175,7 +172,7 @@ protected:
 
 	void Exec(std::string const& Command) const;
 	void Exec(std::string_view Command) const;
-	void Exec(span<std::string_view const> Commands) const;
+	void Exec(std::span<std::string_view const> Commands) const;
 	void SetWALJournalingMode() const;
 	void EnableForeignKeysConstraints() const;
 
@@ -185,8 +182,7 @@ protected:
 	static void KeepStatement(auto_statement& Stmt) { (void)Stmt.release(); }
 
 	// No forwarding here - ExecuteStatement is atomic so we don't have to deal with lifetimes
-	template<typename... args>
-	auto ExecuteStatement(size_t Index, const args&... Args) const
+	auto ExecuteStatement(size_t Index, const auto&... Args) const
 	{
 		return AutoStatement(Index)->Bind(Args...).Execute();
 	}
@@ -200,8 +196,7 @@ protected:
 		}
 
 #define FORWARD_FUNCTION(FunctionName) \
-		template<typename... args> \
-		decltype(auto) FunctionName(args&&... Args) const \
+		decltype(auto) FunctionName(auto&&... Args) const \
 		{ \
 			return m_Db->FunctionName(FWD(Args)...); \
 		}

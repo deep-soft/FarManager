@@ -72,7 +72,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // Common:
 #include "common/from_string.hpp"
-#include "common/range.hpp"
 #include "common/scope_exit.hpp"
 
 // External:
@@ -199,7 +198,7 @@ static string SerializeMenu(const UserMenu::menu_container& Menu)
 	return Result;
 }
 
-static void ParseMenu(UserMenu::menu_container& Menu, range<enum_lines::iterator> const FileStrings, bool OldFormat)
+static void ParseMenu(UserMenu::menu_container& Menu, std::ranges::subrange<enum_lines::iterator> const FileStrings, bool OldFormat)
 {
 	UserMenu::menu_container::value_type *MenuItem = nullptr;
 
@@ -1066,7 +1065,7 @@ bool UserMenu::EditMenu(std::list<UserMenuItem>& Menu, std::list<UserMenuItem>::
 #endif
 	}
 
-	const auto Dlg = Dialog::create(EditDlg, &UserMenu::EditMenuDlgProc, this);
+	const auto Dlg = Dialog::create(EditDlg, std::bind_front(&UserMenu::EditMenuDlgProc, this));
 	Dlg->SetHelp(L"UserMenu"sv);
 	Dlg->SetId(EditUserMenuId);
 	Dlg->SetPosition({ -1, -1, DLG_X, DLG_Y });
@@ -1099,7 +1098,7 @@ bool UserMenu::EditMenu(std::list<UserMenuItem>& Menu, std::list<UserMenuItem>::
 #else
 		size_t CommandNumber = 0;
 
-		for (const auto i: std::views::iota(size_t{}, DI_EDIT_COUNT))
+		for (const auto i: std::views::iota(size_t{}, static_cast<size_t>(DI_EDIT_COUNT)))
 		{
 			if (!EditDlg[i + EM_EDITLINE_0].strData.empty())
 				CommandNumber = i + 1;
@@ -1107,7 +1106,7 @@ bool UserMenu::EditMenu(std::list<UserMenuItem>& Menu, std::list<UserMenuItem>::
 
 		(*MenuItem)->Commands.clear();
 
-		for (const auto i: std::views::iota(size_t{}, DI_EDIT_COUNT))
+		for (const auto i: std::views::iota(size_t{}, static_cast<size_t>(DI_EDIT_COUNT)))
 		{
 			if (static_cast<size_t>(i) >= CommandNumber)
 				break;

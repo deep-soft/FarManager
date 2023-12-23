@@ -361,7 +361,7 @@ intptr_t single_color_state::GetSingleColorDlgProc(Dialog* Dlg, intptr_t Msg, in
 
 		if (Param1 - Offset == cb::button_256)
 		{
-			const auto ResolvedColor = colors::resolve_default(CurColor.Value, Offset != cd::bg_first);
+			const auto ResolvedColor = CurColor.IsIndex? colors::resolve_default(CurColor.Value, Offset != cd::bg_first) : CurColor.Value;
 
 			FarColor FakeColor{ .BackgroundColor = ResolvedColor };
 			FakeColor.SetBgIndex(CurColor.IsIndex);
@@ -381,7 +381,7 @@ intptr_t single_color_state::GetSingleColorDlgProc(Dialog* Dlg, intptr_t Msg, in
 
 		if (Param1 - Offset == cb::button_rgb)
 		{
-			const auto ResolvedColor = colors::resolve_default(CurColor.Value, Offset != cd::bg_first);
+			const auto ResolvedColor = CurColor.IsIndex? colors::resolve_default(CurColor.Value, Offset != cd::bg_first) : CurColor.Value;
 
 			auto Color = colors::color_value(
 				CurColor.IsIndex?
@@ -527,7 +527,7 @@ static std::optional<size_t> get_control_id(COLORREF const ColorPart, size_t con
 	return Offset + cb::color_first_radio + control_by_color[Index];
 }
 
-static auto activate_control(COLORREF const Color, span<DialogItemEx> ColorDlgItems, size_t const Offset)
+static auto activate_control(COLORREF const Color, std::span<DialogItemEx> ColorDlgItems, size_t const Offset)
 {
 	const auto ControlId = get_control_id(Color, Offset);
 	if (!ControlId)
@@ -538,7 +538,7 @@ static auto activate_control(COLORREF const Color, span<DialogItemEx> ColorDlgIt
 	return true;
 }
 
-static void disable_if_needed(COLORREF const Color, span<DialogItemEx> ColorDlgItems, size_t const Offset)
+static void disable_if_needed(COLORREF const Color, std::span<DialogItemEx> ColorDlgItems, size_t const Offset)
 {
 	if (colors::is_transparent(Color))
 	{
@@ -615,7 +615,7 @@ static bool pick_color_single(colors::single_color& Color, colors::single_color 
 		ColorDlg[scd_item(cb::color_active_checkbox)].Flags |= DIF_HIDDEN | DIF_DISABLE;
 	}
 
-	const auto Dlg = Dialog::create(ColorDlg, &single_color_state::GetSingleColorDlgProc, &ColorState);
+	const auto Dlg = Dialog::create(ColorDlg, std::bind_front(&single_color_state::GetSingleColorDlgProc, &ColorState));
 
 	const auto
 		DlgWidth = static_cast<int>(ColorDlg[scd::border].X2) + 4,
@@ -896,7 +896,7 @@ bool GetColorDialog(FarColor& Color, bool const bCentered, const FarColor* const
 		ColorDlg[bg_item(cb::color_active_checkbox)].Flags |= DIF_HIDDEN | DIF_DISABLE;
 	}
 
-	const auto Dlg = Dialog::create(ColorDlg, &color_state::GetColorDlgProc, &ColorState);
+	const auto Dlg = Dialog::create(ColorDlg, std::bind_front(&color_state::GetColorDlgProc, &ColorState));
 
 	const auto
 		DlgWidth = static_cast<int>(ColorDlg[cd::border].X2) + 4,

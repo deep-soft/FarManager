@@ -3165,8 +3165,7 @@ void Editor::InsertString()
 	TextChanged(true);
 }
 
-template<class F>
-void Editor::UpdateIteratorAndKeepPos(numbered_iterator& Iter, const F& Func)
+void Editor::UpdateIteratorAndKeepPos(numbered_iterator& Iter, const auto& Func)
 {
 	const auto CurPos = Iter->GetTabCurPos();
 	const auto LeftPos = Iter->GetLeftPos();
@@ -4075,7 +4074,7 @@ string Editor::Block2Text()
 	string CopyData;
 	CopyData.reserve(TotalChars);
 
-	for (const auto& i: range(m_it_AnyBlockStart.base(), SelEnd))
+	for (const auto& i: std::ranges::subrange(m_it_AnyBlockStart.base(), SelEnd))
 	{
 		CopyData += i.GetSelString();
 
