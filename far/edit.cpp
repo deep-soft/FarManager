@@ -103,7 +103,7 @@ private:
 void ColorItem::SetOwner(const UUID& Value)
 {
 	static std::unordered_set<UUID> UuidSet;
-	Owner = &*UuidSet.emplace(Value).first;
+	Owner = std::to_address(UuidSet.emplace(Value).first);
 }
 
 void ColorItem::SetColor(const FarColor& Value)
@@ -488,7 +488,7 @@ long long Edit::VMProcess(int OpCode, void* vParam, long long iParam)
 			return GetLineCursorPos()+1;
 		case MCODE_F_EDITOR_SEL:
 		{
-			const auto Action = static_cast<int>(reinterpret_cast<intptr_t>(vParam));
+			const auto Action = static_cast<int>(std::bit_cast<intptr_t>(vParam));
 			if (Action) m_Flags.Clear(FEDITLINE_CLEARFLAG);
 
 			switch (Action)

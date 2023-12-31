@@ -60,15 +60,20 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 namespace os::debug
 {
-	bool debugger_present()
+	bool is_debugger_present()
 	{
 		return IsDebuggerPresent() != FALSE;
 	}
 
-	void breakpoint(bool const Always)
+	void breakpoint()
 	{
-		if (Always || debugger_present())
-			DebugBreak();
+		DebugBreak();
+	}
+
+	void breakpoint_if_debugging()
+	{
+		if (is_debugger_present())
+			breakpoint();
 	}
 
 	void print(const wchar_t* const Str)
@@ -190,7 +195,7 @@ namespace os::debug
 
 			std::transform(Pointers, Pointers + Size, std::back_inserter(Stack), [](void* Ptr)
 			{
-				return stack_frame{ reinterpret_cast<uintptr_t>(Ptr), INLINE_FRAME_CONTEXT_INIT };
+				return stack_frame{ std::bit_cast<uintptr_t>(Ptr), INLINE_FRAME_CONTEXT_INIT };
 			});
 
 			i += Size;
@@ -421,7 +426,7 @@ namespace os::debug::symbols
 		{
 		case CBA_EVENT:
 			{
-				const auto& Event = *static_cast<IMAGEHLP_CBA_EVENT const*>(reinterpret_cast<void const*>(CallbackData));
+				const auto& Event = view_as<IMAGEHLP_CBA_EVENT>(static_cast<uintptr_t>(CallbackData));
 				const auto Level = event_level(Event.severity);
 
 				string Buffer;

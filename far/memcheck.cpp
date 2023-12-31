@@ -277,7 +277,7 @@ private:
 		if (!m_AllocatedMemorySize)
 			return;
 
-		os::debug::breakpoint(false);
+		os::debug::breakpoint_if_debugging();
 
 		// Q: Why?
 		// A: The regular instances are already dead at this point, this voodoo will bring them back from the underworld:
@@ -330,7 +330,7 @@ private:
 
 			for (StackSize = 0; StackSize != std::size(Stack) && i->Stack[StackSize]; ++StackSize)
 			{
-				Stack[StackSize] = { reinterpret_cast<uintptr_t>(i->Stack[StackSize]), INLINE_FRAME_CONTEXT_INIT };
+				Stack[StackSize] = { std::bit_cast<uintptr_t>(i->Stack[StackSize]), INLINE_FRAME_CONTEXT_INIT };
 			}
 
 			tracer.get_symbols({}, { Stack, StackSize }, [&](string_view const Line)

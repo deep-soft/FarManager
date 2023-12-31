@@ -132,7 +132,7 @@ public:
 		m_Finalised = false;
 	}
 
-	void DoEpilogue(bool Scroll) override
+	void DoEpilogue(bool Scroll, bool IsLastInstance) override
 	{
 		if (!m_Activated)
 			return;
@@ -149,7 +149,8 @@ public:
 			std::wcout.flush();
 			Global->ScrBuf->FillBuf();
 
-			m_Consolised = false;
+			if (IsLastInstance)
+				m_Consolised = false;
 		}
 
 		if (Scroll && DoWeReallyHaveToScroll(Global->Opt->ShowKeyBar? 3 : 2))
@@ -161,7 +162,8 @@ public:
 
 		Global->WindowManager->Desktop()->TakeSnapshot();
 
-		m_Finalised = true;
+		if (IsLastInstance)
+			m_Finalised = true;
 	}
 
 	~context() override
@@ -187,7 +189,7 @@ void console_session::EnterPluginContext(bool Scroll)
 	}
 	else
 	{
-		m_PluginContext->DoEpilogue(Scroll);
+		m_PluginContext->DoEpilogue(Scroll, false);
 	}
 
 	m_PluginContext->DoPrologue();
@@ -196,13 +198,12 @@ void console_session::EnterPluginContext(bool Scroll)
 
 void console_session::LeavePluginContext(bool Scroll)
 {
-	Global->ScrBuf->Flush();
 	if (m_PluginContextInvocations)
 		--m_PluginContextInvocations;
 
 	if (m_PluginContext)
 	{
-		m_PluginContext->DoEpilogue(Scroll);
+		m_PluginContext->DoEpilogue(Scroll, !m_PluginContextInvocations);
 	}
 	else
 	{

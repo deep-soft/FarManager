@@ -420,7 +420,7 @@ void filters::EditFilters(filter_area const Area, Panel* const HostPanel)
 				{
 					const auto NewPos = std::min(FilterData().size(), static_cast<size_t>(pos));
 					const auto FilterIterator = FilterData().emplace(FilterData().begin() + NewPos, std::move(NewFilter));
-					FilterList->AddItem(MenuItemEx(MenuString(&*FilterIterator)), static_cast<int>(NewPos));
+					FilterList->AddItem(MenuItemEx(MenuString(std::to_address(FilterIterator))), static_cast<int>(NewPos));
 					FilterList->SetSelectPos(static_cast<int>(NewPos),1);
 					NeedUpdate = true;
 				}
@@ -474,7 +474,7 @@ void filters::EditFilters(filter_area const Area, Panel* const HostPanel)
 					!(any_of(Key, KEY_CTRLDOWN, KEY_RCTRLDOWN) && static_cast<size_t>(SelPos) == FilterData().size() - 1))
 				{
 					const auto NewPos = SelPos + (any_of(Key, KEY_CTRLDOWN, KEY_RCTRLDOWN)? 1 : -1);
-					using std::swap;
+					using std::ranges::swap;
 					swap(FilterList->at(SelPos), FilterList->at(NewPos));
 					swap(FilterData()[NewPos], FilterData()[SelPos]);
 					FilterList->SetSelectPos(NewPos,1);

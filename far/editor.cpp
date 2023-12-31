@@ -181,7 +181,7 @@ void Editor::FreeAllocatedData()
 void Editor::SwapState(Editor& swap_state)
 {
 	// BUGBUGBUG not all fields swapped
-	using std::swap;
+	using std::ranges::swap;
 	Lines.swap(swap_state.Lines);
 	swap(m_it_TopScreen, swap_state.m_it_TopScreen);
 	swap(m_it_CurLine, swap_state.m_it_CurLine);
@@ -542,7 +542,7 @@ long long Editor::VMProcess(int OpCode, void* vParam, long long iParam)
 		{
 			long long Ret=-1;
 			InternalEditorBookmark ebm{};
-			const auto iMode = reinterpret_cast<intptr_t>(vParam);
+			const auto iMode = std::bit_cast<intptr_t>(vParam);
 
 			if (iMode >= 0 && iMode <= 3 && GetSessionBookmark(static_cast<int>(iParam - 1), &ebm))
 			{
@@ -564,7 +564,7 @@ long long Editor::VMProcess(int OpCode, void* vParam, long long iParam)
 		case MCODE_F_EDITOR_SEL:
 		{
 			int iPos;
-			switch (const auto Action = reinterpret_cast<intptr_t>(vParam))
+			switch (const auto Action = std::bit_cast<intptr_t>(vParam))
 			{
 				case 0:  // Get Param
 				{
@@ -2926,7 +2926,7 @@ Editor::numbered_iterator Editor::DeleteString(numbered_iterator DelPtr, bool De
 		}
 	}
 
-	m_AutoDeletedColors.erase(&*DelPtr);
+	m_AutoDeletedColors.erase(std::to_address(DelPtr));
 
 	const auto Result = numbered_iterator(Lines.erase(DelPtr), DelPtr.Number());
 
@@ -3747,8 +3747,8 @@ void Editor::DoSearchReplace(const SearchReplaceDisposition Disposition)
 
 	if(FindAll && MatchFound)
 	{
-		const auto MenuY1 = ScrY - 20;
-		const auto MenuY2 = MenuY1 + std::min(static_cast<int>(FindAllList->size()), 10) + 2;
+		const auto MenuY1 = std::max(0, ScrY - 20);
+		const auto MenuY2 = std::min(ScrY, MenuY1 + std::min(static_cast<int>(FindAllList->size()), 10) + 2);
 		FindAllList->SetMenuFlags(VMENU_WRAPMODE | VMENU_SHOWAMPERSAND);
 		FindAllList->SetPosition({ -1, MenuY1, 0, MenuY2 });
 		FindAllList->SetTitle(far::vformat(msg(lng::MEditSearchStatistics), FindAllList->size(), AllRefLines));
@@ -4476,7 +4476,7 @@ public:
 	static size_t HashBM(bookmark_list::iterator BM)
 	{
 		// BUGBUG this is some dark magic
-		auto x = reinterpret_cast<size_t>(&*BM);
+		auto x = std::bit_cast<size_t>(std::to_address(BM));
 		x ^= (BM->Line << 16) ^ (BM->Cursor);
 		return x;
 	}
@@ -5603,7 +5603,7 @@ int Editor::EditorControl(int Command, intptr_t Param1, void *Param2)
 
 			AddColor(CurPtr, newcol);
 			if (col->Flags & ECF_AUTODELETE)
-				m_AutoDeletedColors.emplace(&*CurPtr);
+				m_AutoDeletedColors.emplace(std::to_address(CurPtr));
 
 			return true;
 		}
@@ -6098,7 +6098,7 @@ bool Editor::InitSessionBookmarksForPlugin(EditorBookmarks* Param, size_t Count,
 	if (!Param || Param->Size < Size)
 		return false;
 
-	const auto data = edit_as<intptr_t*>(Param + 1);
+	const auto data = std::bit_cast<intptr_t*>(Param + 1);
 	Param->Count=Count;
 	Param->Line=data;
 	Param->Cursor=data+Count;
@@ -6638,7 +6638,7 @@ static std::string_view GetLineBytes(string_view const Str, std::vector<char>& B
 		if (Length <= Buffer.size())
 			return { Buffer.data(), Length };
 
-		resize_exp_noshrink(Buffer, Length);
+		resize_exp(Buffer, Length);
 	}
 }
 
@@ -6885,7 +6885,7 @@ Editor::numbered_const_iterator Editor::LastLine() const
 
 bool Editor::IsLastLine(const Edit* Line) const
 {
-	return Line == &*LastLine();
+	return Line == std::to_address(LastLine());
 }
 
 bool Editor::IsLastLine(const iterator& Line) const

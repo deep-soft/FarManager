@@ -35,10 +35,12 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "preprocessor.hpp"
 #include "type_traits.hpp"
 
+#include <bit>
 #include <functional>
 #include <optional>
 #include <utility>
 
+#include <concepts>
 #include <cstddef>
 #include <cstring>
 
@@ -57,33 +59,30 @@ protected:
 	using base_type = T;
 };
 
-inline size_t grow_exp_noshrink(size_t const Current, std::optional<size_t> const Desired)
+inline size_t grow_exp(size_t const Current, std::optional<size_t> const Desired)
 {
-	// Unlike vector, string is allowed to shrink (another splendid design decision from the committee):
-	// "Calling reserve() with a res_arg argument less than capacity() is in effect a non-binding shrink request." (21.4.4 basic_string capacity)
-	// gcc decided to go mental and made that a _binding_ shrink request.
 	if (Desired && *Desired <= Current)
 		return Current;
 
-	// For vector reserve typically allocates exactly the requested amount instead of exponential growth.
+	// reserve typically allocates exactly the requested amount instead of exponential growth.
 	// This can be really bad if called in a loop.
 	const auto LowerBound = Current + std::max(size_t{1}, Current / 2);
 	return Desired? std::max(LowerBound, *Desired) : LowerBound;
 }
 
-void reserve_exp_noshrink(auto& Container, size_t const DesiredCapacity)
+void reserve_exp(auto& Container, size_t const DesiredCapacity)
 {
-	Container.reserve(grow_exp_noshrink(Container.capacity(), DesiredCapacity));
+	Container.reserve(grow_exp(Container.capacity(), DesiredCapacity));
 }
 
-void resize_exp_noshrink(auto& Container)
+void resize_exp(auto& Container)
 {
-	Container.resize(grow_exp_noshrink(Container.size(), {}), {});
+	Container.resize(grow_exp(Container.size(), {}), {});
 }
 
-void resize_exp_noshrink(auto& Container, size_t const DesiredSize)
+void resize_exp(auto& Container, size_t const DesiredSize)
 {
-	Container.resize(grow_exp_noshrink(Container.size(), DesiredSize), {});
+	Container.resize(grow_exp(Container.size(), DesiredSize), {});
 }
 
 
@@ -91,8 +90,7 @@ template<class T>
 void clear_and_shrink(T& container)
 {
 	T Tmp;
-	using std::swap;
-	swap(container, Tmp);
+	std::ranges::swap(container, Tmp);
 }
 
 
@@ -255,7 +253,7 @@ constexpr inline auto aligned_sizeof = aligned_size(sizeof(T), Alignment);
 [[nodiscard]]
 inline bool is_aligned(const void* Address, const size_t Alignment)
 {
-	return !(reinterpret_cast<uintptr_t>(Address) % Alignment);
+	return !(std::bit_cast<uintptr_t>(Address) % Alignment);
 }
 
 template<typename T>
@@ -420,7 +418,7 @@ constexpr small_type extract_integer(large_type const Value)
 	static_assert(sizeof(small_type) < sizeof(large_type));
 	static_assert(sizeof(small_type) * Index < sizeof(large_type));
 
-	return Value >> sizeof(small_type) * Index * CHAR_BIT;
+	return static_cast<small_type>(Value >> sizeof(small_type) * Index * CHAR_BIT);
 }
 
 #endif // UTILITY_HPP_D8E934C7_BF30_4CEB_B80C_6E508DF7A1BC
