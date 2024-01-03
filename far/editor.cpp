@@ -3772,10 +3772,10 @@ void Editor::DoSearchReplace(const SearchReplaceDisposition Disposition)
 
 				case KEY_CTRLENTER:
 				case KEY_RCTRLENTER:
-				// TODO: Need to handle mouse events with ProcessMouse(). This implementation is accpetable,
+				// TODO: Need to handle mouse events with ProcessMouse(). This implementation is acceptable,
 				// but a click on the border jumps to the currently selected item without changing the item.
 				// Normally, mouse click on the border frame does nothing. Mouse click on the border
-				// ouside of the frame starts dragging the dialog.
+				// outside of the frame starts dragging the dialog.
 				case KEY_CTRL|KEY_MSLCLICK:
 				case KEY_RCTRL|KEY_MSLCLICK:
 					{
@@ -4771,7 +4771,7 @@ long long Editor::GetCurPos(bool file_pos, bool add_bom) const
 		}
 	}
 
-	const auto TotalSize = std::accumulate(Lines.cbegin(), m_it_TopScreen.cbase(), bom, [&](auto Value, const auto& line)
+	const auto TotalSize = std::ranges::fold_left(Lines.cbegin(), m_it_TopScreen.cbase(), bom, [&](auto Value, const auto& line)
 	{
 		const auto& Str = line.GetString();
 		return Value + (Multiplier != UnknownMultiplier? Str.size() : encoding::get_bytes_count(Codepage, Str)) + line.GetEOL().str().size();

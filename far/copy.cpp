@@ -2324,7 +2324,7 @@ void ShellCopy::CheckStreams(const string_view Src, const string_view DestPath)
 
 	const auto StreamsEnumerator = os::fs::enum_streams(Src);
 
-	if (std::ranges::none_of(StreamsEnumerator, [](WIN32_FIND_STREAM_DATA const& i){ return !string_view(i.cStreamName).starts_with(L"::"sv); }))
+	if (std::ranges::all_of(StreamsEnumerator, [](WIN32_FIND_STREAM_DATA const& i){ return string_view(i.cStreamName).starts_with(L"::"sv); }))
 		return;
 
 	switch (Message(MSG_WARNING, msg(lng::MWarning),
@@ -3317,11 +3317,8 @@ bool ShellCopy::ShellSystemCopy(const string_view SrcName, const string_view Des
 				PROGRESS_CANCEL :
 				PROGRESS_CONTINUE;
 		},
-		[&]
-		{
-			SAVE_EXCEPTION_TO(ExceptionPtr);
-			return PROGRESS_CANCEL;
-		});
+		save_exception_and_return<PROGRESS_CANCEL>(ExceptionPtr)
+		);
 	};
 
 	const auto sd = GetSecurity(SrcName);
