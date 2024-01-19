@@ -140,7 +140,7 @@ PluginManager::PluginManager():
 {
 }
 
-void PluginManager::NotifyExit()
+void PluginManager::NotifyExitLuaMacro() const
 {
 	if (const auto LuaMacro = m_Plugins.find(Global->Opt->KnownIDs.Luamacro.Id); LuaMacro != m_Plugins.cend())
 		LuaMacro->second->NotifyExit();
@@ -313,7 +313,7 @@ bool PluginManager::UnloadPlugin(Plugin* pPlugin, int From)
 
 		const auto IsPanelPlugin = pPlugin->IsPanelPlugin();
 
-		Result = pPlugin->Unload();
+		Result = pPlugin->Unload(true);
 
 		pPlugin->WorkFlags.Set(PIWF_DONTLOADAGAIN);
 
@@ -352,7 +352,7 @@ bool PluginManager::UnloadPluginExternal(Plugin* pPlugin)
 	}
 
 	UnloadedPlugins.erase(pPlugin);
-	const auto Result = pPlugin->Unload();
+	const auto Result = pPlugin->Unload(true);
 	RemovePlugin(pPlugin);
 	return Result;
 }
@@ -2451,7 +2451,7 @@ void PluginManager::RefreshPluginsList()
 		if (i->Active())
 			return false;
 
-		i->Unload();
+		i->Unload(true);
 		RemovePlugin(i);
 		return true;
 	});
