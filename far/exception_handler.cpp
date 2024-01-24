@@ -82,7 +82,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //----------------------------------------------------------------------------
 
 #define BUGREPORT_NAME   "bug_report.txt"
-#define MINIDDUMP_NAME   "far.mdmp"
+#define MINIDUMP_NAME    "far.mdmp"
 #define FULLDUMP_NAME    "far_full.mdmp"
 
 class exception_context
@@ -247,18 +247,25 @@ static bool write_readme(string_view const FullPath)
 {
 	os::fs::file const File(FullPath, GENERIC_WRITE, os::fs::file_share_read, nullptr, CREATE_ALWAYS);
 	if (!File)
+	{
+		const auto LastError = os::last_error();
+		LOGERROR(L"Error opening {}: {}"sv, FullPath, LastError);
 		return false;
+	}
 
 #define EOL "\r\n"
 
 	// English text, ANSI will do fine.
 	const auto Data =
-		"Please send " BUGREPORT_NAME " and " MINIDDUMP_NAME " to the developers:" EOL
+		"Please send " BUGREPORT_NAME " and " MINIDUMP_NAME " to the developers:" EOL
 		EOL
 		"  https://github.com/FarGroup/FarManager/issues" EOL
 		"  https://bugs.farmanager.com" EOL
 		"  https://forum.farmanager.com/viewforum.php?f=37" EOL
 		"  https://forum.farmanager.com/viewforum.php?f=9" EOL
+		EOL
+		"Please include the steps needed to reproduce the problem" EOL
+		"and any other potentially useful information." EOL
 		EOL
 		"------------------------------------------------------------" EOL
 		"DO NOT SHARE " FULLDUMP_NAME " UNLESS EXPLICITLY ASKED TO DO SO." EOL
@@ -268,15 +275,30 @@ static bool write_readme(string_view const FullPath)
 
 #undef EOL
 
-	return File.Write(Data.data(), Data.size() * sizeof(Data[0]));
+	if (File.Write(Data.data(), Data.size() * sizeof(Data[0])))
+		return true;
+
+	const auto LastError = os::last_error();
+	LOGERROR(L"Error writing to {}: {}"sv, FullPath, LastError);
+	return false;
 }
 
 static bool write_report(string_view const Data, string_view const FullPath)
 {
 	os::fs::file const File(FullPath, GENERIC_WRITE, os::fs::file_share_read, nullptr, CREATE_ALWAYS);
 	if (!File)
+	{
+		const auto LastError = os::last_error();
+		LOGERROR(L"Error opening {}: {}"sv, FullPath, LastError);
 		return false;
-	return File.Write(Data.data(), Data.size() * sizeof(decltype(Data)::value_type));
+	}
+
+	if (File.Write(Data.data(), Data.size() * sizeof(decltype(Data)::value_type)))
+		return true;
+
+	const auto LastError = os::last_error();
+	LOGERROR(L"Error writing to {}: {}"sv, FullPath, LastError);
+	return false;
 }
 
 static bool write_minidump(const exception_context& Context, string_view const FullPath, MINIDUMP_TYPE const Type)
@@ -291,7 +313,11 @@ static bool write_minidump(const exception_context& Context, string_view const F
 
 	const os::fs::file DumpFile(FullPath, GENERIC_WRITE, os::fs::file_share_read, nullptr, CREATE_ALWAYS);
 	if (!DumpFile)
+	{
+		const auto LastError = os::last_error();
+		LOGERROR(L"Error opening {}: {}"sv, FullPath, LastError);
 		return false;
+	}
 
 	auto ExceptionRecord = Context.exception_record();
 	auto ContextRecord = Context.context_record();
@@ -1690,7 +1716,7 @@ static handler_result handle_generic_exception(
 		MiniDumpIgnoreInaccessibleMemory
 	);
 
-	const auto MinidumpNormal = write_minidump(Context, path::join(ReportLocation, WIDE_SV(MINIDDUMP_NAME)), MinidumpFlags);
+	const auto MinidumpNormal = write_minidump(Context, path::join(ReportLocation, WIDE_SV(MINIDUMP_NAME)), MinidumpFlags);
 	const auto MinidumpFull = write_minidump(Context, path::join(ReportLocation, WIDE_SV(FULLDUMP_NAME)), FulldumpFlags);
 	const auto BugReport = collect_information(Context, Location, PluginInfo, ModuleName, Type, Message, ErrorState, NestedStack);
 	const auto ReportOnDisk = write_report(BugReport, path::join(ReportLocation, WIDE_SV(BUGREPORT_NAME)));

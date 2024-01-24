@@ -2120,7 +2120,7 @@ COPY_CODES ShellCopy::ShellCopyOneFile(
 					if (!FileMoved)
 					{
 						ErrorState = os::last_error();
-						LOGWARNING(L"move_file({}, {}): {}"sv, strSrcFullName, strDestPath, os::last_error());
+						LOGWARNING(L"move_file({}, {}): {}"sv, strSrcFullName, strDestPath, *ErrorState);
 
 						if (NWFS_Attr && !os::fs::set_file_attributes(strSrcFullName, SrcData.Attributes)) // BUGBUG
 						{
