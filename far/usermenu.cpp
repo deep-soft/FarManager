@@ -64,6 +64,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "file_io.hpp"
 #include "keyboard.hpp"
 #include "log.hpp"
+#include "codepage.hpp"
 
 // Platform:
 #include "platform.hpp"
@@ -266,7 +267,7 @@ static void DeserializeMenu(UserMenu::menu_container& Menu, const os::fs::file& 
 	enum_lines EnumFileLines(Stream, Codepage);
 	ParseMenu(Menu, EnumFileLines, Codepage == encoding::codepage::oem());
 
-	if (!IsUnicodeOrUtfCodePage(Codepage))
+	if (!IsUtfCodePage(Codepage))
 	{
 		Codepage = default_menu_file_codepage;
 	}

@@ -84,6 +84,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "cvtname.hpp"
 #include "log.hpp"
 #include "stddlg.hpp"
+#include "codepage.hpp"
 
 // Platform:
 #include "platform.hpp"
@@ -481,7 +482,7 @@ struct background_searcher::CodePageInfo
 
 	void initialize()
 	{
-		if (IsUnicodeCodePage(CodePage))
+		if (IsUtf16CodePage(CodePage))
 			MaxCharSize = 2;
 		else
 		{
@@ -542,8 +543,8 @@ void background_searcher::InitInFileSearch()
 				}
 
 				m_CodePages.emplace_back(CP_UTF8);
-				m_CodePages.emplace_back(CP_UNICODE);
-				m_CodePages.emplace_back(CP_REVERSEBOM);
+				m_CodePages.emplace_back(CP_UTF16LE);
+				m_CodePages.emplace_back(CP_UTF16BE);
 			}
 
 			// Добавляем избранные таблицы символов
@@ -1132,7 +1133,7 @@ bool background_searcher::LookForString(string_view const FileName)
 				wchar_t const *buffer;
 
 				// Перегоняем буфер в UTF-16
-				if (IsUnicodeCodePage(i.CodePage))
+				if (IsUtf16CodePage(i.CodePage))
 				{
 					// Вычисляем размер буфера в UTF-16
 					bufferCount = readBlockSize/sizeof(wchar_t);
@@ -1145,10 +1146,11 @@ bool background_searcher::LookForString(string_view const FileName)
 					}
 
 					// Копируем буфер чтения в буфер сравнения
-					if (i.CodePage==CP_REVERSEBOM)
+					if (i.CodePage== CP_UTF16BE)
 					{
 						// Для UTF-16 (big endian) преобразуем буфер чтения в буфер сравнения
-						swap_bytes(readBufferA.data(), readBuffer.data(), readBlockSize);
+						static_assert(std::endian::native == std::endian::little, "No way");
+						swap_bytes(readBufferA.data(), readBuffer.data(), readBlockSize, sizeof(char16_t));
 						// Устанавливаем буфер сравнения
 						buffer = readBuffer.data();
 					}
@@ -1161,7 +1163,7 @@ bool background_searcher::LookForString(string_view const FileName)
 				else
 				{
 					// Конвертируем буфер чтения из кодировки поиска в UTF-16
-					encoding::diagnostics Diagnostics{ encoding::diagnostics::incomplete_bytes };
+					encoding::diagnostics Diagnostics{ encoding::diagnostics::not_enough_data };
 					bufferCount = encoding::get_chars(i.CodePage, { readBufferA.data() + i.BytesToSkip, readBlockSize - i.BytesToSkip }, readBuffer, &Diagnostics);
 
 					// Выходим, если нам не удалось сконвертировать строку
@@ -1171,8 +1173,8 @@ bool background_searcher::LookForString(string_view const FileName)
 						continue;
 					}
 
-					if (Diagnostics.IncompleteBytes && !IsLastBlock)
-						--bufferCount;
+					if (!IsLastBlock)
+						bufferCount -= Diagnostics.PartialOutput;
 
 					// Если у нас поиск по словам и в конце предыдущего блока было вхождение
 					if (m_SearchDlgParams.WholeWords.value() && i.WordFound)
@@ -1272,7 +1274,7 @@ bool background_searcher::LookForString(string_view const FileName)
 
 				if (!IsLastBlock)
 				{
-					if (IsUnicodeCodePage(i.CodePage))
+					if (IsUtf16CodePage(i.CodePage))
 					{
 						i.LastSymbol = readBuffer[bufferCount - StepBackOffset / sizeof(wchar_t) - 1];
 					}
@@ -1291,13 +1293,13 @@ bool background_searcher::LookForString(string_view const FileName)
 						// * 2 To make sure that we can decode at least one
 						bytes_view const TestStr(readBufferA.data() + readBlockSize - StepBackOffset, m_MaxCharSize * 2);
 
-						encoding::diagnostics Diagnostics{ encoding::diagnostics::incomplete_bytes };
+						encoding::diagnostics Diagnostics{ encoding::diagnostics::not_enough_data };
 						const auto TestStrChars = encoding::get_chars(i.CodePage, TestStr, readBuffer, &Diagnostics);
 
-						i.BytesToSkip = TestStr.size() - Diagnostics.IncompleteBytes;
+						i.BytesToSkip = TestStr.size() - Diagnostics.PartialInput;
 
 						// Запоминаем последний символ блока
-						i.LastSymbol = readBuffer[TestStrChars - (Diagnostics.IncompleteBytes != 0)];
+						i.LastSymbol = readBuffer[TestStrChars - Diagnostics.PartialOutput];
 					}
 				}
 			}

@@ -63,6 +63,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "plugapi.hpp"
 #include "exception_handler.hpp"
 #include "log.hpp"
+#include "codepage.hpp"
 
 // Platform:
 #include "platform.hpp"
@@ -4511,7 +4512,7 @@ static int WINAPI FarViewerControlA(int Command, void* Param) noexcept
 				viA->CurMode.UseDecodeTable = 0;
 				viA->CurMode.TableNum       = 0;
 				viA->CurMode.AnsiMode       = viW.CurMode.CodePage == encoding::codepage::ansi();
-				viA->CurMode.Unicode        = IsUnicodeCodePage(viW.CurMode.CodePage);
+				viA->CurMode.Unicode        = IsUtf16CodePage(viW.CurMode.CodePage);
 				viA->CurMode.Wrap           = (viW.CurMode.Flags&VMF_WRAP)?1:0;
 				viA->CurMode.WordWrap       = (viW.CurMode.Flags&VMF_WORDWRAP)?1:0;
 				viA->CurMode.Hex            = viW.CurMode.ViewMode;

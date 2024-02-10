@@ -76,6 +76,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "global.hpp"
 #include "uuids.far.dialogs.hpp"
 #include "log.hpp"
+#include "encoding.hpp"
 
 // Platform:
 #include "platform.hpp"
@@ -127,9 +128,9 @@ static int ViewerID=0;
 
 static constexpr int s_BytesPerStripe = 8;
 
-static bool IsCodePageSupported(uintptr_t cp)
+static bool IsCodePageSupportedInViewer(uintptr_t cp)
 {
-	return codepages::IsCodePageSupported(cp, 2);
+	return IsCodePageSupported(cp, 2);
 }
 
 // seems like this initialization list is toooooo long
@@ -359,7 +360,7 @@ bool Viewer::OpenFile(string_view const Name, bool const Warn)
 			if (vo.SaveCodepage || vo.SavePos)
 			{
 				CachedCodePage = poscache.CodePage;
-				if (CachedCodePage && !IsCodePageSupported(CachedCodePage))
+				if (CachedCodePage && !IsCodePageSupportedInViewer(CachedCodePage))
 					CachedCodePage = 0;
 			}
 
@@ -400,7 +401,7 @@ bool Viewer::OpenFile(string_view const Name, bool const Warn)
 		{
 			const auto DefaultCodepage = GetDefaultCodePage();
 			const auto DetectedCodepage = GetFileCodepage(ViewFile, DefaultCodepage, &Signature, vo.AutoDetectCodePage);
-			m_Codepage = IsCodePageSupported(DetectedCodepage)? DetectedCodepage : DefaultCodepage;
+			m_Codepage = IsCodePageSupportedInViewer(DetectedCodepage)? DetectedCodepage : DefaultCodepage;
 		}
 
 		MB.SetCP(m_Codepage);
@@ -443,7 +444,7 @@ bool Viewer::isBinaryFile(uintptr_t cp) // very approximate: looks for '\0' in f
 	if (!Result)
 		return true;
 
-	if (IsUnicodeCodePage(cp))
+	if (IsUtf16CodePage(cp))
 	{
 		return contains(std::span(std::bit_cast<const wchar_t*>(&Buffer), BytesRead / sizeof(wchar_t)), L'\0');
 	}
@@ -687,15 +688,15 @@ int Viewer::getCharSize() const
 {
 	if (CP_UTF8 == m_Codepage)
 		return -1;
-	else if (IsUnicodeCodePage(m_Codepage))
-		return +2;
+	else if (IsUtf16CodePage(m_Codepage))
+		return sizeof(char16_t);
 	else
 		return m_Codepage == MB.GetCP()? -static_cast<int>(MB.GetSize()) : +1;
 }
 
 static int getChSize(uintptr_t const cp)
 {
-	return IsUnicodeCodePage(cp)? 2 : 1;
+	return IsUtf16CodePage(cp)? sizeof(char16_t) : 1;
 }
 
 int Viewer::GetModeDependentCharSize() const
@@ -712,12 +713,13 @@ int Viewer::txt_dump(std::string_view const Str, size_t ClientWidth, string& Out
 {
 	OutStr.clear();
 
-	if (IsUnicodeCodePage(m_Codepage))
+	if (IsUtf16CodePage(m_Codepage))
 	{
 		OutStr.assign(std::bit_cast<const wchar_t*>(Str.data()), Str.size() / sizeof(wchar_t));
-		if (m_Codepage == CP_REVERSEBOM)
+		if (m_Codepage == CP_UTF16BE)
 		{
-			swap_bytes(OutStr.data(), OutStr.data(), OutStr.size() * sizeof(wchar_t));
+			static_assert(std::endian::native == std::endian::little, "No way");
+			swap_bytes(OutStr.data(), OutStr.data(), OutStr.size() * sizeof(char16_t), sizeof(char16_t));
 		}
 		if (Str.size() & 1)
 		{
@@ -1378,7 +1380,7 @@ long long Viewer::VMProcess(int OpCode,void *vParam,long long iParam)
 		{
 			DWORD MacroViewerState = 0;
 			MacroViewerState |= ViOpt.AutoDetectCodePage?                             0_bit : 0;
-			MacroViewerState |= IsUnicodeCodePage(m_Codepage)?                        2_bit : 0;
+			MacroViewerState |= IsUtf16CodePage(m_Codepage)?                          2_bit : 0;
 			MacroViewerState |= m_Wrap?                                               3_bit : 0;
 			MacroViewerState |= m_WordWrap?                                           4_bit : 0;
 			MacroViewerState |= m_DisplayMode == VMT_HEX?                             5_bit : 0;
@@ -1663,7 +1665,7 @@ bool Viewer::process_key(const Manager::Key& Key)
 					const auto fpos = vtell();
 					const auto DecectedCodepage = GetFileCodepage(ViewFile, DefaultCodepage, &Signature, true);
 					vseek(fpos, FILE_BEGIN);
-					nCodePage = IsCodePageSupported(DecectedCodepage)? DecectedCodepage : DefaultCodepage;
+					nCodePage = IsCodePageSupportedInViewer(DecectedCodepage)? DecectedCodepage : DefaultCodepage;
 				}
 				m_Codepage = nCodePage;
 				MB.SetCP(m_Codepage);
@@ -2234,20 +2236,20 @@ static int process_back(int BufferSize, int pos, long long& fpos, const auto& Re
 	{
 		const auto PopEol = [&](T Char) { return nr && Buffer[nr - 1] == Char && --nr; };
 
-		if (PopEol(eol.lf<T>()))
+		if (PopEol(eol.lf()))
 		{
-			if (PopEol(eol.cr<T>()))
+			if (PopEol(eol.cr()))
 			{
-				PopEol(eol.cr<T>());
+				PopEol(eol.cr());
 			}
 		}
 		else
 		{
-			PopEol(eol.cr<T>());
+			PopEol(eol.cr());
 		}
 	}
 
-	const T crlf[]{ eol.cr<T>(), eol.lf<T>() };
+	const T crlf[]{ eol.cr(), eol.lf() };
 	const auto REnd = std::make_reverse_iterator(Buffer);
 	const auto RBegin = REnd - nr;
 	const auto Iterator = std::find_first_of(RBegin, REnd, ALL_CONST_RANGE(crlf));
@@ -2299,7 +2301,7 @@ void Viewer::Up(int nlines, bool adjust)
 
 	const auto ch_size = getCharSize();
 
-	const raw_eol eol;
+	const raw_eol eol(m_Codepage);
 
 	while ( nlines > 0 )
 	{
@@ -3305,13 +3307,13 @@ int Viewer::vread(wchar_t *Buf, int Count, wchar_t *Buf2)
 
 	size_t ReadSize = 0;
 
-	if (IsUnicodeCodePage(m_Codepage))
+	if (IsUtf16CodePage(m_Codepage))
 	{
 		Reader.Read(Buf, Count, &ReadSize);
 
-		if (CP_REVERSEBOM == m_Codepage)
+		if (CP_UTF16BE == m_Codepage)
 		{
-			swap_bytes(Buf, Buf, ReadSize);
+			(void)encoding::get_chars(m_Codepage, { view_as<char const*>(Buf), ReadSize }, { Buf, ReadSize });
 		}
 
 		if (ReadSize & 1)
@@ -3456,8 +3458,8 @@ bool Viewer::vgetc(wchar_t* pCh)
 
 	switch (m_Codepage)
 	{
-	case CP_UNICODE:
-	case CP_REVERSEBOM:
+	case CP_UTF16LE:
+	case CP_UTF16BE:
 		{
 			const auto First = VgetcCache.pop();
 
@@ -3469,7 +3471,7 @@ bool Viewer::vgetc(wchar_t* pCh)
 			{
 				const auto Second = VgetcCache.pop();
 
-				*pCh = m_Codepage == CP_UNICODE?
+				*pCh = m_Codepage == CP_UTF16LE?
 					make_integer<wchar_t>(First, Second) :
 					make_integer<wchar_t>(Second, First);
 			}
@@ -3481,8 +3483,8 @@ bool Viewer::vgetc(wchar_t* pCh)
 			wchar_t w[2];
 			std::string_view const View(VgetcCache.cbegin(), VgetcCache.size());
 			auto Iterator = View.cbegin();
-			auto FullyConsumedIterator = Iterator;
-			const auto WideCharsNumber = Utf8::get_char(Iterator, FullyConsumedIterator, View.cend(), w[0], w[1]);
+			encoding::diagnostics Diagnostics;
+			const auto WideCharsNumber = Utf8::get_char(Iterator, View.cend(), w[0], w[1], Diagnostics);
 			VgetcCache.pop(Iterator - View.cbegin());
 			*pCh = w[0];
 			if (WideCharsNumber > 1)
@@ -3562,11 +3564,11 @@ wchar_t Viewer::vgetc_prev()
 	{
 		switch (m_Codepage)
 		{
-		case CP_REVERSEBOM:
+		case CP_UTF16BE:
 			Result = make_integer<wchar_t>(RawBuffer[1], RawBuffer[0]);
 			break;
 
-		case CP_UNICODE:
+		case CP_UTF16LE:
 			Result = make_integer<wchar_t>(RawBuffer[0], RawBuffer[1]);
 			break;
 
@@ -4057,7 +4059,7 @@ int Viewer::ProcessTypeWrapMode(int newMode, bool isRedraw)
 uintptr_t Viewer::GetDefaultCodePage()
 {
 	const auto cp = encoding::codepage::normalise(Global->Opt->ViOpt.DefaultCodePage);
-	return cp == CP_DEFAULT || !IsCodePageSupported(cp)?
+	return cp == CP_DEFAULT || !IsCodePageSupportedInViewer(cp)?
 		encoding::codepage::ansi() :
 		cp;
 }

@@ -65,6 +65,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "lang.hpp"
 #include "string_utils.hpp"
 #include "global.hpp"
+#include "codepage.hpp"
 
 // Platform:
 
@@ -4755,21 +4756,24 @@ long long Editor::GetCurPos(bool file_pos, bool add_bom) const
 
 	if (file_pos)
 	{
-		if (Codepage == CP_UNICODE || Codepage == CP_REVERSEBOM)
+		switch (Codepage)
 		{
-			Multiplier = sizeof(wchar_t);
-			if (add_bom)
-				bom = 1;
-		}
-		else if (Codepage == CP_UTF8)
-		{
+		case CP_UTF8:
 			Multiplier = UnknownMultiplier;
 			if (add_bom)
 				bom = 3;
-		}
-		else if (const auto Info = GetCodePageInfo(Codepage); Info && Info->MaxCharSize > 1)
-		{
-			Multiplier = UnknownMultiplier;
+			break;
+
+		case CP_UTF16LE:
+		case CP_UTF16BE:
+			Multiplier = sizeof(char16_t);
+			if (add_bom)
+				bom = 1;
+			break;
+
+		default:
+			if (const auto Info = GetCodePageInfo(Codepage); Info && Info->MaxCharSize > 1)
+				Multiplier = UnknownMultiplier;
 		}
 	}
 
@@ -5705,7 +5709,7 @@ int Editor::EditorControl(int Command, intptr_t Param1, void *Param2)
 				}
 				else
 				{
-					if (cp == CP_DEFAULT || !codepages::IsCodePageSupported(cp) || !SetCodePage(GetCodePage(), cp))
+					if (cp == CP_DEFAULT || !IsCodePageSupported(cp) || !SetCodePage(GetCodePage(), cp))
 						return false;
 				}
 				Show();
@@ -6546,16 +6550,19 @@ void Editor::SetCacheParams(EditorPosCache &pc, bool count_bom)
 		size_t TotalSize = 0;
 		const auto Codepage = GetCodePage();
 
-		if (Codepage == CP_UNICODE || Codepage == CP_REVERSEBOM)
+		switch (Codepage)
 		{
-			StartChar /= 2;
-			if ( count_bom )
-				--StartChar;
-		}
-		else if (Codepage == CP_UTF8)
-		{
-			if ( count_bom )
+		case CP_UTF8:
+			if (count_bom)
 				StartChar -= 3;
+			break;
+
+		case CP_UTF16LE:
+		case CP_UTF16BE:
+			StartChar /= sizeof(char16_t);
+			if (count_bom)
+				--StartChar;
+			break;
 		}
 
 		while (!IsLastLine(CurPtr))

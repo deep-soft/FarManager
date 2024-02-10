@@ -36,6 +36,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
 // Internal:
+#include "codepage.hpp"
 
 // Platform:
 
@@ -53,32 +54,17 @@ namespace encoding
 	{
 		enum: unsigned
 		{
-			error_position = 0_bit,
-			incomplete_bytes = 1_bit,
+			no_translation  = 0_bit,
+			not_enough_data = 1_bit,
 
 			all = ~0u
 		};
 
 		unsigned EnabledDiagnostics{ all };
 		std::optional<size_t> ErrorPosition;
-		size_t IncompleteBytes{};
+		size_t PartialInput{};
+		size_t PartialOutput{};
 	};
-
-	namespace codepage
-	{
-		namespace detail
-		{
-			struct utf8 { [[nodiscard]] static uintptr_t id(); };
-			struct ansi { [[nodiscard]] static uintptr_t id(); };
-			struct oem  { [[nodiscard]] static uintptr_t id(); };
-		}
-
-		[[nodiscard]] inline uintptr_t utf8() { return detail::utf8::id(); }
-		[[nodiscard]] inline uintptr_t ansi() { return detail::ansi::id(); }
-		[[nodiscard]] inline uintptr_t oem()  { return detail::oem::id(); }
-
-		[[nodiscard]] uintptr_t normalise(uintptr_t Codepage);
-	}
 
 	[[nodiscard]] size_t get_bytes(uintptr_t Codepage, string_view Str, std::span<char> Buffer, diagnostics* Diagnostics = {});
 	void get_bytes(uintptr_t Codepage, string_view Str, std::string& Buffer, diagnostics* Diagnostics = {});
@@ -105,8 +91,6 @@ namespace encoding
 
 	namespace detail
 	{
-		namespace cp = codepage;
-
 		template<typename T>
 		class codepage
 		{
@@ -232,15 +216,7 @@ namespace encoding
 	}
 }
 
-void swap_bytes(const void* Src, void* Dst, size_t SizeInBytes);
-
-[[nodiscard]] bool IsVirtualCodePage(uintptr_t cp);
-[[nodiscard]] bool IsUnicodeCodePage(uintptr_t cp);
-[[nodiscard]] bool IsStandardCodePage(uintptr_t cp);
-[[nodiscard]] bool IsUnicodeOrUtfCodePage(uintptr_t cp);
-[[nodiscard]] bool IsNoFlagsCodepage(uintptr_t cp);
-
-[[nodiscard]] string ShortReadableCodepageName(uintptr_t cp);
+void swap_bytes(void const* Src, void* Dst, size_t SizeInBytes, size_t ElementSize);
 
 //#############################################################################
 
@@ -269,16 +245,20 @@ private:
 
 namespace Utf8
 {
-	// returns the number of decoded chars, 1 or 2. Moves StrIterator and FullyConsumedIterator forward:
-	// StrIterator: including incomplete characters
-	// FullyConsumedIterator: only fully decoded characters. If it's not the same as StrIterator, you might want to drop the results and try again
+	// Returns the number of decoded chars, 1 or 2. Moves StrIterator forward
+	// When there is not enough data to decode the whole character:
+	// - First will have the the first raw byte embedded
+	// - StrIterator will be advanced by one
+	// - Diagnostics will be set accordingly
+	// You might want to drop the result or continue decoding the tail as embedded raw bytes
 	[[nodiscard]] size_t get_char(
 		std::string_view::const_iterator& StrIterator,
-		std::string_view::const_iterator& FullyConsumedIterator,
 		std::string_view::const_iterator StrEnd,
 		wchar_t& First,
-		wchar_t& Second
+		wchar_t& Second,
+		encoding::diagnostics& Diagnostics
 	);
+
 	// returns the number of decoded chars, up to Buffer.size(). Stops on buffer overflow. Tail contains the number of unprocessed bytes.
 	[[nodiscard]] size_t get_chars(std::string_view Str, std::span<wchar_t> Buffer, int& Tail);
 }
@@ -288,14 +268,17 @@ namespace Utf8
 class [[nodiscard]] raw_eol
 {
 public:
-	raw_eol(): m_Cr('\r'), m_Lf('\n') {}
-	explicit raw_eol(uintptr_t Codepage): m_Cr(to(Codepage, L'\r')), m_Lf(to(Codepage, L'\n')) {}
+	explicit raw_eol(uintptr_t const Codepage)
+	{
+		if (!IsUtfCodePage(Codepage))
+		{
+			m_Cr = to(Codepage, m_Cr);
+			m_Lf = to(Codepage, m_Lf);
+		}
+	}
 
-	template<class T>
-	[[nodiscard]] T cr() const { return value<T>(L'\r', m_Cr); }
-
-	template<class T>
-	[[nodiscard]] T lf() const { return value<T>(L'\n', m_Lf); }
+	[[nodiscard]] auto cr() const { return m_Cr; }
+	[[nodiscard]] auto lf() const { return m_Lf; }
 
 private:
 	static char to(uintptr_t Codepage, wchar_t WideChar)
@@ -304,33 +287,9 @@ private:
 		return encoding::get_bytes(Codepage, { &WideChar, 1 }, { &Char, 1 })? Char : WideChar;
 	}
 
-	template<typename T>
-	static T value(
-		[[maybe_unused]] wchar_t const WideChar,
-		[[maybe_unused]] char const Char
-	)
-	{
-		if constexpr (std::same_as<T, wchar_t>)
-			return WideChar;
-		else
-		{
-			static_assert(std::same_as<T, char>);
-			return Char;
-		}
-	}
-
-	const char m_Cr;
-	const char m_Lf;
+	char
+		m_Cr{'\r'},
+		m_Lf{'\n'};
 };
-
-struct cp_info
-{
-	string Name;
-	unsigned char MaxCharSize;
-};
-
-using cp_map = std::unordered_map<unsigned, cp_info>;
-[[nodiscard]] const cp_map& InstalledCodepages();
-[[nodiscard]] cp_info const* GetCodePageInfo(uintptr_t cp);
 
 #endif // ENCODING_HPP_44AE7032_AF79_4A6F_A2ED_529BC1A38758

@@ -36,6 +36,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "codepage_selection.hpp"
 
 // Internal:
+#include "codepage.hpp"
 #include "encoding.hpp"
 #include "vmenu2.hpp"
 #include "keys.hpp"
@@ -307,8 +308,8 @@ static string_view unicode_codepage_name(uintptr_t const Codepage)
 	switch (Codepage)
 	{
 	case CP_UTF8:       return L"UTF-8"sv;
-	case CP_UNICODE:    return L"UTF-16 (Little endian)"sv;
-	case CP_REVERSEBOM: return L"UTF-16 (Big endian)"sv;
+	case CP_UTF16LE:    return L"UTF-16 (Little endian)"sv;
+	case CP_UTF16BE:    return L"UTF-16 (Big endian)"sv;
 	default:            return {};
 	}
 }
@@ -373,8 +374,8 @@ void codepages::AddCodePages(DWORD codePages)
 	//
 	AddSeparator(msg(lng::MGetCodePageUnicode));
 	AddStandardCodePage(unicode_codepage_name(CP_UTF8), CP_UTF8, -1, true);
-	AddStandardCodePage(unicode_codepage_name(CP_UNICODE), CP_UNICODE);
-	AddStandardCodePage(unicode_codepage_name(CP_REVERSEBOM), CP_REVERSEBOM);
+	AddStandardCodePage(unicode_codepage_name(CP_UTF16LE), CP_UTF16LE);
+	AddStandardCodePage(unicode_codepage_name(CP_UTF16BE), CP_UTF16BE);
 
 	// other codepages
 	//
@@ -778,15 +779,6 @@ size_t codepages::FillCodePagesList(Dialog* Dlg, size_t controlId, uintptr_t cod
 	return favoriteCodePages;
 }
 
-bool codepages::IsCodePageSupported(uintptr_t CodePage, size_t MaxCharSize)
-{
-	if (CodePage == CP_DEFAULT || IsStandardCodePage(CodePage))
-		return true;
-
-	const auto Info = GetCodePageInfo(CodePage);
-	return Info && Info->MaxCharSize <= MaxCharSize;
-}
-
 std::optional<cp_info> codepages::GetInfo(uintptr_t CodePage)
 {
 	const auto Info = GetCodePageInfo(CodePage);
@@ -870,7 +862,7 @@ F8CP::F8CP(bool viewer):
 					cp = 0;
 			}
 
-			if (cp && codepages::IsCodePageSupported(cp, viewer ? 2:20) && !used_cps.contains(cp))
+			if (cp && IsCodePageSupported(cp, viewer? 2 : 20) && !used_cps.contains(cp))
 			{
 				m_F8CpOrder.emplace_back(cp);
 				used_cps.emplace(cp);

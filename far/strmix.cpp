@@ -48,6 +48,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "regex_helpers.hpp"
 #include "string_utils.hpp"
 #include "global.hpp"
+#include "codepage.hpp"
 
 // Platform:
 
@@ -1608,7 +1609,7 @@ TEST_CASE("hex")
 	{
 		REQUIRE(ExtractHexString(i.Src) == i.Numbers);
 		REQUIRE(HexStringToBlob(i.Numbers, 0) == i.Bytes);
-		REQUIRE(BlobToHexString(view_bytes(i.Bytes), 0) == i.Numbers);
+		REQUIRE(BlobToHexString(i.Bytes, 0) == i.Numbers);
 	}
 }
 
