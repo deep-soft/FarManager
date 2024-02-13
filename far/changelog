@@ -1,4 +1,24 @@
 --------------------------------------------------------------------------------
+drkns 2024-02-12 20:23:32+00:00 - build 6273
+
+1. gh-796 and other folder shortcuts improvements:
+   - RCtrl+<N> in folder shortcuts menu works the same as Down
+   - RCtrl+<N> in folder shortcuts menu switches to the corresponding list if needed
+   - If there are no shortcuts assigned to RCtrl+<N>, an empty menu will pop up.
+
+--------------------------------------------------------------------------------
+drkns 2024-02-12 01:52:41+00:00 - build 6272
+
+1. gh-795: FindFile Trap.
+
+--------------------------------------------------------------------------------
+MZK 2024-02-10 13:13:13-08:00 - build 6271
+
+1. `Ctrl+Numpad5` in Editor menu "All matching entries" vertically aligns
+   found text in all items. To preserve vertical alignment while scrolling items
+   horizontally, the items can be moved beyond the left or right window edges.
+
+--------------------------------------------------------------------------------
 drkns 2024-02-10 14:45:04+00:00 - build 6270
 
 1. Refactoring.
