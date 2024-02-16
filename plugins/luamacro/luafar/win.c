@@ -624,6 +624,11 @@ static int win_MoveFile(lua_State *L)
 	return SysErrorReturn(L);
 }
 
+static int win_RenameFile(lua_State *L)
+{
+	return win_MoveFile(L);
+}
+
 static int win_DeleteFile(lua_State *L)
 {
 	if(DeleteFileW(check_utf8_string(L, 1, NULL)))
@@ -958,42 +963,44 @@ static int win_ReplaceFile(lua_State *L)
 	return 1;
 }
 
+#define PAIR(prefix,txt) {#txt, prefix ## _ ## txt}
+
 const luaL_Reg win_funcs[] =
 {
-	{"CompareString",       win_CompareString},
-	{"CopyFile",            win_CopyFile},
-	{"CreateDir",           win_CreateDir},
-	{"DeleteFile",          win_DeleteFile},
-	{"DeleteRegKey",        win_DeleteRegKey},
-	{"DeleteRegValue",      win_DeleteRegValue},
-	{"EnumRegKey",          win_EnumRegKey},
-	{"EnumRegValue",        win_EnumRegValue},
-	{"ExtractKey",          win_ExtractKey},
-	{"ExtractKeyEx",        win_ExtractKeyEx},
-	{"IsWinVersion",        win_IsWinVersion},
-	{"FileTimeToLocalFileTime", win_FileTimeToLocalFileTime},
-	{"FileTimeToSystemTime",win_FileTimeToSystemTime},
-	{"GetConsoleScreenBufferInfo", win_GetConsoleScreenBufferInfo},
-	{"GetEnv",              win_GetEnv},
-	{"GetFileInfo",         win_GetFileInfo},
-	{"GetFileTimes",        win_GetFileTimes},
-	{"GetRegKey",           win_GetRegKey},
-	{"GetSystemTime",       win_GetSystemTime},
-	{"GetLocalTime",        win_GetLocalTime},
-	{"GetSystemTimeAsFileTime", win_GetSystemTimeAsFileTime},
-	{"GetVirtualKeys",      win_GetVirtualKeys},
-	{"IsProcess64bit",      win_IsProcess64bit},
-	{"MoveFile",            win_MoveFile},
-	{"RemoveDir",           win_RemoveDir},
-	{"RenameFile",          win_MoveFile}, // alias
-	{"ReplaceFile",         win_ReplaceFile},
-	{"SetEnv",              win_SetEnv},
-	{"SetFileTimes",        win_SetFileTimes},
-	{"SetRegKey",           win_SetRegKey},
-	{"ShellExecute",        win_ShellExecute},
-	{"SystemTimeToFileTime",win_SystemTimeToFileTime},
-	{"wcscmp",              win_wcscmp},
-	{"WriteConsole",        win_WriteConsole},
+	PAIR( win, CompareString),
+	PAIR( win, CopyFile),
+	PAIR( win, CreateDir),
+	PAIR( win, DeleteFile),
+	PAIR( win, DeleteRegKey),
+	PAIR( win, DeleteRegValue),
+	PAIR( win, EnumRegKey),
+	PAIR( win, EnumRegValue),
+	PAIR( win, ExtractKey),
+	PAIR( win, ExtractKeyEx),
+	PAIR( win, FileTimeToLocalFileTime),
+	PAIR( win, FileTimeToSystemTime),
+	PAIR( win, GetConsoleScreenBufferInfo),
+	PAIR( win, GetEnv),
+	PAIR( win, GetFileInfo),
+	PAIR( win, GetFileTimes),
+	PAIR( win, GetLocalTime),
+	PAIR( win, GetRegKey),
+	PAIR( win, GetSystemTime),
+	PAIR( win, GetSystemTimeAsFileTime),
+	PAIR( win, GetVirtualKeys),
+	PAIR( win, IsProcess64bit),
+	PAIR( win, IsWinVersion),
+	PAIR( win, MoveFile),
+	PAIR( win, RemoveDir),
+	PAIR( win, RenameFile), // alias
+	PAIR( win, ReplaceFile),
+	PAIR( win, SetEnv),
+	PAIR( win, SetFileTimes),
+	PAIR( win, SetRegKey),
+	PAIR( win, ShellExecute),
+	PAIR( win, SystemTimeToFileTime),
+	PAIR( win, WriteConsole),
+	PAIR( win, wcscmp),
 
 	{NULL, NULL}
 };
