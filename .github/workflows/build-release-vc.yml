@@ -42,7 +42,7 @@ jobs:
         uses: deep-soft/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: deep-soft/setup-python@v5
 
       - name: Run checks
         working-directory: far
@@ -56,7 +56,7 @@ jobs:
       - name: Checkout source
         uses: deep-soft/checkout@v4
 
-      - uses: actions/setup-dotnet@v3
+      - uses: deep-soft/setup-dotnet@v4
         with:
           dotnet-version: '6.0'
 
@@ -186,7 +186,7 @@ jobs:
       - name: Upload zip
         if: matrix.build_config  == 'Release'
         continue-on-error: true
-        uses: deep-soft/upload-artifact@main
+        uses: deep-soft/upload-artifact@v4
         with:
           name: ${{ env.PROG_NAME }}.${{ matrix.platform_name }}.${{ env.VERSION }}.zip
           #path: _build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}/${{ env.PROG_NAME }}.${{ matrix.build_config }}.${{ matrix.platform_sln }}.${{ env.VERSION }}.zip
@@ -195,7 +195,7 @@ jobs:
       - name: Upload folder
         if: matrix.build_config  == 'Debug'
         continue-on-error: true
-        uses: deep-soft/upload-artifact@main
+        uses: deep-soft/upload-artifact@v4
         with:
           name: ${{ env.PROG_NAME }}.${{ matrix.build_config }}.${{ matrix.platform_name }}
           path: _build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}
