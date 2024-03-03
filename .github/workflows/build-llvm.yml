@@ -24,7 +24,8 @@ on:
         required: true
 
 env:
-  PROG_NAME:    "Far3"
+  PRG_NAME:    "Far3"
+  PRG_VERSION: "3.0.0000.0"
   Far_version:  "3.0."
   TAG_NAME:     "Far3"
   TAG_VERSION:  "Far3-v1.0.0"
@@ -155,7 +156,7 @@ jobs:
         uses: deep-soft/zip-release@v2
         with:
           type: 'zip'
-          filename: '${{ env.PROG_NAME }}.${{ matrix.machine_target }}.${{ matrix.c_lib}}.${{ env.PRG_VERSION }}.zip'
+          filename: '${{ env.PRG_NAME }}.${{ matrix.machine_target }}.${{ matrix.c_lib}}.${{ env.PRG_VERSION }}.zip'
           directory: '${{ env.FOLDER_NAME }}'
           exclusions: '*.map *.pdb'
           recursive_exclusions: '*.map *.pdb changelog *Bel.lng *Cze.lng *Ger.lng *Hun.lng *Ita.lng *Lit.lng *Pol.lng *Rus.lng *Sky.lng *Spa.lng *Ukr* *Bel.hlf *Cze.hlf *Ger.hlf *Hun.hlf *Ita.hlf *Lit.hlf *Pol.hlf *Rus.hlf *Sky.hlf *Spa.hlf *Ukr*'
