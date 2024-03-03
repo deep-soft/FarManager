@@ -24,8 +24,8 @@ on:
         required: true
 
 env:
-  PRG_NAME:    "Far3"
-  PRG_VERSION: "3.0.0000.0"
+  PRG_NAME:     "Far3-llvm"
+  PRG_VERSION:  "3.0.0000.0"
   Far_version:  "3.0."
   TAG_NAME:     "Far3"
   TAG_VERSION:  "Far3-v1.0.0"
@@ -66,7 +66,7 @@ jobs:
           _ref_len_="${#_ref_org_}"
           _ref_=$(echo ${_ref_all_::$_ref_len_})
 
-          Far_version=${{ env.Far_Version}}
+          Far_version=${{ env.Far_version }}
           Far_build=$(cat "far/vbuild.m4")
           echo $Far_version$Far_build
           echo "VERSION=$Far_version$Far_build.0" >> $GITHUB_ENV
@@ -77,7 +77,7 @@ jobs:
           _build_="$_crt_date_${{ env.TAG_BUILD }}.$_ref_"
           echo "TAG_BUILD=$_build_" >> $GITHUB_ENV
           echo "PRG_VERSION=$_prg_version_" >> $GITHUB_ENV
-          echo "TAG_VERSION=$_prg_version_" >> $GITHUB_ENV
+          echo "TAG_VERSION=${{ env.PRG_NAME }}-$_prg_version_" >> $GITHUB_ENV
 
       - name: Print ref, build version
         shell: bash
