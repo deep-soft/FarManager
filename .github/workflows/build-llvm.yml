@@ -156,7 +156,7 @@ jobs:
         uses: deep-soft/zip-release@v3
         with:
           type: 'zip'
-          filename: '${{ env.PRG_NAME }}.${{ matrix.machine_target }}.${{ matrix.c_lib}}.${{ env.PRG_VERSION }}.zip'
+          filename: '${{ env.PRG_NAME }}.${{ matrix.machine_target }}.${{ matrix.c_lib}}.${{ env.PRG_VERSION }}'
           directory: '${{ env.FOLDER_NAME }}'
           exclusions: '*.map *.pdb'
           recursive_exclusions: '*.map *.pdb changelog *Bel.lng *Cze.lng *Ger.lng *Hun.lng *Ita.lng *Lit.lng *Pol.lng *Rus.lng *Sky.lng *Spa.lng *Ukr* *Bel.hlf *Cze.hlf *Ger.hlf *Hun.hlf *Ita.hlf *Lit.hlf *Pol.hlf *Rus.hlf *Sky.hlf *Spa.hlf *Ukr*'
@@ -181,7 +181,7 @@ jobs:
         uses: deep-soft/zip-release@v3
         with:
           type: 'zip'
-          filename: '${{ env.TAG_VERSION }}${{ env.TAG_BUILD }}-ALL'
+          filename: '${{ env.PRG_NAME }}.${{ matrix.machine_target }}.${{ matrix.c_lib}}.${{ env.PRG_VERSION }}-ALL'
           directory: '.'
           path: '.'
           exclusions: '*.git* /*node_modules/* .editorconfig'
