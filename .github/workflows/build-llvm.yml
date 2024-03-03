@@ -185,6 +185,7 @@ jobs:
           directory: '.'
           path: '.'
           exclusions: '*.git* /*node_modules/* .editorconfig'
+          env_variable: 'ZIP_ARCHIVE_ALL'
           # archive name is ${{ env.ZIP_ARCHIVE_RELEASE }}
 
       - name: Publish Archive ALL
@@ -195,6 +196,6 @@ jobs:
           draft: true
           tag_name: ${{ env.TAG_VERSION }}${{ env.TAG_BUILD }}-ALL
           files: |
-              ${{ env.ZIP_ARCHIVE_RELEASE }}
+              ${{ env.ZIP_ARCHIVE_ALL }}
               _version_.txt
 # zip release end
