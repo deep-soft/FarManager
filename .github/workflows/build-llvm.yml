@@ -55,41 +55,39 @@ jobs:
       - name: Checkout source
         uses: deep-soft/checkout@v4
 
-#
-    - name: Get ref, set build version
-      continue-on-error: true
-      shell: bash
-      run: |
-        _ref_all_=$(git log -1 --format='%H')
-        popd
-        # _ref_=$(echo ${_ref_all_::7})
-        _ref_org_=${{ env.TAG_REF }}
-        _ref_len_="${#_ref_org_}"
-        _ref_=$(echo ${_ref_all_::$_ref_len_})
+      - name: Get ref, set build version
+        continue-on-error: true
+        shell: bash
+        run: |
+          _ref_all_=$(git log -1 --format='%H')
+          popd
+          # _ref_=$(echo ${_ref_all_::7})
+          _ref_org_=${{ env.TAG_REF }}
+          _ref_len_="${#_ref_org_}"
+          _ref_=$(echo ${_ref_all_::$_ref_len_})
 
-        Far_version=${{ env.Far_Version}}
-        Far_build=$(cat "far/vbuild.m4")
-        echo $Far_version$Far_build
-        echo "VERSION=$Far_version$Far_build.0" >> $GITHUB_ENV
-        _prg_version_="$Far_version$Far_build.0"
+          Far_version=${{ env.Far_Version}}
+          Far_build=$(cat "far/vbuild.m4")
+          echo $Far_version$Far_build
+          echo "VERSION=$Far_version$Far_build.0" >> $GITHUB_ENV
+          _prg_version_="$Far_version$Far_build.0"
 
-        echo "TAG_REF=$_ref_" >> $GITHUB_ENV
-        _crt_date_=$(date "+%Y%m%d_%H%M")
-        _build_="$_crt_date_${{ env.TAG_BUILD }}.$_ref_"
-        echo "TAG_BUILD=$_build_" >> $GITHUB_ENV
-        echo "PRG_VERSION=$_prg_version_" >> $GITHUB_ENV
-        echo "TAG_VERSION=$_prg_version_" >> $GITHUB_ENV
+          echo "TAG_REF=$_ref_" >> $GITHUB_ENV
+          _crt_date_=$(date "+%Y%m%d_%H%M")
+          _build_="$_crt_date_${{ env.TAG_BUILD }}.$_ref_"
+          echo "TAG_BUILD=$_build_" >> $GITHUB_ENV
+          echo "PRG_VERSION=$_prg_version_" >> $GITHUB_ENV
+          echo "TAG_VERSION=$_prg_version_" >> $GITHUB_ENV
 
-    - name: Print ref, build version
-      shell: bash
-      run: |
-        echo "NAM: ${{ env.PRG_NAME    }}"
-        echo "VER: ${{ env.PRG_VERSION }}"
-        echo "TAG: ${{ env.TAG_VERSION }}"
-        echo "REF: ${{ env.TAG_REF     }}"
-        echo "BLD: ${{ env.TAG_BUILD   }}"
-        echo "${{ env.PRG_NAME }}-${{ env.PRG_VERSION }}-${{ env.TAG_BUILD }}" > _version_.txt
-#
+      - name: Print ref, build version
+        shell: bash
+        run: |
+          echo "NAM: ${{ env.PRG_NAME    }}"
+          echo "VER: ${{ env.PRG_VERSION }}"
+          echo "TAG: ${{ env.TAG_VERSION }}"
+          echo "REF: ${{ env.TAG_REF     }}"
+          echo "BLD: ${{ env.TAG_BUILD   }}"
+          echo "${{ env.PRG_NAME }}-${{ env.PRG_VERSION }}-${{ env.TAG_BUILD }}" > _version_.txt
 
       - name: set folder_name and tag_name
         shell: bash
