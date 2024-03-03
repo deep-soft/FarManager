@@ -1,0 +1,202 @@
+# build-llvm.yml
+# 2024-03-04 00:40
+name: Build-llvm
+
+on:
+#  push:
+#    branches: master
+#  pull_request:
+#    branches: master
+  workflow_dispatch:
+    inputs:
+      extra_plugins_profile:
+        default: true
+        type: boolean
+      archive_src:
+        description: 'archive_src'
+        type: boolean
+        default: false
+        required: true
+      archive_ALL:
+        description: 'archive_ALL'
+        type: boolean
+        default: false
+        required: true
+
+env:
+  PROG_NAME:    "Far3"
+  Far_version:  "3.0."
+  TAG_NAME:     "Far3"
+  TAG_VERSION:  "Far3-v1.0.0"
+  TAG_BUILD:    "-b"
+  TAG_REF:      "0000000"
+
+#concurrency:
+#  group: ${{ github.workflow }}-${{ github.ref }}
+#  cancel-in-progress: true
+
+jobs:
+#------------------------------------------------------------------------------
+  build-llvm-mingw:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        machine_target: [i686, x86_64, armv7, aarch64]
+        c_lib: [msvcrt, ucrt]
+        build_type: [Release]
+        exclude:
+          - machine_target: armv7
+            c_lib: msvcrt
+          - machine_target: aarch64
+            c_lib: msvcrt
+
+    steps:
+      - name: Checkout source
+        uses: deep-soft/checkout@v4
+
+#
+    - name: Get ref, set build version
+      continue-on-error: true
+      shell: bash
+      run: |
+        _ref_all_=$(git log -1 --format='%H')
+        popd
+        # _ref_=$(echo ${_ref_all_::7})
+        _ref_org_=${{ env.TAG_REF }}
+        _ref_len_="${#_ref_org_}"
+        _ref_=$(echo ${_ref_all_::$_ref_len_})
+
+        Far_version=${{ env.Far_Version}}
+        Far_build=$(cat "far/vbuild.m4")
+        echo $Far_version$Far_build
+        echo "VERSION=$Far_version$Far_build.0" >> $GITHUB_ENV
+        _prg_version_="$Far_version$Far_build.0"
+
+        echo "TAG_REF=$_ref_" >> $GITHUB_ENV
+        _crt_date_=$(date "+%Y%m%d_%H%M")
+        _build_="$_crt_date_${{ env.TAG_BUILD }}.$_ref_"
+        echo "TAG_BUILD=$_build_" >> $GITHUB_ENV
+        echo "PRG_VERSION=$_prg_version_" >> $GITHUB_ENV
+        echo "TAG_VERSION=$_prg_version_" >> $GITHUB_ENV
+
+    - name: Print ref, build version
+      shell: bash
+      run: |
+        echo "NAM: ${{ env.PRG_NAME    }}"
+        echo "VER: ${{ env.PRG_VERSION }}"
+        echo "TAG: ${{ env.TAG_VERSION }}"
+        echo "REF: ${{ env.TAG_REF     }}"
+        echo "BLD: ${{ env.TAG_BUILD   }}"
+        echo "${{ env.PRG_NAME }}-${{ env.PRG_VERSION }}-${{ env.TAG_BUILD }}" > _version_.txt
+#
+
+      - name: set folder_name and tag_name
+        shell: bash
+        run: |
+          case ${{ matrix.machine_target }} in
+            i686)
+              folder_name="far/${{ matrix.build_type }}.32.clang";
+              ;;
+            x86_64)
+              folder_name="far/${{ matrix.build_type }}.64.clang";
+              ;;
+            armv7)
+              folder_name="far/${{ matrix.build_type }}.ARM32.clang";
+              ;;
+            aarch64)
+              folder_name="far/${{ matrix.build_type }}.ARM64.clang";
+              ;;
+          esac
+          echo "FOLDER_NAME=$folder_name" >> $GITHUB_ENV
+
+      - name: Install luver
+        uses: deep-soft/luver-action@v1
+
+      - name: Download llvm-mingw
+        id: download_llvm_mingw
+        uses: deep-soft/release-downloader@v1.9
+        with:
+          repository: "mstorsjo/llvm-mingw"
+          latest: true
+          preRelease: true
+          fileName: "llvm-mingw-*-${{ matrix.c_lib }}-ubuntu-*-x86_64.tar.xz"
+
+      - name: Install llvm-mingw
+        run: |
+          LLVM_MINGW=${{ fromJson(steps.download_llvm_mingw.outputs.downloaded_files)[0] }}
+          tar -xf "$LLVM_MINGW"
+          echo "${{ github.workspace }}/$(basename -s .tar.xz $LLVM_MINGW)/bin" >> $GITHUB_PATH
+
+      - name: Setup build environment
+        run: |
+          echo "GCC_PREFIX=${{ matrix.machine_target }}-w64-mingw32-" >> "$GITHUB_ENV"
+          echo "CLANG=1" >> "$GITHUB_ENV"
+          echo "PYTHON=1" >> "$GITHUB_ENV"
+          echo "SYS_LUA=1" >> "$GITHUB_ENV"
+          echo "ENABLE_TESTS=0" >> "$GITHUB_ENV"
+          [[ ${{ matrix.build_type }} == Debug ]] && echo "DEBUG=1" >> "$GITHUB_ENV" && echo "USE_LLD=1" >> "$GITHUB_ENV" || true
+
+      - name: Build far
+        working-directory: far
+        run: |
+          ${GCC_PREFIX}clang --version
+          make -j $(($(nproc)+1)) -f makefile_gcc
+
+      - name: Build plugins
+        working-directory: plugins
+        run: |
+          ${GCC_PREFIX}clang --version
+          luver install lua 5.1.5
+          luver use 5.1.5
+          make -j $(($(nproc)+1)) -f makefile_all_gcc
+
+# release - begin
+      - name: Create Zip Archive Release
+        if: matrix.build_type == 'Release'
+        continue-on-error: true
+        uses: deep-soft/zip-release@v2
+        with:
+          type: 'zip'
+          filename: '${{ env.PROG_NAME }}.${{ matrix.machine_target }}.${{ matrix.c_lib}}.${{ env.PRG_VERSION }}.zip'
+          directory: '${{ env.FOLDER_NAME }}'
+          exclusions: '*.map *.pdb'
+          recursive_exclusions: '*.map *.pdb changelog *Bel.lng *Cze.lng *Ger.lng *Hun.lng *Ita.lng *Lit.lng *Pol.lng *Rus.lng *Sky.lng *Spa.lng *Ukr* *Bel.hlf *Cze.hlf *Ger.hlf *Hun.hlf *Ita.hlf *Lit.hlf *Pol.hlf *Rus.hlf *Sky.hlf *Spa.hlf *Ukr*'
+          path: '.'
+          env_variable: 'ZIP_ARCHIVE_RELEASE'
+
+      - name: Publish
+        if: matrix.build_type == 'Release'
+        continue-on-error: true
+        uses: deep-soft/action-gh-release@v2.1
+        with:
+          tag_name: ${{ env.TAG_NAME }}-${{ env.PRG_VERSION }}
+          files: |
+            ${{ env.ZIP_ARCHIVE_RELEASE }}
+            _version_.txt
+# release - end
+
+# zip release begin
+      - name: Create Archive ALL
+        if:  ${{ inputs.archive_ALL}}
+        continue-on-error: true
+        uses: deep-soft/zip-release@v2
+        with:
+          type: 'zip'
+          filename: '${{ env.TAG_VERSION }}${{ env.TAG_BUILD }}-ALL'
+          directory: '.'
+          path: '.'
+          exclusions: '*.git* /*node_modules/* .editorconfig'
+          # archive name is ${{ env.ZIP_ARCHIVE_RELEASE }}
+
+      - name: Publish Archive ALL
+        if:  ${{ inputs.archive_ALL}}
+        continue-on-error: true
+        uses: deep-soft/action-gh-release@v2.1
+        with:
+          draft: true
+          tag_name: ${{ env.TAG_VERSION }}${{ env.TAG_BUILD }}-ALL
+          files: |
+              ${{ env.ZIP_ARCHIVE_RELEASE }}
+              _version_.txt
+# zip release end
