@@ -58,6 +58,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "keys.hpp"
 #include "log.hpp"
 #include "char_width.hpp"
+#include "string_sort.hpp"
 
 // Platform:
 #include "platform.hpp"
@@ -224,13 +225,60 @@ static string get_comspec()
 	return {};
 }
 
-static string exclude_cmds()
+static std::span<string_view const> exclude_cmds()
 {
 	if (!Global->Opt->Exec.strExcludeCmds.empty())
-		return os::env::expand(Global->Opt->Exec.strExcludeCmds);
+		return Global->Opt->Exec.ExcludeCmds;
 
 	if (equal_icase(PointToName(get_comspec()), L"cmd.exe"sv))
-		return L"ASSOC;CALL;CD;CHCP;CHDIR;CLS;COLOR;COPY;DATE;DEL;DIR;DPATH;ECHO;ERASE;EXIT;FOR;FTYPE;IF;KEYS;MD;MKDIR;MKLINK;MOVE;PATH;PAUSE;POPD;PROMPT;PUSHD;RD;REM;REN;RENAME;RMDIR;SET;START;TIME;TITLE;TYPE;VER;VERIFY;VOL"s;
+	{
+		static constexpr std::array PredefinedCmdCommands
+		{
+			L"ASSOC"sv,
+			L"CALL"sv,
+			L"CD"sv,
+			L"CHCP"sv,
+			L"CHDIR"sv,
+			L"CLS"sv,
+			L"COLOR"sv,
+			L"COPY"sv,
+			L"DATE"sv,
+			L"DEL"sv,
+			L"DIR"sv,
+			L"DPATH"sv,
+			L"ECHO"sv,
+			L"ERASE"sv,
+			L"EXIT"sv,
+			L"FOR"sv,
+			L"FTYPE"sv,
+			L"IF"sv,
+			L"KEYS"sv,
+			L"MD"sv,
+			L"MKDIR"sv,
+			L"MKLINK"sv,
+			L"MOVE"sv,
+			L"PATH"sv,
+			L"PAUSE"sv,
+			L"POPD"sv,
+			L"PROMPT"sv,
+			L"PUSHD"sv,
+			L"RD"sv,
+			L"REM"sv,
+			L"REN"sv,
+			L"RENAME"sv,
+			L"RMDIR"sv,
+			L"SET"sv,
+			L"START"sv,
+			L"TIME"sv,
+			L"TITLE"sv,
+			L"TYPE"sv,
+			L"VER"sv,
+			L"VERIFY"sv,
+			L"VOL"sv,
+		};
+
+		return PredefinedCmdCommands;
+	}
 
 	return {};
 }
@@ -317,11 +365,10 @@ static bool PartCmdLine(string_view const FullCommand, string& Command, string& 
 	}
 
 	string_view const Cmd{ Begin, CmdEnd };
-	const auto ExcludeCmds = enum_tokens(exclude_cmds(), L";"sv);
-	if (std::ranges::any_of(ExcludeCmds, [&](string_view const i){ return equal_icase(i, Cmd); }))
+	if (std::ranges::binary_search(exclude_cmds(), Cmd, string_sort::less_icase))
 		return false;
 
-	Command.assign(Begin, CmdEnd);
+	Command = Cmd;
 	Parameters.assign(ParamsBegin, End);
 	return true;
 }
@@ -497,22 +544,30 @@ static void log_process_exit_code(os::handle const& Process)
 	}
 }
 
-static void after_process_creation(os::handle Process, execute_info::wait_mode const WaitMode, HANDLE Thread, point const& ConsoleSize, rectangle const& ConsoleWindowRect, function_ref<void(bool)> const ConsoleActivator)
+static void after_process_creation(os::handle Process, execute_info::wait_mode const WaitMode, os::handle Thread, point const& ConsoleSize, rectangle const& ConsoleWindowRect, function_ref<void(bool)> const ConsoleActivator)
 {
+	const auto resume_process = [&](bool const Consolise)
+	{
+		ConsoleActivator(Consolise);
+
+		if (!Thread)
+		{
+			ResumeThread(Thread.native_handle());
+			Thread = {};
+		}
+	};
+
 	switch (WaitMode)
 	{
 	case execute_info::wait_mode::no_wait:
-		ConsoleActivator(false);
-		if (Thread)
-			ResumeThread(Thread);
+		resume_process(false);
 		return;
 
 	case execute_info::wait_mode::if_needed:
 		{
 			const auto NeedWaiting = os::process::get_process_subsystem(Process.get()) != os::process::image_type::graphical;
-			ConsoleActivator(NeedWaiting);
-			if (Thread)
-				ResumeThread(Thread);
+
+			resume_process(NeedWaiting);
 
 			if (!NeedWaiting)
 				return;
@@ -524,9 +579,7 @@ static void after_process_creation(os::handle Process, execute_info::wait_mode c
 		return;
 
 	case execute_info::wait_mode::wait_finish:
-		ConsoleActivator(true);
-		if (Thread)
-			ResumeThread(Thread);
+		resume_process(true);
 		Process.wait();
 		log_process_exit_code(Process);
 		return;
@@ -733,7 +786,7 @@ static bool execute_impl(
 		if (!execute_createprocess(Command, Parameters, CurrentDirectory, Info.RunAs, Info.WaitMode != execute_info::wait_mode::no_wait, pi))
 			return false;
 
-		after_process_creation(os::handle(pi.hProcess), Info.WaitMode, pi.hThread, ConsoleSize, ConsoleWindowRect, ExtendedActivator);
+		after_process_creation(os::handle(pi.hProcess), Info.WaitMode, os::handle(pi.hThread), ConsoleSize, ConsoleWindowRect, ExtendedActivator);
 		return true;
 
 	};

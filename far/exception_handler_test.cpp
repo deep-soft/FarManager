@@ -119,7 +119,7 @@ namespace tests
 	static void cpp_std_nested_thread()
 	{
 		std::exception_ptr Ptr;
-		os::thread(os::thread::mode::join, [&]
+		os::thread([&]
 		{
 			os::debug::set_thread_name(L"Nested thread exception test");
 
@@ -344,7 +344,17 @@ WARNING_POP()
 
 	static void seh_access_violation_bad()
 	{
-		RaiseException(STATUS_ACCESS_VIOLATION, 0, 0, {});
+		static const ULONG_PTR Args[]
+		{
+			EXCEPTION_WRITE_FAULT,
+			std::bit_cast<ULONG_PTR>(&seh_access_violation_bad),
+			static_cast<ULONG_PTR>(STATUS_ACCESS_DENIED),
+		};
+
+		// Use [ Continue ] to test all
+		RaiseException(STATUS_ACCESS_VIOLATION, 0, 0, Args);
+		RaiseException(STATUS_ACCESS_VIOLATION, 0, 1, Args);
+		RaiseException(STATUS_IN_PAGE_ERROR, 0, 2, Args);
 	}
 
 	static void seh_in_page_error()
@@ -373,7 +383,7 @@ WARNING_POP()
 	static void seh_divide_by_zero_thread()
 	{
 		seh_exception SehException;
-		os::thread const Thread(os::thread::mode::join, [&]
+		os::thread const Thread([&]
 		{
 			os::debug::set_thread_name(L"Divide by zero test");
 
@@ -492,7 +502,7 @@ WARNING_POP()
 
 	static void seh_unhandled()
 	{
-		os::thread Thread(os::thread::mode::join, [&]
+		os::thread Thread([&]
 		{
 			os::debug::set_thread_name(L"Unhandled exception test");
 			RaiseException(-1, 0, 0, {});

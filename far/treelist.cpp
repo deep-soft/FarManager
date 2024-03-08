@@ -363,7 +363,7 @@ public:
 	void SetTreeName(string_view const Name) { m_TreeName = Name; }
 
 private:
-	using cache_set = std::set<string, string_sort::less_t>;
+	using cache_set = std::set<string, string_sort::less_icase_t>;
 
 public:
 	using const_iterator = cache_set::const_iterator;
@@ -711,7 +711,7 @@ static void ReadLines(const os::fs::file& TreeFile, function_ref<void(string_vie
 	}
 }
 
-static void WriteTree(auto& Name, const auto& Container, const auto& Opener, size_t offset)
+static void WriteTree(auto& Name, std::ranges::range auto const& Container, const auto& Opener, size_t offset)
 {
 	// получим и сразу сбросим атрибуты (если получится)
 	const auto SavedAttributes = os::fs::get_file_attributes(Name);
