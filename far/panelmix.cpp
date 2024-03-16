@@ -403,7 +403,7 @@ std::vector<column> DeserialiseViewSettings(string_view const ColumnTitles, stri
 		}
 		else
 		{
-			const auto ItemIterator = std::ranges::find(ColumnInfo, Type, [&](column_info const& i){ return i.String; });
+			const auto ItemIterator = std::ranges::find(ColumnInfo, Type, &column_info::String);
 			if (ItemIterator != std::cend(ColumnInfo))
 				NewColumn.type = ItemIterator->Type;
 			else if (Type.size() >= 2 && Type.size() <= 3 && Type.front() == L'C')
@@ -493,7 +493,7 @@ std::pair<string, string> SerialiseViewSettings(const std::vector<column>& Colum
 		case COLFLAGS_RIGHTALIGNFORCE: return L'F';
 		case COLFLAGS_MARK_DYNAMIC:    return L'D';
 		default:
-			throw MAKE_FAR_FATAL_EXCEPTION(far::format(L"Unexpected mode {}"sv, std::to_underlying(Mode)));
+			throw far_fatal_exception(far::format(L"Unexpected mode {}"sv, std::to_underlying(Mode)));
 		}
 	};
 

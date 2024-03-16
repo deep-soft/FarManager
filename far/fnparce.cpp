@@ -352,7 +352,7 @@ static void MakeListFile(panel_ptr const& Panel, string& ListFileName, bool cons
 
 	const os::fs::file ListFile(ListFileName, GENERIC_WRITE, os::fs::file_share_read, nullptr, CREATE_ALWAYS);
 	if (!ListFile)
-		throw MAKE_FAR_EXCEPTION(msg(lng::MCannotCreateListTemp));
+		throw far_exception(msg(lng::MCannotCreateListTemp));
 
 	SCOPE_FAIL
 	{
@@ -849,8 +849,7 @@ static bool InputVariablesDialog(string& strStr, subst_data& SubstData, string_v
 
 	for (size_t n = 0; n != strStr.size(); ++n)
 	{
-		const auto ItemIterator = std::ranges::find(Positions, n, [&](pos_item const& i){ return i.Pos; });
-		if (ItemIterator != Positions.cend())
+		if (const auto ItemIterator = std::ranges::find(Positions, n, &pos_item::Pos); ItemIterator != Positions.cend())
 		{
 			strTmpStr += DlgData[(ItemIterator - Positions.cbegin()) * 2 + 2].strData;
 			n = ItemIterator->EndPos;

@@ -175,7 +175,6 @@ endif
 
 CPPFLAGS = $(CFLAGS)\
 	-std=c++23 \
-	-fvisibility=hidden \
 	-Werror=old-style-cast \
 	-Werror=vexing-parse \
 	-Wctor-dtor-privacy \
@@ -201,6 +200,7 @@ LNKFLAGS += \
 	-lversion \
 	-luserenv \
 	-lcomdlg32 \
+	-limm32 \
 	-m$(DIRBIT) \
 	-static \
 	-Xlinker --tsaware \

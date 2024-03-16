@@ -3069,7 +3069,7 @@ MenuItemEx& VMenu::at(size_t n)
 	const auto ItemPos = GetItemPosition(static_cast<int>(n));
 
 	if (ItemPos < 0)
-		throw MAKE_FAR_FATAL_EXCEPTION(L"menu index out of range"sv);
+		throw far_fatal_exception(L"menu index out of range"sv);
 
 	return Items[ItemPos];
 }
@@ -3431,7 +3431,7 @@ TEST_CASE("item.hpos.limits")
 
 		for (const auto& Policy : { cling_to_edge, bound, bound_stick_to_left })
 		{
-			REQUIRE(std::ranges::data(TestDataPoint.Expected)[std::to_underlying(Policy) - 1]
+			REQUIRE(std::ranges::cdata(TestDataPoint.Expected)[std::to_underlying(Policy) - 1]
 				== item_hpos_limits(TestDataPoint.ItemLength, TestDataPoint.TextAreaWidth, Policy));
 		}
 	}
