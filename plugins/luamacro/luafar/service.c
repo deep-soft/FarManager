@@ -6405,6 +6405,20 @@ static int far_host_SetDirectory(lua_State *L)
 	return 1;
 }
 
+static int far_DetectCodePage(lua_State *L)
+{
+	int codepage;
+	struct DetectCodePageInfo Info;
+	Info.StructSize = sizeof(Info);
+	Info.FileName = check_utf8_string(L, 1, NULL);
+	codepage = GetPluginData(L)->FSF->DetectCodePage(&Info);
+	if (codepage)
+		lua_pushinteger(L, codepage);
+	else
+		lua_pushnil(L);
+	return 1;
+}
+
 #define PAIR(prefix,txt) {#txt, prefix ## _ ## txt}
 
 const luaL_Reg timer_methods[] =
@@ -6655,6 +6669,7 @@ const luaL_Reg far_funcs[] =
 	PAIR( far, CopyToClipboard),
 	PAIR( far, CreateFileFilter),
 	PAIR( far, CreateSettings),
+	PAIR( far, DetectCodePage),
 	PAIR( far, DialogFree),
 	PAIR( far, DialogInit),
 	PAIR( far, DialogRun),
