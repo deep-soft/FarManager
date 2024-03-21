@@ -571,6 +571,7 @@ intptr_t VMenu2::RunEx(const std::function<int(int Msg, void *param)>& fn)
 	Resize(true);
 
 	Process();
+	mfn = {};
 
 	return GetExitCode();
 }
