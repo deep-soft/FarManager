@@ -53,6 +53,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "string_utils.hpp"
 #include "log.hpp"
 #include "exception.hpp"
+#include "encoding.hpp"
 
 // Platform:
 #include "platform.hpp"
@@ -204,7 +205,7 @@ static bool PrepareAndSetREPARSE_DATA_BUFFER(REPARSE_DATA_BUFFER& rdb, string_vi
 	case IO_REPARSE_TAG_MOUNT_POINT:
 		{
 			const auto PrintName = ConvertNameToFull(Target);
-			const auto SubstituteName = KernelPath(NTPath(PrintName));
+			const auto SubstituteName = kernel_path(nt_path(PrintName));
 			if (!FillREPARSE_DATA_BUFFER(rdb, PrintName, SubstituteName))
 			{
 				SetLastError(ERROR_INSUFFICIENT_BUFFER);
@@ -221,7 +222,7 @@ static bool PrepareAndSetREPARSE_DATA_BUFFER(REPARSE_DATA_BUFFER& rdb, string_vi
 
 			if (IsAbsolutePath(Target))
 			{
-				SubstituteNameBuffer = KernelPath(NTPath(SubstituteName));
+				SubstituteNameBuffer = kernel_path(nt_path(SubstituteName));
 				SubstituteName = SubstituteNameBuffer;
 				rdb.SymbolicLinkReparseBuffer.Flags = 0;
 			}
@@ -389,6 +390,24 @@ bool GetReparsePointInfo(string_view const Object, string& DestBuffer, LPDWORD R
 	case IO_REPARSE_TAG_MOUNT_POINT:
 		return Extract(rdb->MountPointReparseBuffer);
 
+	case IO_REPARSE_TAG_NFS:
+		{
+			constexpr auto NFS_SPECFILE_LNK = 0x014B4E4C;
+
+			struct NFS_REPARSE_DATA_BUFFER
+			{
+				ULONG64 Type;
+				WCHAR   DataBuffer[1];
+			};
+
+			const auto& NfsReparseBuffer = view_as<NFS_REPARSE_DATA_BUFFER>(rdb->GenericReparseBuffer.DataBuffer);
+			if (NfsReparseBuffer.Type != NFS_SPECFILE_LNK)
+				return false;
+
+			DestBuffer.assign(NfsReparseBuffer.DataBuffer, (rdb->ReparseDataLength - sizeof(NfsReparseBuffer.Type)) / sizeof(wchar_t));
+			return true;
+		}
+
 	case IO_REPARSE_TAG_APPEXECLINK:
 		{
 			// The current protocol version is 3. It is known that in all 3 versions the third string in the list is the target filename.
@@ -419,6 +438,19 @@ bool GetReparsePointInfo(string_view const Object, string& DestBuffer, LPDWORD R
 				return true;
 			}
 			return false;
+		}
+
+	case IO_REPARSE_TAG_LX_SYMLINK:
+		{
+			struct LX_SYMLINK_REPARSE_DATA_BUFFER
+			{
+				DWORD FileType;
+				char  PathBuffer[1];
+			};
+
+			const auto& LxSymlinkReparseBuffer = view_as<LX_SYMLINK_REPARSE_DATA_BUFFER>(rdb->GenericReparseBuffer.DataBuffer);
+			DestBuffer = encoding::utf8::get_chars({ LxSymlinkReparseBuffer.PathBuffer, rdb->ReparseDataLength - sizeof(LxSymlinkReparseBuffer.FileType) });
+			return true;
 		}
 
 	default:
@@ -558,8 +590,13 @@ bool GetVHDInfo(string_view const RootDirectory, string &strVolumePath, VIRTUAL_
 	if (!StorageDependencyInfo->NumberEntries)
 		return false;
 
+WARNING_PUSH()
+WARNING_DISABLE_GCC("-Warray-bounds=")
+
 	if(StorageType)
 		*StorageType = StorageDependencyInfo->Version2Entries[0].VirtualStorageType;
+
+WARNING_POP()
 
 	// trick: ConvertNameToReal also converts \\?\{UUID} to drive letter, if possible.
 	strVolumePath = ConvertNameToReal(concat(StorageDependencyInfo->Version2Entries[0].HostVolumeName, StorageDependencyInfo->Version2Entries[0].DependentVolumeRelativePath));

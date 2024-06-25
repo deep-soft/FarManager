@@ -480,7 +480,7 @@ void PluginManager::LoadPluginsFromCache()
 
 	for (size_t i = 0; ConfigProvider().PlCacheCfg()->EnumPlugins(i, strModuleName); ++i)
 	{
-		ReplaceSlashToBackslash(strModuleName);
+		path::inplace::normalize_separators(strModuleName);
 
 		os::fs::find_data FindData;
 
@@ -2415,7 +2415,7 @@ void PluginManager::GetContentData(
 	unordered_string_map<string>& ContentData
 ) const
 {
-	const NTPath Path(FilePath);
+	const auto Path = nt_path(FilePath);
 	const auto Count = ColNames.size();
 
 	for (const auto& i: Plugins)

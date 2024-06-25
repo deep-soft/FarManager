@@ -151,6 +151,7 @@ cl /nologo /c /Fo"$(IntDir)%(Filename)_c++.testobj" /TP api_test.c
     <ClCompile Include="lockscrn.cpp" />
     <ClCompile Include="log.cpp" />
     <ClCompile Include="macro.cpp" />
+    <ClCompile Include="macroapi.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="manager.cpp" />
     <ClCompile Include="map_file.cpp" />
@@ -205,10 +206,6 @@ cl /nologo /c /Fo"$(IntDir)%(Filename)_c++.testobj" /TP api_test.c
     <ClCompile Include="setattr.cpp" />
     <ClCompile Include="setcolor.cpp" />
     <ClCompile Include="shortcuts.cpp" />
-    <ClCompile Include="sqlite.c">
-      <PrecompiledHeader>NotUsing</PrecompiledHeader>
-      <ForcedIncludeFiles>disabled_warnings.hpp</ForcedIncludeFiles>
-    </ClCompile>
     <ClCompile Include="sqlitedb.cpp" />
     <ClCompile Include="stddlg.cpp" />
     <ClCompile Include="string_sort.cpp" />
@@ -368,6 +365,7 @@ cl /nologo /c /Fo"$(IntDir)%(Filename)_c++.testobj" /TP api_test.c
     <ClInclude Include="lockscrn.hpp" />
     <ClInclude Include="log.hpp" />
     <ClInclude Include="macro.hpp" />
+    <ClInclude Include="macroapi.hpp" />
     <ClInclude Include="macroopcode.hpp" />
     <ClInclude Include="macrovalues.hpp" />
     <ClInclude Include="manager.hpp" />
@@ -520,6 +518,9 @@ cl /nologo /c /Fo"$(IntDir)%(Filename)_c++.testobj" /TP api_test.c
     <ProjectReference Include="common_test.vcxproj">
       <Project>{459C0A10-7D18-4623-9FA9-1D5B6A587D40}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+    <ProjectReference Include="sqlite.vcxproj">
+      <Project>{7FFC46F3-7C9F-4849-AA03-44F47F616212}</Project>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(ProjectDir)..\_build\vc\config\common.targets" />

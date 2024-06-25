@@ -4,12 +4,9 @@
 -- This plugin does not support reloading the default script on the fly.
 if not (...) then return end
 
-local function LOG (fmt, ...)
-  win.OutputDebugString(fmt:format(...))
-end
-
 local F, Msg = far.Flags, nil
 local bor = bit64.bor
+local JoinPath = win.JoinPath
 local co_yield, co_resume, co_status = coroutine.yield, coroutine.resume, coroutine.status
 
 local PROPAGATE={} -- a unique value, inaccessible to scripts.
@@ -20,6 +17,7 @@ local Shared
 local TablePanelSort -- must be separate from LastMessage, otherwise Far crashes after a macro is called from CtrlF12.
 local TableExecString -- must be separate from LastMessage, otherwise Far crashes
 local utils, macrobrowser, panelsort, keymacro
+local PluginIsReady
 
 local function ExpandEnv(str) return (str:gsub("%%(.-)%%", win.GetEnv)) end
 
@@ -96,8 +94,6 @@ end
 -- END: Functions implemented via "returning a key" to Far
 -------------------------------------------------------------------------------
 
-local PluginInfo
-
 function export.GetPluginInfo()
   local out = {
     Flags = bor(F.PF_PRELOAD,F.PF_FULLCMDLINE,F.PF_EDITOR,F.PF_VIEWER,F.PF_DIALOG),
@@ -105,7 +101,6 @@ function export.GetPluginInfo()
     PluginMenuGuids = win.Uuid("EF6D67A2-59F7-4DF3-952E-F9049877B492"),
     PluginMenuStrings = { "Macro Browser" },
   }
-  PluginInfo = out
 
   local mode = far.MacroGetArea()
   local area = utils.GetTrueAreaName(mode)
@@ -264,7 +259,7 @@ local function MacroParse (Lang, Text, onlyCheck, skipFile)
     _loadstring, _loadfile = ms.loadstring, ms.loadfile
   end
 
-  local ok,msg = true,nil
+  local ok,msg
   local fname,params = GetFileParams(Text)
   if fname then
     ok,msg = _loadstring("return "..params)
@@ -334,8 +329,8 @@ local function ShowCmdLineHelp()
   local windir, fardir = win.GetEnv("WINDIR"), win.GetEnv("FARHOME")
   if windir and fardir then
     local suffix = win.GetEnv("FARLANG")=="Russian" and "ru" or "en"
-    local topic = fardir.."\\Encyclopedia\\macroapi_manual."..suffix..".chm::/92.html"
-    win.ShellExecute(nil, nil, windir.."\\hh.exe", topic)
+    local topic = JoinPath(fardir, "Encyclopedia", "macroapi_manual."..suffix..".chm::/92.html")
+    win.ShellExecute(nil, nil, JoinPath(windir,"hh.exe"), topic)
   end
 end
 
@@ -344,23 +339,44 @@ local function Open_CommandLine (strCmdLine)
   if not prefix then return end -- this can occur with Plugin.Command()
   prefix = prefix:lower()
   if prefix == "lm" or prefix == "macro" then
-    if text=="" then ShowCmdLineHelp(); return;  end
+    if text == "" then
+      ShowCmdLineHelp(); return;
+    end
     local cmd = text:match("%S*"):lower()
     if cmd == "load" then
       local paths = text:match("%S.*",5)
       paths = paths and paths:gsub([[^"(.+)"$]], "%1")
       far.MacroLoadAll(paths)
-    elseif cmd == "save" then utils.WriteMacros()
-    elseif cmd == "unload" then utils.UnloadMacros()
-    elseif cmd == "about" then About()
-    elseif cmd ~= "" then ErrMsg(Msg.CL_UnsupportedCommand .. cmd) end
+    elseif cmd == "save" then
+      utils.WriteMacros()
+    elseif cmd == "unload" then
+      utils.UnloadMacros()
+    elseif cmd == "about" then
+      About()
+    elseif cmd == "test" then
+      far.MacroPost( [[
+        local function Quit(n) actl.Quit(n) Keys("Esc") end
+        local OK, R
+        R = win.JoinPath(far.PluginStartupInfo().ModuleDir, "macrotest.lua")
+        R = loadfile(R) or Quit(1)
+        OK, R = pcall(R)
+        OK = OK or Quit(2)
+        R.test_all = R.test_all or Quit(3)
+        OK = pcall(R.test_all)
+        Quit(OK and 0 or 4)
+      ]], 0, "CtrlShiftF12")
+    elseif cmd == "browser" then
+      macrobrowser()
+    elseif cmd ~= "" then
+      ErrMsg(Msg.CL_UnsupportedCommand .. cmd)
+    end
   elseif prefix == "lua" or prefix == "moon" or prefix == "luas" or prefix == "moons" then
     if text=="" then ShowCmdLineHelp(); return;  end
     local show = false
     if text:find("^=") then
       show, text = true, text:sub(2)
     end
-    local fname, params = GetFileParams(text)
+    local fname = GetFileParams(text)
     if show and not fname then
       text = "return "..text
     end
@@ -430,7 +446,10 @@ local CanCreatePanel = {
 }
 
 function export.Open (OpenFrom, guid, ...)
-  if OpenFrom == F.OPEN_LUAMACRO then
+  if not PluginIsReady then
+    return
+
+  elseif OpenFrom == F.OPEN_LUAMACRO then
     return Open_LuaMacro(guid, ...)
 
   elseif OpenFrom == F.OPEN_COMMANDLINE then
@@ -477,7 +496,8 @@ function export.Open (OpenFrom, guid, ...)
       return far.MacroPost([[far.Message"macropost"]])
     end
 
-  else
+  else -- OPEN_DIALOG, OPEN_EDITOR, OPEN_FILEPANEL, OPEN_LEFTDISKMENU,
+       -- OPEN_PLUGINSMENU, OPEN_RIGHTDISKMENU, OPEN_VIEWER
     local items = utils.GetMenuItems()
     if items[guid] then
       local mod, obj = items[guid].action(OpenFrom, ...)
@@ -509,11 +529,11 @@ local function Init()
     yieldcall         = yieldcall,
   }
   Shared.MacroCallFar, far.MacroCallFar = far.MacroCallFar, nil
-  Shared.FarMacroCallToLua, far.FarMacroCallToLua = far.FarMacroCallToLua, nil
+  Shared.MacroCallToLua, far.MacroCallToLua = far.MacroCallToLua, nil
 
   local ModuleDir = far.PluginStartupInfo().ModuleDir
   local function RunPluginFile (fname, param)
-    local func,msg = assert(loadfile(ModuleDir..fname))
+    local func = assert(loadfile(JoinPath(ModuleDir,fname)))
     return func(param)
   end
 
@@ -558,11 +578,22 @@ local function Init()
 
   utils.FixInitialModules()
   utils.InitMacroSystem()
-  local macros = win.GetEnv("farprofile").."\\Macros\\"
-  local modules = macros .. "modules\\"
-  package.path = modules.."?.lua;"..modules.."?\\init.lua;"..package.path
-  package.moonpath = modules.."?.moon;"..modules.."?\\init.moon;"..package.moonpath
-  package.cpath = macros..(win.IsProcess64bit() and "lib64" or "lib32").."\\?.dll;"..package.cpath
+
+  local macros = JoinPath(win.GetEnv("FARPROFILE"), "Macros")
+  local modules = JoinPath(macros, "modules")
+  package.path =
+    JoinPath(modules, "?.lua;") ..
+    JoinPath(modules, "?", "init.lua;") ..
+    package.path
+  package.moonpath =
+    JoinPath(modules, "?.moon;") ..
+    JoinPath(modules, "?", "init.moon;") ..
+    package.moonpath
+  package.cpath =
+    JoinPath(macros, win.IsProcess64bit() and "lib64" or "lib32", "?.dll;") ..
+    package.cpath
+
+  PluginIsReady = true
 
   if _G.IsLuaStateRecreated then
     _G.IsLuaStateRecreated = nil

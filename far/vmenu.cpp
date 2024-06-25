@@ -94,7 +94,7 @@ struct menu_layout
 
 	explicit menu_layout(const VMenu& Menu)
 		: BoxType{ get_box_type(Menu) }
-		, ClientRect{ get_client_rect(Menu) }
+		, ClientRect{ get_client_rect(Menu, BoxType) }
 	{
 		auto Left{ Menu.m_Where.left };
 		if (need_box(BoxType))       LeftBox = Left++;
@@ -103,7 +103,7 @@ struct menu_layout
 
 		auto Right{ Menu.m_Where.right };
 		if (need_box(BoxType))       RightBox = Right;
-		if (need_scrollbar(Menu))    Scrollbar = Right;
+		if (need_scrollbar(Menu, BoxType)) Scrollbar = Right;
 		if (RightBox || Scrollbar)   Right--;
 		if (need_submenu(Menu))      SubMenu = Right--;
 		if (need_right_hscroll())    RightHScroll = Right--;
@@ -143,11 +143,18 @@ struct menu_layout
 
 	[[nodiscard]] static int get_service_area_size(const VMenu& Menu, const short BoxType)
 	{
-		return get_service_area_size(Menu, need_box(BoxType));
+		const auto NeedBox = need_box(BoxType);
+
+		return NeedBox
+			+ need_check_mark()
+			+ need_left_hscroll()
+			+ need_right_hscroll()
+			+ need_submenu(Menu)
+			+ (NeedBox || need_scrollbar(Menu, BoxType));
 	}
 
 private:
-	[[nodiscard]] rectangle get_client_rect(const VMenu& Menu) const noexcept
+	[[nodiscard]] static rectangle get_client_rect(const VMenu& Menu, short const BoxType) noexcept
 	{
 		if (!need_box(BoxType))
 			return Menu.m_Where;
@@ -155,25 +162,22 @@ private:
 		return { Menu.m_Where.left + 1, Menu.m_Where.top + 1, Menu.m_Where.right - 1, Menu.m_Where.bottom - 1 };
 	}
 
-	[[nodiscard]] static int get_service_area_size(const VMenu& Menu, const bool NeedBox)
-	{
-		return NeedBox
-			+ need_check_mark()
-			+ need_left_hscroll()
-			+ need_right_hscroll()
-			+ need_submenu(Menu)
-			+ (NeedBox || need_scrollbar(Menu));
-	}
-
 	[[nodiscard]] static bool need_box(short BoxType) noexcept { return BoxType != NO_BOX; }
 	[[nodiscard]] static bool need_check_mark() noexcept { return true; }
 	[[nodiscard]] static bool need_left_hscroll() noexcept { return true; }
 	[[nodiscard]] static bool need_right_hscroll() noexcept { return true; }
 	[[nodiscard]] static bool need_submenu(const VMenu& Menu) noexcept { return Menu.ItemSubMenusCount > 0; }
-	[[nodiscard]] static bool need_scrollbar(const VMenu& Menu)
+	[[nodiscard]] static bool need_scrollbar(const VMenu& Menu, short const BoxType)
 	{
-		return (Menu.CheckFlags(VMENU_LISTBOX | VMENU_ALWAYSSCROLLBAR) || Global->Opt->ShowMenuScrollbar)
-			&& ScrollBarRequired(Menu.m_Where.height(), Menu.GetShowItemCount());
+		if (!Menu.CheckFlags(VMENU_LISTBOX | VMENU_ALWAYSSCROLLBAR) && !Global->Opt->ShowMenuScrollbar)
+			return false;
+
+		// Check separately because passing an empty menu to get_client_rect will trigger an assertion
+		const auto ItemsCount = Menu.GetShowItemCount();
+		if (!ItemsCount)
+			return false;
+
+		return ScrollBarRequired(get_client_rect(Menu, BoxType).height(), ItemsCount);
 	}
 };
 
@@ -608,6 +612,9 @@ int VMenu::SetSelectPos(int Pos, int Direct, bool stop_on_edge)
 // установить курсор и верхний элемент
 int VMenu::SetSelectPos(const FarListPos *ListPos, int Direct)
 {
+	if (Items.empty())
+		return -1;
+
 	const auto pos = std::clamp(ListPos->SelectPos, intptr_t{}, static_cast<intptr_t>(Items.size() - 1));
 	const auto Ret = SetSelectPos(pos, Direct ? Direct : pos > SelectPos? 1 : -1);
 
@@ -2722,13 +2729,20 @@ void VMenu::AssignHighlights(bool Reverse)
 
 	const auto Delta = Reverse? -1 : 1;
 
-	const auto RegisterHotkey = [&Used](wchar_t Hotkey)
+	const auto RegisterHotkey = [&](wchar_t const Hotkey)
 	{
+		const auto Upper = upper(Hotkey);
+		if (Used[Upper])
+			return false;
+
+		Used[Upper] = true;
+		Used[lower(Hotkey)] = true;
+
 		const auto OtherHotkey = KeyToKeyLayout(Hotkey);
 		Used[upper(OtherHotkey)] = true;
 		Used[lower(OtherHotkey)] = true;
-		Used[upper(Hotkey)] = true;
-		Used[lower(Hotkey)] = true;
+
+		return true;
 	};
 
 	const auto ShowAmpersand = CheckFlags(VMENU_SHOWAMPERSAND);
@@ -2738,9 +2752,8 @@ void VMenu::AssignHighlights(bool Reverse)
 		wchar_t Hotkey{};
 		size_t HotkeyVisualPos{};
 		// TODO: проверка на LIF_HIDDEN
-		if (!ShowAmpersand && HiTextHotkey(Items[I].Name, Hotkey, &HotkeyVisualPos) && !Used[upper(Hotkey)] && !Used[lower(Hotkey)])
+		if (!ShowAmpersand && HiTextHotkey(Items[I].Name, Hotkey, &HotkeyVisualPos) && RegisterHotkey(Hotkey))
 		{
-			RegisterHotkey(Hotkey);
 			Items[I].AutoHotkey = Hotkey;
 			Items[I].AutoHotkeyPos = HotkeyVisualPos;
 		}
@@ -2759,9 +2772,8 @@ void VMenu::AssignHighlights(bool Reverse)
 		// TODO: проверка на LIF_HIDDEN
 		for (const auto& Ch: MenuItemForDisplay)
 		{
-			if ((Ch == L'&' || is_alpha(Ch) || std::iswdigit(Ch)) && !Used[upper(Ch)] && !Used[lower(Ch)])
+			if ((Ch == L'&' || is_alpha(Ch) || std::iswdigit(Ch)) && RegisterHotkey(Ch))
 			{
-				RegisterHotkey(Ch);
 				Items[I].AutoHotkey = Ch;
 				Items[I].AutoHotkeyPos = &Ch - MenuItemForDisplay.data();
 				break;

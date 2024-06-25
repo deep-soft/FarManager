@@ -66,6 +66,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "cvtname.hpp"
 #include "log.hpp"
 #include "scrbuf.hpp"
+#include "interf.hpp"
 
 // Platform:
 #include "platform.hpp"
@@ -89,7 +90,8 @@ enum SETATTRDLG
 	SA_TEXT_REPARSE_POINT,
 	SA_EDIT_REPARSE_POINT,
 	SA_COMBO_REPARSE_POINT,
-	SA_SEPARATOR1,
+	SA_SEPARATOR_AFTER_HEADER,
+
 	SA_ATTR_FIRST,
 	SA_CHECKBOX_READONLY = SA_ATTR_FIRST,
 	SA_CHECKBOX_ARCHIVE,
@@ -98,9 +100,13 @@ enum SETATTRDLG
 	SA_CHECKBOX_COMPRESSED,
 	SA_CHECKBOX_ENCRYPTED,
 	SA_CHECKBOX_NOTINDEXED,
-	SA_ATTR_LAST = SA_CHECKBOX_NOTINDEXED,
+	SA_CHECKBOX_SPARSE,
+	SA_CHECKBOX_TEMP,
+	SA_CHECKBOX_OFFLINE,
+	SA_ATTR_LAST = SA_CHECKBOX_OFFLINE,
 	SA_BUTTON_ADVANCED,
-	SA_SEPARATOR2,
+
+	SA_TEXT_DATETIME,
 	SA_TEXT_TITLEDATE,
 	SA_TEXT_TITLETIME,
 	SA_TEXT_LASTWRITE,
@@ -118,15 +124,20 @@ enum SETATTRDLG
 	SA_BUTTON_ORIGINAL,
 	SA_BUTTON_CURRENT,
 	SA_BUTTON_BLANK,
-	SA_SEPARATOR3,
+
 	SA_TEXT_OWNER,
 	SA_EDIT_OWNER,
-	SA_SEPARATOR4,
+
+	SA_SEPARATOR_BEFORE_SUBFOLODERS,
 	SA_CHECKBOX_SUBFOLDERS,
-	SA_SEPARATOR5,
+
+	SA_SEPARATOR_BEFORE_MAIN_BUTTONS,
 	SA_BUTTON_SET,
 	SA_BUTTON_SYSTEMDLG,
 	SA_BUTTON_CANCEL,
+
+	SA_SEPARATOR_VERTICAL,
+	SA_SEPARATOR_AFTER_TIME,
 
 	SA_COUNT
 };
@@ -137,10 +148,7 @@ enum advanced_attributes
 {
 	SA_ADVANCED_ATTRIBUTE_FIRST = 1,
 
-	SA_CHECKBOX_SPARSE = SA_ADVANCED_ATTRIBUTE_FIRST,
-	SA_CHECKBOX_TEMP,
-	SA_CHECKBOX_OFFLINE,
-	SA_CHECKBOX_REPARSEPOINT,
+	SA_CHECKBOX_REPARSEPOINT = SA_ADVANCED_ATTRIBUTE_FIRST,
 	SA_CHECKBOX_VIRTUAL,
 	SA_CHECKBOX_INTEGRITY_STREAM,
 	SA_CHECKBOX_NO_SCRUB_DATA,
@@ -178,10 +186,10 @@ AttributeMap[]
 	{ SA_CHECKBOX_COMPRESSED,                   FILE_ATTRIBUTE_COMPRESSED,            lng::MSetAttrCompressed,         },
 	{ SA_CHECKBOX_ENCRYPTED,                    FILE_ATTRIBUTE_ENCRYPTED,             lng::MSetAttrEncrypted,          },
 	{ SA_CHECKBOX_NOTINDEXED,                   FILE_ATTRIBUTE_NOT_CONTENT_INDEXED,   lng::MSetAttrNotIndexed,         },
-
 	{ SA_CHECKBOX_SPARSE,                       FILE_ATTRIBUTE_SPARSE_FILE,           lng::MSetAttrSparse,             },
 	{ SA_CHECKBOX_TEMP,                         FILE_ATTRIBUTE_TEMPORARY,             lng::MSetAttrTemporary,          },
 	{ SA_CHECKBOX_OFFLINE,                      FILE_ATTRIBUTE_OFFLINE,               lng::MSetAttrOffline,            },
+
 	{ SA_CHECKBOX_REPARSEPOINT,                 FILE_ATTRIBUTE_REPARSE_POINT,         lng::MSetAttrReparsePoint,       },
 	{ SA_CHECKBOX_VIRTUAL,                      FILE_ATTRIBUTE_VIRTUAL,               lng::MSetAttrVirtual,            },
 	{ SA_CHECKBOX_INTEGRITY_STREAM,             FILE_ATTRIBUTE_INTEGRITY_STREAM,      lng::MSetAttrIntegrityStream,    },
@@ -677,13 +685,43 @@ static bool process_single_file(
 	return true;
 }
 
+static auto symlink_type(lng const Id, DWORD const ReparseTag)
+{
+	if (Id != lng::MSetAttrSymlink)
+		return msg(Id);
+
+	const auto Suffix = [ReparseTag]
+	{
+		switch (ReparseTag)
+		{
+		case IO_REPARSE_TAG_SYMLINK:
+			return L""sv;
+
+		case IO_REPARSE_TAG_DFS:
+			return L" DFS"sv;
+
+		case IO_REPARSE_TAG_NFS:
+			return L" NFS"sv;
+
+		case IO_REPARSE_TAG_LX_SYMLINK:
+			return L" LX"sv;
+
+		default:
+			return L" (?)"sv;
+		}
+	}();
+
+	return far::vformat(msg(Id), Suffix);
+}
+
 static bool ShellSetFileAttributesImpl(Panel* SrcPanel, const string* Object)
 {
-	short DlgX = 74, DlgY = 22;
+	short DlgX = 80, DlgY = 21;
 
 	const auto C1 = 5;
-	const auto C2 = C1 + (DlgX - 10) / 2;
-	const auto AR = 8;
+	const auto C2 = 32;
+	const auto TB = 6;
+	const auto TBB = TB + 6;
 
 	auto AttrDlg = MakeDialogItems<SA_COUNT>(
 	{
@@ -700,40 +738,54 @@ static bool ShellSetFileAttributesImpl(Panel* SrcPanel, const string* Object)
 		{ DI_CHECKBOX,  {{C1,      6     }, {0,       6     }}, DIF_NONE, msg(AttributeMap[SA_CHECKBOX_ARCHIVE - SA_ATTR_FIRST].LngId), },
 		{ DI_CHECKBOX,  {{C1,      7     }, {0,       7     }}, DIF_NONE, msg(AttributeMap[SA_CHECKBOX_HIDDEN - SA_ATTR_FIRST].LngId), },
 		{ DI_CHECKBOX,  {{C1,      8     }, {0,       8     }}, DIF_NONE, msg(AttributeMap[SA_CHECKBOX_SYSTEM - SA_ATTR_FIRST].LngId), },
+		{ DI_CHECKBOX,  {{C1,      9     }, {0,       9     }}, DIF_NONE, msg(AttributeMap[SA_CHECKBOX_COMPRESSED - SA_ATTR_FIRST].LngId), },
+		{ DI_CHECKBOX,  {{C1,      10    }, {0,       10    }}, DIF_NONE, msg(AttributeMap[SA_CHECKBOX_ENCRYPTED - SA_ATTR_FIRST].LngId), },
+		{ DI_CHECKBOX,  {{C1,      11    }, {0,       11    }}, DIF_NONE, msg(AttributeMap[SA_CHECKBOX_NOTINDEXED - SA_ATTR_FIRST].LngId), },
+		{ DI_CHECKBOX,  {{C1,      12    }, {0,       12    }}, DIF_NONE, msg(AttributeMap[SA_CHECKBOX_SPARSE - SA_ATTR_FIRST].LngId), },
+		{ DI_CHECKBOX,  {{C1,      13    }, {0,       13    }}, DIF_NONE, msg(AttributeMap[SA_CHECKBOX_TEMP - SA_ATTR_FIRST].LngId), },
+		{ DI_CHECKBOX,  {{C1,      14    }, {0,       14    }}, DIF_NONE, msg(AttributeMap[SA_CHECKBOX_OFFLINE - SA_ATTR_FIRST].LngId), },
+		{ DI_BUTTON,    {{C1,      16    }, {0,       16    }}, DIF_NONE, msg(lng::MSetAttrMore), },
 
-		{ DI_CHECKBOX,  {{C2,      5     }, {0,       5     }}, DIF_NONE, msg(AttributeMap[SA_CHECKBOX_COMPRESSED - SA_ATTR_FIRST].LngId), },
-		{ DI_CHECKBOX,  {{C2,      6     }, {0,       6     }}, DIF_NONE, msg(AttributeMap[SA_CHECKBOX_ENCRYPTED - SA_ATTR_FIRST].LngId), },
-		{ DI_CHECKBOX,  {{C2,      7     }, {0,       7     }}, DIF_NONE, msg(AttributeMap[SA_CHECKBOX_NOTINDEXED - SA_ATTR_FIRST].LngId), },
-		{ DI_BUTTON,    {{C2,      8     }, {0,       8     }}, DIF_NONE, msg(lng::MSetAttrMore), },
+		{ DI_TEXT,      {{C2,      TB+0  }, {0,       TB+0  }}, DIF_NONE, msg(lng::MSetAttrDate), },
+		{ DI_TEXT,      {{DlgX-33, TB+0  }, {0,       TB+0  }}, DIF_NONE, },
+		{ DI_TEXT,      {{DlgX-21, TB+0  }, {0,       TB+0  }}, DIF_NONE, },
+		{ DI_TEXT,      {{C2,      TB+1  }, {0,       TB+1  }}, DIF_NONE, msg(lng::MSetAttrWrite), },
+		{ DI_FIXEDIT,   {{DlgX-33, TB+1  }, {DlgX-23, TB+1  }}, DIF_MASKEDIT, },
+		{ DI_FIXEDIT,   {{DlgX-21, TB+1  }, {DlgX-6,  TB+1  }}, DIF_MASKEDIT, },
+		{ DI_TEXT,      {{C2,      TB+2  }, {0,       TB+2  }}, DIF_NONE, msg(lng::MSetAttrCreation), },
+		{ DI_FIXEDIT,   {{DlgX-33, TB+2  }, {DlgX-23, TB+2  }}, DIF_MASKEDIT, },
+		{ DI_FIXEDIT,   {{DlgX-21, TB+2  }, {DlgX-6,  TB+2  }}, DIF_MASKEDIT, },
+		{ DI_TEXT,      {{C2,      TB+3  }, {0,       TB+3  }}, DIF_NONE, msg(lng::MSetAttrAccess), },
+		{ DI_FIXEDIT,   {{DlgX-33, TB+3  }, {DlgX-23, TB+3  }}, DIF_MASKEDIT, },
+		{ DI_FIXEDIT,   {{DlgX-21, TB+3  }, {DlgX-6,  TB+3  }}, DIF_MASKEDIT, },
+		{ DI_TEXT,      {{C2,      TB+4  }, {0,       TB+4  }}, DIF_NONE, msg(lng::MSetAttrChange), },
+		{ DI_FIXEDIT,   {{DlgX-33, TB+4  }, {DlgX-23, TB+4  }}, DIF_MASKEDIT, },
+		{ DI_FIXEDIT,   {{DlgX-21, TB+4  }, {DlgX-6,  TB+4  }}, DIF_MASKEDIT, },
+		{ DI_BUTTON,    {{0,       TBB   }, {0,       TBB   }}, DIF_CENTERGROUP | DIF_BTNNOCLOSE, msg(lng::MSetAttrOriginal), },
+		{ DI_BUTTON,    {{0,       TBB   }, {0,       TBB   }}, DIF_CENTERGROUP | DIF_BTNNOCLOSE, msg(lng::MSetAttrCurrent), },
+		{ DI_BUTTON,    {{0,       TBB   }, {0,       TBB   }}, DIF_CENTERGROUP | DIF_BTNNOCLOSE, msg(lng::MSetAttrBlank), },
 
-		{ DI_TEXT,      {{-1,      AR+1  }, {0,       AR+1  }}, DIF_SEPARATOR, },
-		{ DI_TEXT,      {{DlgX-33, AR+2  }, {0,       AR+2  }}, DIF_NONE, },
-		{ DI_TEXT,      {{DlgX-21, AR+2  }, {0,       AR+2  }}, DIF_NONE, },
-		{ DI_TEXT,      {{5,       AR+3  }, {0,       AR+3  }}, DIF_NONE, msg(lng::MSetAttrModification), },
-		{ DI_FIXEDIT,   {{DlgX-33, AR+3  }, {DlgX-23, AR+3  }}, DIF_MASKEDIT, },
-		{ DI_FIXEDIT,   {{DlgX-21, AR+3  }, {DlgX-6,  AR+3  }}, DIF_MASKEDIT, },
-		{ DI_TEXT,      {{5,       AR+4  }, {0,       AR+4  }}, DIF_NONE, msg(lng::MSetAttrCreation), },
-		{ DI_FIXEDIT,   {{DlgX-33, AR+4  }, {DlgX-23, AR+4  }}, DIF_MASKEDIT, },
-		{ DI_FIXEDIT,   {{DlgX-21, AR+4  }, {DlgX-6,  AR+4  }}, DIF_MASKEDIT, },
-		{ DI_TEXT,      {{5,       AR+5  }, {0,       AR+5  }}, DIF_NONE, msg(lng::MSetAttrLastAccess), },
-		{ DI_FIXEDIT,   {{DlgX-33, AR+5  }, {DlgX-23, AR+5  }}, DIF_MASKEDIT, },
-		{ DI_FIXEDIT,   {{DlgX-21, AR+5  }, {DlgX-6,  AR+5  }}, DIF_MASKEDIT, },
-		{ DI_TEXT,      {{5,       AR+6  }, {0,       AR+6  }}, DIF_NONE, msg(lng::MSetAttrChange), },
-		{ DI_FIXEDIT,   {{DlgX-33, AR+6  }, {DlgX-23, AR+6  }}, DIF_MASKEDIT, },
-		{ DI_FIXEDIT,   {{DlgX-21, AR+6  }, {DlgX-6,  AR+6  }}, DIF_MASKEDIT, },
-		{ DI_BUTTON,    {{0,       AR+7  }, {0,       AR+7  }}, DIF_CENTERGROUP | DIF_BTNNOCLOSE, msg(lng::MSetAttrOriginal), },
-		{ DI_BUTTON,    {{0,       AR+7  }, {0,       AR+7  }}, DIF_CENTERGROUP | DIF_BTNNOCLOSE, msg(lng::MSetAttrCurrent), },
-		{ DI_BUTTON,    {{0,       AR+7  }, {0,       AR+7  }}, DIF_CENTERGROUP | DIF_BTNNOCLOSE, msg(lng::MSetAttrBlank), },
-		{ DI_TEXT,      {{-1,      AR+8  }, {0,       AR+8  }}, DIF_SEPARATOR, },
-		{ DI_TEXT,      {{5,       AR+9  }, {17,      AR+9  }}, DIF_NONE, msg(lng::MSetAttrOwner), },
-		{ DI_EDIT,      {{18,      AR+9  }, {DlgX-6,  AR+9  }}, DIF_NONE, },
-		{ DI_TEXT,      {{-1,      AR+10 }, {0,       AR+10 }}, DIF_SEPARATOR | DIF_HIDDEN, },
-		{ DI_CHECKBOX,  {{5,       AR+11 }, {0,       AR+11 }}, DIF_DISABLE | DIF_HIDDEN, msg(lng::MSetAttrSubfolders), },
+		{ DI_TEXT,      {{C2,      15    }, {0,       15    }}, DIF_NONE, msg(lng::MSetAttrOwner), },
+		{ DI_EDIT,      {{C2,      16    }, {DlgX-6,  16    }}, DIF_NONE, },
+
+		{ DI_TEXT,      {{-1,      17    }, {0,       17    }}, DIF_SEPARATOR | DIF_HIDDEN, },
+		{ DI_CHECKBOX,  {{5,       18    }, {0,       18    }}, DIF_DISABLE | DIF_HIDDEN, msg(lng::MSetAttrSubfolders), },
+
 		{ DI_TEXT,      {{-1,      DlgY-4}, {0,       DlgY-4}}, DIF_SEPARATOR, },
 		{ DI_BUTTON,    {{0,       DlgY-3}, {0,       DlgY-3}}, DIF_CENTERGROUP | DIF_DEFAULTBUTTON, msg(lng::MSetAttrSet), },
 		{ DI_BUTTON,    {{0,       DlgY-3}, {0,       DlgY-3}}, DIF_CENTERGROUP | DIF_DISABLE, msg(lng::MSetAttrSystemDialog), },
 		{ DI_BUTTON,    {{0,       DlgY-3}, {0,       DlgY-3}}, DIF_CENTERGROUP, msg(lng::MCancel), },
+
+		{ DI_VTEXT,     {{C2-2,    4     }, {C2-2,    DlgY-4}}, DIF_SEPARATORUSER, },
+		{ DI_TEXT,      {{C2-2,    TB+8  }, {DlgX-4,  TB+8  }}, DIF_SEPARATORUSER, },
 	});
+
+	AttrDlg[SA_SEPARATOR_VERTICAL].strMask = { BoxSymbols[BS_T_H1V1], BoxSymbols[BS_V1], BoxSymbols[BS_B_H1V1] };
+	AttrDlg[SA_SEPARATOR_AFTER_TIME].strMask = { BoxSymbols[BS_L_H1V1], BoxSymbols[BS_H1], BoxSymbols[BS_R_H1V2] };
+
+	// Unofficial margins for DIF_CENTERGROUP
+	AttrDlg[SA_BUTTON_ORIGINAL].ListPos = C2;
+	AttrDlg[SA_BUTTON_BLANK].ListPos = 6;
 
 	SetAttrDlgParam DlgParam{};
 	const size_t SelCount = SrcPanel? SrcPanel->GetSelCount() : 1;
@@ -838,11 +890,11 @@ static bool ShellSetFileAttributesImpl(Panel* SrcPanel, const string* Object)
 
 		const auto EnableSubfolders = [&]
 		{
-			AttrDlg[SA_SEPARATOR4].Flags &= ~DIF_HIDDEN;
+			AttrDlg[SA_SEPARATOR_BEFORE_SUBFOLODERS].Flags &= ~DIF_HIDDEN;
 			AttrDlg[SA_CHECKBOX_SUBFOLDERS].Flags &= ~(DIF_DISABLE | DIF_HIDDEN);
 			AttrDlg[SA_DOUBLEBOX].Y2 += 2;
 
-			for (const auto i: std::views::iota(SA_SEPARATOR5 + 0, SA_BUTTON_CANCEL + 1))
+			for (const auto i: std::views::iota(SA_SEPARATOR_BEFORE_MAIN_BUTTONS + 0, SA_BUTTON_CANCEL + 1))
 			{
 				AttrDlg[i].Y1 += 2;
 				AttrDlg[i].Y2 += 2;
@@ -882,12 +934,21 @@ static bool ShellSetFileAttributesImpl(Panel* SrcPanel, const string* Object)
 				}
 			}
 
-			bool IsMountPoint;
+			const auto IsMountPoint = [&]
 			{
+				if (DlgParam.Plugin)
+					return false;
+
 				bool IsRoot = false;
 				const auto PathType = ParsePath(SingleSelFileName, nullptr, &IsRoot);
-				IsMountPoint = IsRoot && ((PathType == root_type::drive_letter || PathType == root_type::win32nt_drive_letter));
-			}
+				if (!IsRoot)
+					return false;
+
+				if (none_of(PathType, root_type::drive_letter, root_type::win32nt_drive_letter))
+					return false;
+
+				return os::fs::GetVolumeNameForVolumeMountPoint(SingleSelFileName, strLinkName);
+			}();
 
 			if ((SingleSelFindData.Attributes != INVALID_FILE_ATTRIBUTES && (SingleSelFindData.Attributes & FILE_ATTRIBUTE_REPARSE_POINT)) || IsMountPoint)
 			{
@@ -904,7 +965,6 @@ static bool ShellSetFileAttributesImpl(Panel* SrcPanel, const string* Object)
 						// BUGBUG, cheating
 						ReparseTag = IO_REPARSE_TAG_MOUNT_POINT;
 						KnownReparseTag = true;
-						(void)os::fs::GetVolumeNameForVolumeMountPoint(SingleSelFileName, strLinkName);
 					}
 					else
 					{
@@ -923,11 +983,11 @@ static bool ShellSetFileAttributesImpl(Panel* SrcPanel, const string* Object)
 						switch (ReparseTag)
 						{
 						case IO_REPARSE_TAG_MOUNT_POINT:
-							ID_Msg = lng::MSetAttrJunction;
 
-							if (bool Root; !IsMountPoint && ParsePath(strLinkName, nullptr, &Root) == root_type::volume && Root)
+							if (bool Root; IsMountPoint || (ParsePath(strLinkName, nullptr, &Root) == root_type::volume && Root))
 								ID_Msg = lng::MSetAttrVolMount;
-
+							else
+								ID_Msg = lng::MSetAttrJunction;
 							break;
 
 						case IO_REPARSE_TAG_SYMLINK:
@@ -945,10 +1005,14 @@ static bool ShellSetFileAttributesImpl(Panel* SrcPanel, const string* Object)
 							{
 								const auto path = path::join(SrcPanel->GetCurDir(), SingleSelFileName);
 								os::netapi::ptr<DFS_INFO_3> DfsInfo;
-								auto Result = imports.NetDfsGetInfo(UNSAFE_CSTR(path), nullptr, nullptr, 3, edit_as<BYTE**>(&ptr_setter(DfsInfo)));
-								if (Result != NERR_Success)
-									Result = imports.NetDfsGetClientInfo(UNSAFE_CSTR(path), nullptr, nullptr, 3, edit_as<BYTE**>(&ptr_setter(DfsInfo)));
-								if (Result == NERR_Success)
+
+								auto get_dfs_info = [&](const auto& Callable)
+								{
+									return Callable(UNSAFE_CSTR(path), {}, {}, 3, edit_as<BYTE**>(&ptr_setter(DfsInfo))) == NERR_Success;
+								};
+
+								// Client first - it should be faster and we want to see the activity flag, which is a client thing
+								if (get_dfs_info(imports.NetDfsGetClientInfo) || get_dfs_info(imports.NetDfsGetInfo))
 								{
 									KnownReparseTag = true;
 
@@ -995,7 +1059,7 @@ static bool ShellSetFileAttributesImpl(Panel* SrcPanel, const string* Object)
 
 				if (KnownReparseTag)
 				{
-					AttrDlg[SA_TEXT_REPARSE_POINT].strData = msg(ID_Msg);
+					AttrDlg[SA_TEXT_REPARSE_POINT].strData = symlink_type(ID_Msg, ReparseTag);
 
 					if (ReparseTag == IO_REPARSE_TAG_DFS)
 					{
@@ -1010,7 +1074,7 @@ static bool ShellSetFileAttributesImpl(Panel* SrcPanel, const string* Object)
 						AttrDlg[SA_EDIT_REPARSE_POINT].strData = strLinkName;
 					}
 
-					if (IsMountPoint || none_of(ReparseTag, IO_REPARSE_TAG_MOUNT_POINT, IO_REPARSE_TAG_SYMLINK))
+					if (IsMountPoint || none_of(ReparseTag, IO_REPARSE_TAG_MOUNT_POINT, IO_REPARSE_TAG_SYMLINK, IO_REPARSE_TAG_APPEXECLINK))
 						AttrDlg[SA_EDIT_REPARSE_POINT].Flags |= DIF_READONLY;
 				}
 				else
@@ -1299,8 +1363,10 @@ static bool ShellSetFileAttributesImpl(Panel* SrcPanel, const string* Object)
 							os::fs::find_data NewFindData;
 							NewFindData.Attributes = (SingleSelFindData.Attributes | SetAttr) & ~ClearAttr;
 
+							string Empty;
+
 							const state
-								Current{ SelCount == 1 && !AttrDlg[SA_CHECKBOX_SUBFOLDERS].Selected? DlgParam.Owner.InitialValue : L""s, SingleSelFindData},
+								Current{ SelCount == 1 && !AttrDlg[SA_CHECKBOX_SUBFOLDERS].Selected? DlgParam.Owner.InitialValue : Empty, SingleSelFindData},
 								New{ AttrDlg[SA_EDIT_OWNER].strData, NewFindData };
 
 							if (!process_single_file(SingleSelFileName, Current, New, AttrDlgAccessor, SkipErrors))
@@ -1331,8 +1397,10 @@ static bool ShellSetFileAttributesImpl(Panel* SrcPanel, const string* Object)
 								os::fs::find_data NewFindData;
 								NewFindData.Attributes = (SingleSelFindData.Attributes | SetAttr) & ~ClearAttr;
 
+								string Empty;
+
 								const state
-									Current{ L""s, SingleSelFindData }, // BUGBUG, should we read the owner?
+									Current{ Empty, SingleSelFindData }, // BUGBUG, should we read the owner?
 									New{ AttrDlg[SA_EDIT_OWNER].strData, NewFindData };
 
 								if (!process_single_file(strFullName, Current, New, AttrDlgAccessor, SkipErrors))
@@ -1356,17 +1424,12 @@ static bool ShellSetFileAttributesImpl(Panel* SrcPanel, const string* Object)
 				SHELLEXECUTEINFO seInfo{ sizeof(seInfo) };
 				seInfo.nShow = SW_SHOW;
 				seInfo.fMask = SEE_MASK_INVOKEIDLIST;
-				NTPath strFullName(SingleSelFileName);
+				auto strFullName = SingleSelFileName;
 				if(SingleSelFindData.Attributes&FILE_ATTRIBUTE_DIRECTORY)
 				{
 					AddEndSlash(strFullName);
 				}
 				seInfo.lpFile = strFullName.c_str();
-				if (!IsWindowsVistaOrGreater() && ParsePath(seInfo.lpFile) == root_type::win32nt_drive_letter)
-				{
-					// "\\?\c:\..." fails on old windows
-					seInfo.lpFile += 4;
-				}
 				seInfo.lpVerb = L"properties";
 				const auto strCurDir = os::fs::get_current_directory();
 				seInfo.lpDirectory=strCurDir.c_str();

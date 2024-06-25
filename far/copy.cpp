@@ -352,7 +352,7 @@ static bool CheckNulOrCon(string_view Src)
 	if (HasPathPrefix(Src))
 		Src.remove_prefix(4);
 
-	return (starts_with_icase(Src, L"nul"sv) || starts_with_icase(Src, L"con"sv)) && (Src.size() == 3 || (Src.size() > 3 && path::is_separator(Src[3])));
+	return (starts_with_icase(Src, L"nul"sv) || starts_with_icase(Src, L"con"sv)) && (Src.size() == 3 || (Src.size() > 3 && path::get_is_separator(Src)(Src[3])));
 }
 
 static string GenerateName(string_view const Name, string_view const Path)
@@ -1170,7 +1170,7 @@ ShellCopy::ShellCopy(
 	strDestDizPath.clear();
 	SrcPanel->SaveSelection();
 	// TODO: Posix - bugbug
-	ReplaceSlashToBackslash(strCopyDlgValue);
+	path::inplace::normalize_separators(strCopyDlgValue);
 	// нужно ли показывать время копирования?
 	// ***********************************************************************
 	// **** Здесь все подготовительные операции закончены, можно приступать
@@ -1901,7 +1901,9 @@ COPY_CODES ShellCopy::ShellCopyOneFile(
 				SrcData.ReparseTag,
 				IO_REPARSE_TAG_SYMLINK,
 				IO_REPARSE_TAG_MOUNT_POINT,
-				IO_REPARSE_TAG_APPEXECLINK
+				IO_REPARSE_TAG_NFS,
+				IO_REPARSE_TAG_APPEXECLINK,
+				IO_REPARSE_TAG_LX_SYMLINK
 			);
 		}
 		if (CopySymlinkContents)

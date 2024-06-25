@@ -43,6 +43,9 @@
 <?define Guid.RestoreOldPluginSettings.cmd = "78865DFA-894A-45C4-805B-B18FF3256D2D" ?>
 <?define Guid.SaveOldPluginSettings.cmd = "13657D33-EF93-4E21-878E-62EFBC298C4D" ?>
 
+<?define Guid.sqlite3.dll = "B225AC03-192E-4F26-9CFB-1DB82AFA9973" ?>
+<?define Guid.sqlite3.map = "B3E0A4EA-9536-4AEE-BF9D-94F443A832AF" ?>
+
 <?define Guid.Far.VisualElementsManifest.xml = "6514CCA9-38B4-4D12-8E1D-AE3F30612B58" ?>
 <?define Guid.VisualElements.large.png = "1FF864EB-ED74-4339-8CFE-753A8415484C" ?>
 <?define Guid.VisualElements.small.png = "01737A04-59F0-4E52-BD4B-CD05F136BEC0" ?>
@@ -428,13 +431,16 @@
 
 <?define Guid.ChangeLog_11 = "8E90D597-E10E-4F29-9FBC-AED74A6AF688" ?>
 <?define Guid.NetBox.dll = "FABFEBD9-2B9B-40F1-9254-F79334A5EAA0" ?>
+<?define Guid.NetBox.map = "5AF83C1F-7884-4FDA-9612-9C81D9A5EFD3" ?>
 <?define Guid.NetBoxEng.lng = "84D0F552-3B68-49F7-A5FC-9D0ADE6BDEB1" ?>
 <?define Guid.NetBoxRus.lng = "D3EA7808-4470-4ED4-876B-58ED0D75CD0E" ?>
 <?define Guid.NetBoxPol.lng = "F8B2CCAE-4A12-479F-8CC2-B591BFC94A47" ?>
+<?define Guid.NetBoxSpa.lng = "691FF7F4-660F-4920-9DAB-8429224A0848" ?>
 <?define Guid.README.md = "5D908D6F-ACB4-4B0E-A102-9A76E47F15C7" ?>
 <?define Guid.README.RU.md = "E879951C-FCFC-49DF-8A3B-F0263C42FB7C" ?>
 <?define Guid.README.PL.md = "087C4743-BCB3-4A2B-98CC-9E8E796A306B" ?>
 <?define Guid.LICENSE.txt = "EDD17AEF-E349-4A43-B890-BE65D5B82B9C" ?>
+<?define Guid.cacert.pem = "E1BC374D-4FCA-4F14-8843-EB6E7093CFF8" ?>
 
 <?define Guid.changelog_12 = "63AFBAE0-C8BF-4ACE-B770-E78BBAA8592F" ?>
 <?define Guid.HlfViewer.dll = "90698D53-45C4-4A7D-BBC4-033E74FE690C" ?>
@@ -580,5 +586,6 @@
 <?define Guid.luafar_manual.chm = "B967FB08-E65C-4609-9246-672D4C4CD23B" ?>
 <?define Guid.macroapi_manual.ru.chm = "87920E80-E03F-4F6D-A687-7F50CE93BE9C" ?>
 <?define Guid.macroapi_manual.en.chm = "72D9C2F2-0110-4415-AA2F-0C4E6A0FC0E4" ?>
+<?define Guid.macroapi_manual.pl.chm = "8204A326-8282-82F8-82E1-82144A899D3D" ?>
 <?define Guid.FarEncyclopedia.ru.chm = "D94650F5-956A-4887-8F26-B66B5453287D" ?>
 </Include>

@@ -2196,7 +2196,7 @@ id=71
 lv=2
 dt=Text
 nm=far.SendDlgMessage
-mtime=3917983426
+mtime=3921264341
 <article>
 #_Result = far.SendDlgMessage (hDlg, Msg, Param1, Param2)
 #_    or
@@ -2419,7 +2419,7 @@ mtime=3917983426
 #_
 #_DM_SETDLGDATA:
 #_    Param1: any Lua value
-#_    Result: no
+#_    Result: any Lua value (the previous data)
 #_
 #_**Far API used:**
 #_  SendDlgMessage
@@ -3954,7 +3954,7 @@ id=31
 lv=2
 dt=Text
 nm=editor.GetString
-mtime=3682770766
+mtime=3921827714
 <article>
 #_**Note:**
 #_  This function is an extension over its prototype in Far API.
@@ -3980,10 +3980,11 @@ mtime=3682770766
 #_
 #_**Description:**
 #_  The function's behavior depends on its *Mode* argument:
-#_  Mode:  0 = returns: table LineInfo;        changes current position: no
-#_         1 = returns: table LineInfo;        changes current position: yes
-#_         2 = returns: StringText,StringEOL;  changes current position: yes
-#_         3 = returns: StringText,StringEOL;  changes current position: no
+#_  Mode:  0 = returns: table LineInfo;            changes current position: no
+#_         1 = returns: table LineInfo;            changes current position: yes
+#_         2 = returns: StringText,StringEOL;      changes current position: yes
+#_         3 = returns: StringText,StringEOL;      changes current position: no
+#_         4 = returns: SelStart,SelEnd,StringLength; changes cur. position: no
 #_
 #_  Modes 1 and 2 have a side effect: the current line position in the Editor
 #_  is set to *StringNumber*.
@@ -8693,7 +8694,7 @@ mtime=3651736631
 #_
 #_**Description:**
 #_  A table containing GUIDs of various Far Manager dialogs and menus.
-#_  This table is auto-generated from file *DlgGuid.hpp* at the build time.
+#_  This table is auto-generated from file *uuids.far.dialogs.hpp* at the build time.
 #_
 #_  GUIDs are given in upper-case text representation, e.g.
 #_    FindFileId = '8C9EAD29-910F-4B24-A669-EDAFBA6ED964'
@@ -9467,6 +9468,26 @@ mtime=3504247079
 #_
 #_**Windows API used:**
 #_  GetLogicalDriveStringsW
+#_
+</article>
+</node>
+<node>
+id=569
+lv=3
+dt=Text
+nm=win.JoinPath
+ctime=3922434993
+mtime=3922435036
+<article>
+#_path = win.JoinPath (...)
+#_
+#_**Parameters:**
+#_  ... :  0 or more strings (nils allowed)
+#_
+#_**Returns:**
+#_  path:  string
+#_
+#_@@@
 #_
 </article>
 </node>
@@ -11114,6 +11135,43 @@ mtime=3776486954
 #_
 #_@@@
 #_[string.format]: http://www.lua.org/manual/5.1/manual.html#pdf-string.format
+#_
+</article>
+</node>
+<node>
+id=570
+lv=2
+dt=Text
+nm=utf8.reformat
+ctime=3922998217
+mtime=3923000028
+<article>
+#_result = utf8.reformat (pattern, ...)
+#_
+#_**Parameters:**
+#_  pattern : string
+#_  ...     : 0 or more additional arguments
+#_
+#_**Returns:**
+#_  result  : string
+#_
+#_**Description:**
+#_  This function is similar to utf8.format except for char '{' which must
+#_  be written as '%{'.
+#_  
+#_  {1}, {2}, etc. in the pattern are substituted by values corresponding
+#_  to parameters' numbers in the '%s' format.
+#_
+#_  If the number in curly braces is followed by a ':' then this part becomes
+#_  a "%" in the format string. E.g. {3:04d} is replaced by value of the 3-rd
+#_  parameter in the '%04d' format.
+#_
+#_**Note:**
+#_  This is an added function, not present in the original luautf8 library.
+#_
+#_**Example:**
+#_  reformat('Wrong count: {3:10} {1} {3} and {2:.4f}. Ok: %{ %06d %s and %s }',
+#_           111, 222, 'three')
 #_
 </article>
 </node>

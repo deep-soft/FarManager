@@ -80,7 +80,7 @@ class representation_source
 public:
 	explicit representation_source(string_view const File)
 	{
-		const file_ptr XmlFile(_wfsopen(NTPath(File).c_str(), L"rb", _SH_DENYWR));
+		const file_ptr XmlFile(_wfsopen(nt_path(File).c_str(), L"rb", _SH_DENYWR));
 		if (!XmlFile)
 			throw far_known_exception(far::format(L"Error opening file \"{}\": {}"sv, File, os::format_errno(errno)));
 
@@ -140,7 +140,7 @@ public:
 
 	void Save(string_view const File)
 	{
-		const file_ptr XmlFile(_wfsopen(NTPath(File).c_str(), L"w", _SH_DENYWR));
+		const file_ptr XmlFile(_wfsopen(nt_path(File).c_str(), L"w", _SH_DENYWR));
 		if (!XmlFile)
 			throw far_known_exception(far::format(L"Error opening file \"{}\": {}"sv, File, os::format_errno(errno)));
 
@@ -2358,9 +2358,7 @@ private:
 
 bool is_uuid(string_view const Str)
 {
-	// "HHHHHHHH-HHHH-HHHH-HHHH-HHHHHHHHHHHH"
-	static const std::wregex re(RE_BEGIN RE_ANY_UUID RE_END, std::regex::optimize);
-	return std::regex_search(ALL_CONST_RANGE(Str), re);
+	return uuid::try_parse(Str).has_value();
 }
 
 }

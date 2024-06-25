@@ -705,6 +705,14 @@ TEST_CASE("function_traits")
 		STATIC_REQUIRE(std::same_as<t::arg<0>, bool>);
 		STATIC_REQUIRE(std::same_as<t::result_type, double>);
 	}
+
+	{
+		const auto l = [&](char){ return 0.0; };
+		using t = function_traits<decltype(l)>;
+		STATIC_REQUIRE(t::arity == 1);
+		STATIC_REQUIRE(std::same_as<t::arg<0>, char>);
+		STATIC_REQUIRE(std::same_as<t::result_type, double>);
+	}
 }
 
 //----------------------------------------------------------------------------
@@ -1866,14 +1874,13 @@ TEST_CASE("utility.is_aligned")
 	}
 
 	{
-		alignas(int) const char data[sizeof(int) * 2]{};
+		alignas(int) const char data[sizeof(int) * 3]{};
 		static_assert(sizeof(int) > sizeof(char));
 
 		REQUIRE(is_aligned(view_as<int>(data, 0)));
-		REQUIRE(!is_aligned(view_as<int>(data, 1)));
-		REQUIRE(!is_aligned(view_as<int>(data, sizeof(int) - 1)));
+		REQUIRE(!is_aligned(*std::bit_cast<int*>(data + 1))); // view_as asserts alignof(T)
 		REQUIRE(is_aligned(view_as<int>(data, sizeof(int))));
-		REQUIRE(!is_aligned(view_as<int>(data, sizeof(int) + 1)));
+		REQUIRE(!is_aligned(*std::bit_cast<int*>(data + sizeof(int) + 1))); // view_as asserts alignof(T)
 	}
 }
 

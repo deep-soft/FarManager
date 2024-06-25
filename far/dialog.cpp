@@ -592,7 +592,11 @@ void Dialog::ProcessCenterGroup()
 			if (Length && !FirstVisibleButton->strData.empty() && FirstVisibleButton->Type == DI_BUTTON)
 				--Length;
 
-			int StartX = std::max(0, (m_Where.width() - Length) / 2);
+			// Unofficial margins for DIF_CENTERGROUP
+			const auto LeftMargin = FirstVisibleButton->ListPos;
+			const auto RightMargin = (ButtonsEnd - 1)->ListPos;
+
+			auto StartX = LeftMargin + std::max(0, (m_Where.width() - LeftMargin - RightMargin - Length) / 2);
 
 			for (auto& j: std::ranges::subrange(FirstVisibleButton, ButtonsEnd))
 			{
@@ -5652,7 +5656,7 @@ intptr_t Dialog::SendMessage(intptr_t Msg,intptr_t Param1,void* Param2)
 							SendMessage(DM_REDRAW, 0, nullptr);
 						}
 
-						return Len-(!Len?0:1);
+						return Len;
 					case DI_BUTTON:
 					case DI_CHECKBOX:
 					case DI_RADIOBUTTON:

@@ -14,6 +14,7 @@
       <ComponentRef Id="Far.VisualElementsManifest.xml" />
       <ComponentRef Id="VisualElements.large.png" />
       <ComponentRef Id="VisualElements.small.png" />
+      <ComponentRef Id="sqlite3.dll" />
       <Feature Id="Addons" Level="1" Title="!(loc.Feature.Title.Addons)" AllowAdvertise="no" Description="!(loc.Feature.Description.Addons)">
         <ComponentRef Id="Descript.ion_1" />
         <ComponentRef Id="README.TXT_1" />
@@ -162,9 +163,11 @@
         <ComponentRef Id="Plugins.Install.txt_2" />
         <ComponentRef Id="Plugins.Review.txt_2" />
         <ComponentRef Id="TechInfo.txt_2" />
+        <ComponentRef Id="macroapi_manual.pl.chm" />
       </Feature>
       <Feature Id="MapFiles" Level="1" Title="!(loc.Feature.Title.MapFiles)" AllowAdvertise="no" Description="!(loc.Feature.Description.MapFiles)">
         <ComponentRef Id="Far.map" />
+        <ComponentRef Id="sqlite3.map" />
       </Feature>
       <Feature Id="Languages" Level="1" Title="!(loc.Feature.Title.Languages)" AllowAdvertise="no" Description="!(loc.Feature.Description.Languages)">
         <Feature Id="Belarusian" Level="1" Title="!(loc.Feature.Title.Belarusian)" AllowAdvertise="no">
@@ -798,6 +801,7 @@
           <ComponentRef Id="NetBoxEng.lng" />
           <ComponentRef Id="README.md" />
           <ComponentRef Id="LICENSE.txt" />
+          <ComponentRef Id="cacert.pem" />
           <Feature Id="NetBox.Russian" Level="1" Display="hidden" AllowAdvertise="no">
             <ComponentRef Id="README.RU.md" />
             <ComponentRef Id="NetBoxRus.lng" />
@@ -805,6 +809,12 @@
           <Feature Id="NetBox.Polish" Level="1" Display="hidden" AllowAdvertise="no">
             <ComponentRef Id="README.PL.md" />
             <ComponentRef Id="NetBoxPol.lng" />
+          </Feature>
+          <Feature Id="NetBox.Spanish" Level="1" Display="hidden" AllowAdvertise="no">
+            <ComponentRef Id="NetBoxSpa.lng" />
+          </Feature>
+          <Feature Id="NetBox.MapFiles" Level="1" Display="hidden" AllowAdvertise="no">
+            <ComponentRef Id="NetBox.map" />
           </Feature>
           <Feature Id="NetBox.Changelogs" Level="1" Display="hidden" AllowAdvertise="no">
             <ComponentRef Id="ChangeLog_11" />

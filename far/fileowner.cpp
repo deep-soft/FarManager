@@ -196,7 +196,7 @@ static bool SidToNameCached(PSID Sid, string& Name, const string& Computer)
 
 static bool ProcessFileOwner(string_view const Name, function_ref<bool(PSID)> const Callable)
 {
-	const auto SecurityDescriptor = os::fs::get_file_security(Name, OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION);
+	const auto SecurityDescriptor = os::fs::get_file_security(Name, OWNER_SECURITY_INFORMATION);
 	if (!SecurityDescriptor)
 		return false;
 
@@ -276,7 +276,7 @@ bool SetOwnerInternal(const string& Object, const string& Owner)
 
 bool SetFileOwner(string_view const Object, const string& Owner)
 {
-	const NTPath NtObject(Object);
+	const auto NtObject = nt_path(Object);
 
 	if (SetOwnerInternal(NtObject, Owner))
 		return true;

@@ -49,7 +49,7 @@ local function IsNumOrInt(v)
   return type(v)=="number" or bit64.type(v)
 end
 
-local TmpFileName = assert(win.GetEnv"tmp" or win.GetEnv"temp").."\\tmp.tmp"
+local TmpFileName = win.JoinPath(assert(win.GetEnv"tmp" or win.GetEnv"temp"), "tmp.tmp")
 
 local function WriteTmpFile(...)
   local fp = assert(io.open(TmpFileName,"w"))
@@ -1316,7 +1316,7 @@ local function Test_Panel_Select()
 
   --------------------------------------------------------------
   MODE = 2
-  local list = dir.."\\FarEng.hlf\nFarEng.lng" -- the 1-st file with path, the 2-nd without
+  local list = win.JoinPath(dir,"FarEng.hlf").."\nFarEng.lng" -- the 1-st file with path, the 2-nd without
   assert_eq(2,PS(0,ADD,MODE,list))
   pi = assert_table(panel.GetPanelInfo(1))
   assert_eq(2, pi.SelectedItemsNumber)
@@ -2001,7 +2001,7 @@ end
 
 -- "Several lines are merged into one".
 local function test_issue_3129()
-  local fname = (win.GetEnv("TEMP") or ".").."\\far3-"..win.Uuid(win.Uuid()):sub(1,8)
+  local fname = win.JoinPath(win.GetEnv("TEMP") or ".", "far3-"..win.Uuid("L"):sub(1,8))
   local fp = assert(io.open(fname, "w"))
   fp:close()
   local flags = {EF_NONMODAL=1, EF_IMMEDIATERETURN=1, EF_DISABLEHISTORY=1}
@@ -2098,6 +2098,132 @@ local function test_utf8()
   test_utf8_lower_upper()
 end
 
+local function test_one_guid(val, func, keys, numEsc)
+  numEsc = numEsc or 1
+  val = far.Guids[val]
+  assert_str(val)
+  assert_eq(#val, 36)
+
+  if func then func() end
+  if keys then Keys(keys) end
+
+  assert_eq(Area.Dialog and Dlg.Id or Menu.Id, val)
+  for _ = 1,numEsc do Keys("Esc") end
+end
+
+local function test_Guids()
+  assert_table(far.Guids)
+
+  Keys("Esc"); print("far:config"); Keys("Enter")
+  test_one_guid( "AdvancedConfigId")
+
+  test_one_guid( "ApplyCommandId",           nil, "CtrlG")
+  test_one_guid( "AskInsertMenuOrCommandId", nil, "F2 Ins", 2)
+  test_one_guid( "ChangeDiskMenuId",         nil, "AltF1")
+  test_one_guid( "ChangeDiskMenuId",         nil, "AltF2")
+  test_one_guid( "CodePagesMenuId",          nil, "F9 Home 3*Right Enter End 3*Up Enter")
+  test_one_guid( "CopyCurrentOnlyFileId",    nil, "End ShiftF5")
+  test_one_guid( "CopyFilesId",              nil, "End F5")
+--test_one_guid( "DeleteFileFolderId",       nil, "End F8")
+  test_one_guid( "DeleteWipeId",             nil, "End AltDel")
+  test_one_guid( "DescribeFileId",           nil, "End CtrlZ")
+  test_one_guid( "EditUserMenuId",           nil, "F2 Ins Enter", 2)
+  test_one_guid( "EditorReplaceId",          nil, "End F4 CtrlF7", 2)
+  test_one_guid( "EditorSearchId",           nil, "End F4 F7", 2)
+  test_one_guid( "FarAskQuitId",             nil, "F10")
+
+  local myMenu
+  myMenu = function() mf.mainmenu("fileassociations") end
+  test_one_guid( "FileAssocMenuId",          myMenu)
+  test_one_guid( "FileAssocModifyId",        myMenu, "Ins", 2)
+
+  myMenu = function() mf.mainmenu("foldershortcuts") end
+  test_one_guid( "FolderShortcutsId",        myMenu)
+--test_one_guid( "FolderShortcutsDlgId",     myMenu, "F4", 2)
+
+  myMenu = function() mf.mainmenu("filehighlight") end
+  test_one_guid( "HighlightMenuId",          myMenu)
+  test_one_guid( "HighlightConfigId",        myMenu, "Ins", 2)
+
+  myMenu = function() mf.mainmenu("filepanelmodes") end
+  test_one_guid( "PanelViewModesId",         myMenu)
+  test_one_guid( "PanelViewModesEditId",     myMenu, "Enter", 2)
+
+  myMenu = function() mf.mainmenu("filemaskgroups") end
+  test_one_guid( "MaskGroupsMenuId",         myMenu)
+  test_one_guid( "EditMaskGroupId",          myMenu, "Ins", 2)
+
+  test_one_guid( "FileAttrDlgId",            nil, "End CtrlA")
+  test_one_guid( "FileOpenCreateId",         nil, "ShiftF4")
+  test_one_guid( "FileSaveAsId",             nil, "End F4 ShiftF2", 2)
+  test_one_guid( "FiltersConfigId",          nil, "CtrlI Ins", 2)
+  test_one_guid( "FiltersMenuId",            nil, "CtrlI")
+  test_one_guid( "FindFileId",               nil, "AltF7")
+  test_one_guid( "HardSymLinkId",            nil, "End AltF6")
+  test_one_guid( "HelpSearchId",             nil, "F1 F7", 2)
+  test_one_guid( "HistoryCmdId",             nil, "AltF8")
+  test_one_guid( "HistoryEditViewId",        nil, "AltF11")
+  test_one_guid( "HistoryFolderId",          nil, "AltF12")
+  test_one_guid( "MakeFolderId",             nil, "F7")
+  test_one_guid( "MoveCurrentOnlyFileId",    nil, "End ShiftF6")
+  test_one_guid( "MoveFilesId",              nil, "End F6")
+  test_one_guid( "PluginInformationId",      nil, "F11 F3", 2)
+  test_one_guid( "PluginsConfigMenuId",      nil, "AltShiftF9")
+  test_one_guid( "PluginsMenuId",            nil, "F11")
+  test_one_guid( "ScreensSwitchId",          nil, "F12")
+  test_one_guid( "SelectDialogId",           nil, "Add")
+  test_one_guid( "SelectSortModeId",         nil, "CtrlF12")
+  test_one_guid( "UnSelectDialogId",         nil, "Subtract")
+  test_one_guid( "ViewerSearchId",           nil, "End F3 F7", 2)
+
+  -- test_one_guid( "BadEditorCodePageId", nil, "")
+  -- test_one_guid( "CannotRecycleFileId", nil, "")
+  -- test_one_guid( "CannotRecycleFolderId", nil, "")
+  -- test_one_guid( "ChangeDriveCannotReadDiskErrorId", nil, "")
+  -- test_one_guid( "ChangeDriveModeId", nil, "")
+  -- test_one_guid( "CopyOverwriteId", nil, "")
+  -- test_one_guid( "CopyReadOnlyId", nil, "")
+  -- test_one_guid( "DeleteAskDeleteROId", nil, "")
+  -- test_one_guid( "DeleteAskWipeROId", nil, "")
+  -- test_one_guid( "DeleteFolderId", nil, "")
+  -- test_one_guid( "DeleteFolderRecycleId", nil, "")
+  -- test_one_guid( "DeleteLinkId", nil, "")
+  -- test_one_guid( "DeleteRecycleId", nil, "")
+  -- test_one_guid( "DisconnectDriveId", nil, "")
+  -- test_one_guid( "EditAskSaveExtId", nil, "")
+  -- test_one_guid( "EditAskSaveId", nil, "")
+  -- test_one_guid( "EditorAskOverwriteId", nil, "")
+  -- test_one_guid( "EditorCanNotEditDirectoryId", nil, "")
+  -- test_one_guid( "EditorConfirmReplaceId", nil, "")
+  -- test_one_guid( "EditorFileGetSizeErrorId", nil, "")
+  -- test_one_guid( "EditorFileLongId", nil, "")
+  -- test_one_guid( "EditorFindAllListId", nil, "")
+  -- test_one_guid( "EditorOpenRSHId", nil, "")
+  -- test_one_guid( "EditorReloadId", nil, "")
+  -- test_one_guid( "EditorReloadModalId", nil, "")
+  -- test_one_guid( "EditorSavedROId", nil, "")
+  -- test_one_guid( "EditorSaveExitDeletedId", nil, "")
+  -- test_one_guid( "EditorSaveF6DeletedId", nil, "")
+  -- test_one_guid( "EditorSwitchUnicodeCPDisabledId", nil, "")
+  -- test_one_guid( "EjectHotPlugMediaErrorId", nil, "")
+  -- test_one_guid( "FindFileResultId", nil, "")
+  -- test_one_guid( "FolderShortcutsMoreId", nil, "")
+  -- test_one_guid( "GetNameAndPasswordId", nil, "")
+  -- test_one_guid( "RecycleFolderConfirmDeleteLinkId", nil, "")
+  -- test_one_guid( "RemoteDisconnectDriveError1Id", nil, "")
+  -- test_one_guid( "RemoteDisconnectDriveError2Id", nil, "")
+  -- test_one_guid( "SelectAssocMenuId", nil, "")
+  -- test_one_guid( "SelectFromEditHistoryId", nil, "")
+  -- test_one_guid( "SUBSTDisconnectDriveError1Id", nil, "")
+  -- test_one_guid( "SUBSTDisconnectDriveError2Id", nil, "")
+  -- test_one_guid( "SUBSTDisconnectDriveId", nil, "")
+  -- test_one_guid( "UserMenuUserInputId", nil, "")
+  -- test_one_guid( "VHDDisconnectDriveErrorId", nil, "")
+  -- test_one_guid( "VHDDisconnectDriveId", nil, "")
+  -- test_one_guid( "WipeFolderId", nil, "")
+  -- test_one_guid( "WipeHardLinkId", nil, "")
+end
+
 function MT.test_luafar()
   test_bit64()
   test_utf8()
@@ -2111,6 +2237,7 @@ function MT.test_luafar()
   test_far_timer()
   test_gmatch_coro()
   test_issue_3129()
+  test_Guids()
 end
 
 -- Test in particular that Plugin.Call (a so-called "restricted" function) works properly

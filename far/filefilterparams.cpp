@@ -991,7 +991,7 @@ bool FileFilterConfig(FileFilterParams& Filter, bool ColorConfig)
 	DateList.ItemsNumber=FDATE_COUNT;
 
 	for (const auto i: std::views::iota(0uz, static_cast<size_t>(FDATE_COUNT)))
-		TableItemDate[i].Text = msg(lng::MFileFilterWrited+i).c_str();
+		TableItemDate[i].Text = msg(lng::MFileFilterWrite+i).c_str();
 
 	DWORD DateType;
 	filter_dates Dates;
@@ -1053,6 +1053,7 @@ bool FileFilterConfig(FileFilterParams& Filter, bool ColorConfig)
 		{ FILE_ATTRIBUTE_RECALL_ON_OPEN,               lng::MFileFilterAttrRecallOnOpen,       },
 		{ FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS,        lng::MFileFilterAttrRecallOnDataAccess, },
 		{ FILE_ATTRIBUTE_STRICTLY_SEQUENTIAL,          lng::MFileFilterAttrStrictlySequential, },
+		{ FILE_ATTRIBUTE_DEVICE,                       lng::MFileFilterAttrDevice,             },
 	};
 
 	os::fs::attributes AttrSet, AttrClear;

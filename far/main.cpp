@@ -204,8 +204,6 @@ static int MainProcess(
 		}
 		else
 		{
-			int DirCount=0;
-
 			// воспользуемся тем, что ControlObject::Init() создает панели
 			// юзая Global->Opt->*
 
@@ -215,7 +213,6 @@ static int MainProcess(
 
 			const auto SetupPanel = [&](bool active)
 			{
-				++DirCount;
 				string strPath = active? apanel : ppanel;
 				if (active? IsFileA : IsFileP)
 				{
@@ -246,7 +243,7 @@ static int MainProcess(
 			}
 
 			// теперь все готово - создаем панели!
-			Global->CtrlObject->Init(DirCount);
+			Global->CtrlObject->Init();
 
 			// а теперь "провалимся" в каталог или хост-файл (если получится ;-)
 			if (!apanel.empty())  // активная панель
@@ -967,6 +964,10 @@ static void handle_exception_final(function_ref<bool()> const Handler)
 	throw;
 }
 
+#ifdef _DEBUG
+static void premain();
+#endif
+
 static int wmain_seh()
 {
 	os::set_error_mode(SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX | SEM_NOALIGNMENTFAULTEXCEPT | SEM_NOGPFAULTERRORBOX);
@@ -989,6 +990,10 @@ static int wmain_seh()
 	{
 		return *Result;
 	}
+#endif
+
+#ifdef _DEBUG
+	premain();
 #endif
 
 #ifdef __SANITIZE_ADDRESS__
@@ -1167,5 +1172,11 @@ TEST_CASE("Args")
 			}
 		}, i.Validator);
 	}
+}
+#endif
+
+#ifdef _DEBUG
+static void premain()
+{
 }
 #endif

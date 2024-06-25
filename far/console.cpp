@@ -788,10 +788,7 @@ protected:
 	{
 		const auto ImeWnd = ImmGetDefaultIMEWnd(::console.GetWindow());
 		if (!ImeWnd)
-		{
-			LOGWARNING(L"ImmGetDefaultIMEWnd(): {}"sv, os::last_error());
 			return {};
-		}
 
 		const auto ThreadId = GetWindowThreadProcessId(ImeWnd, {});
 		if (!ThreadId)
@@ -910,6 +907,65 @@ protected:
 		return Result;
 	}
 
+	static bool layout_has_altgr(HKL const Layout)
+	{
+		static std::unordered_map<HKL, bool> LayoutState;
+		const auto [Iterator, Inserted] = LayoutState.emplace(Layout, false);
+		if (!Inserted)
+			return Iterator->second;
+
+		BYTE KeyState[256]{};
+		KeyState[VK_CONTROL] = 0b10000000;
+		KeyState[VK_MENU]    = 0b10000000;
+
+		for (const auto VK: std::views::iota(0, 256))
+		{
+			if (VK == VK_PACKET)
+				continue;
+
+			if (wchar_t Buffer[2]; os::to_unicode(VK, 0, KeyState, Buffer, 0, Layout) > 0)
+			{
+				return Iterator->second = true;
+			}
+		}
+
+		return false;
+	}
+
+	static void undo_altgr_if_redundant(KEY_EVENT_RECORD& KeyEvent)
+	{
+		const auto AltGr = LEFT_CTRL_PRESSED | RIGHT_ALT_PRESSED;
+
+		if ((KeyEvent.dwControlKeyState & AltGr) != AltGr)
+			return; // It's not AltGr
+
+		if (KeyEvent.uChar.UnicodeChar)
+			return; // It produces a character
+
+		const auto Layout = ::console.GetKeyboardLayout();
+
+		if (os::is_dead_key(KeyEvent, Layout))
+			return; // It produces a dead key
+
+		if (!layout_has_altgr(Layout))
+			return; // It's not AltGr
+
+		// It's AltGr that produces nothing. We can safely patch it to normal RAlt
+		KeyEvent.dwControlKeyState &= ~LEFT_CTRL_PRESSED;
+
+		BYTE KeyState[256]{};
+		KeyState[VK_SHIFT] = KeyEvent.dwControlKeyState & SHIFT_PRESSED? 0b10000000 : 0;
+		KeyState[VK_CAPITAL] = KeyEvent.dwControlKeyState & CAPSLOCK_ON? 0b00000001 : 0;
+
+		if (wchar_t Buffer[2]; os::to_unicode(KeyEvent.wVirtualKeyCode, KeyEvent.wVirtualScanCode, KeyState, Buffer, 0, Layout) > 0)
+			KeyEvent.uChar.UnicodeChar = Buffer[0];
+	}
+
+	static void postprocess_key_event(KEY_EVENT_RECORD& KeyEvent)
+	{
+		undo_altgr_if_redundant(KeyEvent);
+	}
+
 	static bool get_current_console_font(HANDLE OutputHandle, CONSOLE_FONT_INFO& FontInfo)
 	{
 		if (!GetCurrentConsoleFont(OutputHandle, FALSE, &FontInfo))
@@ -970,76 +1026,112 @@ protected:
 		Set(&COORD::Y, &POINT::y, &SMALL_RECT::Top);
 	}
 
-	static void AdjustMouseEvents(std::span<INPUT_RECORD> const Buffer, short Delta)
+	static void postprocess_mouse_event(MOUSE_EVENT_RECORD& MouseEvent)
 	{
-		std::optional<point> Size;
+		if (!sWindowMode)
+			return;
 
-		for (auto& i: Buffer)
+		fix_wheel_coordinates(MouseEvent);
+
+		MouseEvent.dwMousePosition.Y = std::max(0, MouseEvent.dwMousePosition.Y - ::console.GetDelta());
+
+		if (point Size; ::console.GetSize(Size))
+			MouseEvent.dwMousePosition.X = std::min(MouseEvent.dwMousePosition.X, static_cast<short>(Size.x - 1));
+	}
+
+	static void postprocess_event(INPUT_RECORD& Record)
+	{
+		switch (Record.EventType)
 		{
-			if (i.EventType != MOUSE_EVENT)
-				continue;
+		case KEY_EVENT:
+			postprocess_key_event(Record.Event.KeyEvent);
+			break;
 
-			if (!Size)
-			{
-				Size.emplace();
-				if (!::console.GetSize(*Size))
-					return;
-			}
+		case MOUSE_EVENT:
+			postprocess_mouse_event(Record.Event.MouseEvent);
+			break;
 
-			fix_wheel_coordinates(i.Event.MouseEvent);
-
-			i.Event.MouseEvent.dwMousePosition.Y = std::max(0, i.Event.MouseEvent.dwMousePosition.Y - Delta);
-			i.Event.MouseEvent.dwMousePosition.X = std::min(i.Event.MouseEvent.dwMousePosition.X, static_cast<short>(Size->x - 1));
+		default:
+			break;
 		}
 	}
 
-	bool console::PeekInput(std::span<INPUT_RECORD> const Buffer, size_t& NumberOfEventsRead) const
+	std::optional<KEY_EVENT_RECORD> console::queued() const
 	{
-		DWORD dwNumberOfEventsRead = 0;
-		if (!PeekConsoleInput(GetInputHandle(), Buffer.data(), static_cast<DWORD>(Buffer.size()), &dwNumberOfEventsRead))
+		if (!m_QueuedKeys.wRepeatCount)
+			return {};
+
+		auto Result = m_QueuedKeys;
+		Result.wRepeatCount = 1;
+		return Result;
+	}
+
+	bool console::PeekOneInput(INPUT_RECORD& Record) const
+	{
+		// See below
+		if (const auto Key = queued())
+		{
+			Record.EventType = KEY_EVENT;
+			Record.Event.KeyEvent = *Key;
+			return true;
+		}
+
+		DWORD NumberOfEvents = 0;
+		if (!PeekConsoleInput(GetInputHandle(), &Record, 1, &NumberOfEvents))
 		{
 			LOGERROR(L"PeekConsoleInput(): {}"sv, os::last_error());
 			return false;
 		}
 
-		NumberOfEventsRead = dwNumberOfEventsRead;
-
-		if (sWindowMode)
-		{
-			AdjustMouseEvents({Buffer.data(), NumberOfEventsRead}, GetDelta());
-		}
-		return true;
-	}
-
-	bool console::PeekOneInput(INPUT_RECORD& Record) const
-	{
-		size_t Read;
-		return PeekInput({ &Record, 1 }, Read) && Read == 1;
-	}
-
-	bool console::ReadInput(std::span<INPUT_RECORD> const Buffer, size_t& NumberOfEventsRead) const
-	{
-		DWORD dwNumberOfEventsRead = 0;
-		if (!ReadConsoleInput(GetInputHandle(), Buffer.data(), static_cast<DWORD>(Buffer.size()), &dwNumberOfEventsRead))
-		{
-			LOGERROR(L"ReadConsoleInput(): {}"sv, os::last_error());
+		if (!NumberOfEvents)
 			return false;
-		}
 
-		NumberOfEventsRead = dwNumberOfEventsRead;
-
-		if (sWindowMode)
-		{
-			AdjustMouseEvents({Buffer.data(), NumberOfEventsRead}, GetDelta());
-		}
+		postprocess_event(Record);
 
 		return true;
 	}
 
 	bool console::ReadOneInput(INPUT_RECORD& Record) const
 	{
-		size_t Read;
-		return ReadInput({ &Record, 1 }, Read) && Read == 1;
+		// See below
+		if (const auto Key = queued())
+		{
+			Record.EventType = KEY_EVENT;
+			Record.Event.KeyEvent = *Key;
+			--m_QueuedKeys.wRepeatCount;
+			return true;
+		}
+
+		DWORD NumberOfEvents = 0;
+		if (!ReadConsoleInput(GetInputHandle(), &Record, 1, &NumberOfEvents))
+		{
+			LOGERROR(L"ReadConsoleInput(): {}"sv, os::last_error());
+			return false;
+		}
+
+		if (!NumberOfEvents)
+			return false;
+
+		postprocess_event(Record);
+
+		// https://learn.microsoft.com/en-us/windows/console/key-event-record-str
+		// wRepeatCount
+		// The repeat count, which indicates that a key is being held down.
+		// For example, when a key is held down, you might get five events
+		// with this member equal to 1, one event with this member equal to 5,
+		// or multiple events with this member greater than or equal to 1.
+
+		// We do not burden the rest of the code with these shenanigans
+		// always yield key events with the repeat count equal to 1
+		// and maintain an internal "queue" to yield the rest during the next calls.
+		if (Record.EventType == KEY_EVENT && Record.Event.KeyEvent.wRepeatCount > 1)
+		{
+			m_QueuedKeys = Record.Event.KeyEvent;
+			Record.Event.KeyEvent.wRepeatCount = 1;
+			--m_QueuedKeys.wRepeatCount;
+		}
+
+		return true;
 	}
 
 	bool console::WriteInput(std::span<INPUT_RECORD> const Buffer, size_t& NumberOfEventsWritten) const
@@ -1389,15 +1481,9 @@ protected:
 						Cell.Char = bad_char_replacement;
 						flags::clear(Cell.Attributes.Flags, COMMON_LVB_TRAILING_BYTE);
 					}
-					else
-WARNING_PUSH()
-// https://gcc.gnu.org/bugzilla/show_bug.cgi?id=80635
-WARNING_DISABLE_GCC("-Wmaybe-uninitialized")
-
-						if (Cell.Char == *LeadingChar)
+					else if (Cell.Char == *LeadingChar)
 					{
 						if (Cell.Char == encoding::replace_char && !char_width::is_wide(encoding::replace_char))
-WARNING_POP()
 						{
 							// As of 13 Jul 2022 ReadConsoleOutputW doesn't work with surrogate pairs (see microsoft/terminal#10810)
 							// It returns two FFFDs instead with leading and trailing flags.
@@ -1933,20 +2019,30 @@ WARNING_POP()
 
 	bool console::FlushInputBuffer() const
 	{
+		if (m_QueuedKeys.wRepeatCount)
+			m_QueuedKeys = {};
+
 		return FlushConsoleInputBuffer(GetInputHandle()) != FALSE;
 	}
 
 	bool console::GetNumberOfInputEvents(size_t& NumberOfEvents) const
 	{
-		DWORD dwNumberOfEvents = 0;
-		const auto Result = GetNumberOfConsoleInputEvents(GetInputHandle(), &dwNumberOfEvents) != FALSE;
-		NumberOfEvents = dwNumberOfEvents;
-		return Result;
+		if (DWORD dwNumberOfEvents = 0; GetNumberOfConsoleInputEvents(GetInputHandle(), &dwNumberOfEvents))
+		{
+			NumberOfEvents = m_QueuedKeys.wRepeatCount + dwNumberOfEvents;
+			return true;
+		}
+
+		if (!m_QueuedKeys.wRepeatCount)
+			return false;
+
+		NumberOfEvents = m_QueuedKeys.wRepeatCount;
+		return true;
 	}
 
 	bool console::GetAlias(string_view const Name, string& Value, string_view const ExeName) const
 	{
-		os::last_error_guard Guard;
+		SCOPED_ACTION(os::last_error_guard);
 
 		null_terminated const C_Name(Name), C_ExeName(ExeName);
 
@@ -2284,6 +2380,33 @@ WARNING_POP()
 			return 0;
 
 		return ::GetDelta(csbi);
+	}
+
+	bool console::input_queue_inspector::search(function_ref<bool(INPUT_RECORD const&)> Predicate)
+	{
+		const auto NumberOfEvents = []
+		{
+			size_t Result;
+			return ::console.GetNumberOfInputEvents(Result)? Result : 0;
+		}();
+
+		if (m_Buffer.size() < NumberOfEvents)
+		{
+			m_Buffer.clear();
+			resize_exp(m_Buffer, NumberOfEvents);
+		}
+
+		if (!os::handle::is_signaled(::console.GetInputHandle(), 100ms))
+			return false;
+
+		DWORD EventsRead = 0;
+		if (!PeekConsoleInput(::console.GetInputHandle(), m_Buffer.data(), static_cast<DWORD>(m_Buffer.size()), &EventsRead))
+		{
+			LOGERROR(L"PeekConsoleInput(): {}"sv, os::last_error());
+			return false;
+		}
+
+		return std::ranges::any_of(m_Buffer | std::views::take(EventsRead), Predicate);
 	}
 
 	bool console::ScrollScreenBuffer(rectangle const& ScrollRectangle, point DestinationOrigin, const FAR_CHAR_INFO& Fill) const

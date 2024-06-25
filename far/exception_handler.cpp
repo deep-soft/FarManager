@@ -198,6 +198,7 @@ static constexpr NTSTATUS
 
 static const auto DoubleSeparator = L"======================================================================"sv;
 static const auto Separator       = L"----------------------------------------------------------------------"sv;
+static const auto ColumnSeparator = L" | "sv;
 
 static void make_header(string_view const Message, function_ref<void(string_view)> const Consumer)
 {
@@ -384,12 +385,35 @@ static bool write_minidump(const exception_context& Context, string_view const F
 static void read_modules(std::span<HMODULE const> const Modules, string& To, string_view const Eol)
 {
 	string Name;
+	os::version::file_version FileVersion;
+
 	for (const auto& i: Modules)
 	{
-		if (os::fs::get_module_file_name({}, i, Name))
-			append(To, Name, L' ', os::version::get_file_version(Name), Eol);
+		To += str(static_cast<void const*>(i));
+
+		if (!os::fs::get_module_file_name({}, i, Name))
+		{
+			append(To, ColumnSeparator, os::last_error().to_string(), Eol);
+			continue;
+		}
+
+		append(To, ColumnSeparator, Name);
+
+		if (!FileVersion.read(Name))
+		{
+			append(To, ColumnSeparator, os::last_error().Win32ErrorStr(), Eol);
+			continue;
+		}
+
+		if (const auto Description = FileVersion.description(); !Description.empty())
+			append(To, ColumnSeparator, Description);
+
+		if (const auto Version = FileVersion.version(); !Version.empty())
+			append(To, ColumnSeparator, Version);
 		else
-			append(To, str(static_cast<void const*>(i)), Eol);
+			append(To, ColumnSeparator, os::last_error().Win32ErrorStr());
+
+		To += Eol;
 	}
 }
 
@@ -476,7 +500,7 @@ static string file_timestamp()
 	{
 		const auto LastError = os::last_error();
 		LOGWARNING(L"get_find_data({}): {}"sv, ModuleName, LastError);
-		return LastError.Win32ErrorStr();
+		return LastError.to_string();
 	}
 
 	return timestamp(Data.LastWriteTime);
@@ -1058,7 +1082,7 @@ static string get_uptime()
 {
 	os::chrono::time_point CreationTime;
 	if (!os::chrono::get_process_creation_time(GetCurrentProcess(), CreationTime))
-		return os::last_error().Win32ErrorStr();
+		return os::last_error().to_string();
 
 	return ConvertDurationToHMS(os::chrono::nt_clock::now() - CreationTime);
 }
@@ -1302,6 +1326,8 @@ static string_view exception_name(NTSTATUS const Code)
 	CASE_STR(STATUS_HEAP_CORRUPTION)
 	CASE_STR(STATUS_NO_MEMORY)
 	CASE_STR(STATUS_ASSERTION_FAILURE)
+	CASE_STR(STATUS_INVALID_PARAMETER)
+	CASE_STR(STATUS_INVALID_CRUNTIME_PARAMETER)
 #undef CASE_STR
 
 	case EH_EXCEPTION_NUMBER:           return L"C++ exception"sv;
@@ -1420,6 +1446,11 @@ static string exception_details(string_view const Module, EXCEPTION_RECORD const
 	case STATUS_FAR_ABORT:
 		return string(Message);
 
+	case STATUS_INVALID_CRUNTIME_PARAMETER:
+		return Message.empty()?
+			default_details() :
+			far::format(L"{} Expression: {}"sv, default_details(), Message);
+
 	case EH_CLR_EXCEPTION:
 		{
 			if (!ExceptionRecord.NumberParameters)
@@ -1460,28 +1491,21 @@ static string exception_details(string_view const Module, EXCEPTION_RECORD const
 	return default_details();
 }
 
-struct thread_status
-{
-	NTSTATUS Result;
-
-	DWORD LastError;
-	NTSTATUS LastStatus;
-};
+using thread_status = std::variant<NTSTATUS, os::error_state>;
 
 static thread_status get_thread_status(HANDLE const Thread)
 {
 	if (!imports.NtQueryInformationThread)
-		return { STATUS_NOT_IMPLEMENTED };
+		return STATUS_NOT_IMPLEMENTED;
 
 	constexpr auto ThreadBasicInformation = static_cast<THREADINFOCLASS>(0);
 	detail::THREAD_BASIC_INFORMATION BasicInformation;
 
 	if (const auto Status = imports.NtQueryInformationThread(Thread, ThreadBasicInformation, &BasicInformation, sizeof(BasicInformation), {}); !NT_SUCCESS(Status))
-		return { Status };
+		return Status;
 
-	return
+	return os::error_state
 	{
-		STATUS_SUCCESS,
 		os::get_last_error(BasicInformation.TebBaseAddress),
 		os::get_last_nt_status(BasicInformation.TebBaseAddress)
 	};
@@ -1679,15 +1703,18 @@ static string collect_information(
 
 				make_header(ThreadTitle, append_line);
 
-				if (const auto ThreadStatus = get_thread_status(Thread.native_handle()); NT_SUCCESS(ThreadStatus.Result))
+				std::visit(overload
 				{
-					append_line(concat(LastErrorTitle, ' ', os::format_error(ThreadStatus.LastError)));
-					append_line(concat(NtStatusTitle, ' ', os::format_ntstatus(ThreadStatus.LastStatus)));
-				}
-				else
-				{
-					append_line(far::format(L"Error getting thread status: {}"sv, os::format_ntstatus(ThreadStatus.Result)));
-				}
+					[&](NTSTATUS const Status)
+					{
+						append_line(far::format(L"Error getting thread status: {}"sv, os::format_ntstatus(Status)));
+					},
+					[&](os::error_state const& State)
+					{
+						append_line(concat(LastErrorTitle, ' ', State.Win32ErrorStr()));
+						append_line(concat(NtStatusTitle, ' ', State.NtErrorStr()));
+					}
+				}, get_thread_status(Thread.native_handle()));
 
 				CONTEXT ThreadContext{};
 				ThreadContext.ContextFlags = CONTEXT_ALL;
@@ -1701,11 +1728,11 @@ static string collect_information(
 				const auto ThreadStack = tracer.stacktrace(ModuleName, ThreadContext, Thread.native_handle());
 				tracer.get_symbols(ModuleName, ThreadStack, append_line);
 
-				make_subheader(DisassemblyTitle, append_line);
-				DebugClient.disassembly(ModuleName, ThreadStack, Eol);
-
 				make_subheader(RegistersTitle, append_line);
 				read_registers(Strings, ThreadContext, Eol);
+
+				make_subheader(DisassemblyTitle, append_line);
+				DebugClient.disassembly(ModuleName, ThreadStack, Eol);
 			}
 		}
 	}
@@ -2023,16 +2050,23 @@ bool use_terminate_handler()
 	return UseTerminateHandler;
 }
 
-static void seh_abort_handler_impl()
+static void abort_handler_impl()
 {
-	static auto InsideHandler = false;
-	if (!HandleCppExceptions || InsideHandler)
+	if (!HandleCppExceptions)
 	{
 		restore_system_exception_handler();
-		std::abort();
+		return;
+	}
+
+	static auto InsideHandler = false;
+	if (InsideHandler)
+	{
+		restore_system_exception_handler();
+		os::process::terminate(STATUS_FATAL_APP_EXIT);
 	}
 
 	InsideHandler = true;
+	SCOPE_EXIT{ InsideHandler = false; };
 
 	constexpr auto Location = source_location::current();
 
@@ -2113,7 +2147,7 @@ static void signal_handler_impl(int const Signal)
 	{
 	case SIGABRT:
 		// terminate() defaults to abort(), so this also covers various C++ runtime failures.
-		return seh_abort_handler_impl();
+		return abort_handler_impl();
 
 	default:
 		return;
@@ -2131,34 +2165,62 @@ signal_handler::~signal_handler()
 		std::signal(SIGABRT, m_PreviousHandler);
 }
 
+#if IS_MICROSOFT_SDK()
+#ifndef _DEBUG // 🤦
+extern "C" void _invalid_parameter(wchar_t const*, wchar_t const*, wchar_t const*, unsigned int, uintptr_t);
+#endif
+#else
+static void _invalid_parameter(wchar_t const*, wchar_t const*, wchar_t const*, unsigned int, uintptr_t)
+{
+	os::process::terminate(STATUS_INVALID_CRUNTIME_PARAMETER);
+}
+#endif
+
 static void invalid_parameter_handler_impl(const wchar_t* const Expression, const wchar_t* const Function, const wchar_t* const File, unsigned int const Line, uintptr_t const Reserved)
 {
-	static auto InsideHandler = false;
-	if (!HandleCppExceptions || InsideHandler)
+	if (!HandleCppExceptions)
 	{
 		restore_system_exception_handler();
 		std::abort();
 	}
 
-	InsideHandler = true;
+	static auto InsideHandler = false;
+	if (InsideHandler)
+	{
+		restore_system_exception_handler();
+		os::process::terminate(STATUS_INVALID_CRUNTIME_PARAMETER);
+	}
 
-	exception_context const Context{ os::debug::fake_exception_information(STATUS_FAR_ABORT) };
+	InsideHandler = true;
+	SCOPE_EXIT{ InsideHandler = false; };
+
+	exception_context const Context{ os::debug::fake_exception_information(STATUS_INVALID_CRUNTIME_PARAMETER, true) };
 	error_state_ex const LastError{ os::last_error(), {}, errno };
 	constexpr auto Location = source_location::current();
 
-	if (handle_generic_exception(
+	switch (handle_generic_exception(
 		Context,
 		Function && File?
 			source_location(encoding::utf8::get_bytes(Function).c_str(), encoding::utf8::get_bytes(File).c_str(), Line) :
 			Location,
 		{},
 		{},
-		Expression? Expression : L"Invalid parameter"sv,
+		NullToEmpty(Expression),
 		LastError
-	) == handler_result::execute_handler)
+	))
+	{
+	case handler_result::execute_handler:
 		os::process::terminate_by_user();
 
-	restore_system_exception_handler();
+	case handler_result::continue_execution:
+		return;
+
+	case handler_result::continue_search:
+		restore_system_exception_handler();
+		_set_invalid_parameter_handler({});
+		_invalid_parameter(Expression, Function, File, Line, Reserved);
+		break;
+	}
 }
 
 invalid_parameter_handler::invalid_parameter_handler():

@@ -135,12 +135,13 @@ after_build:
   - copy /Y enc\build\lua\luafar_manual\luafar_manual.chm ci\%configuration%.%platform_name%\Encyclopedia
   - copy /Y enc\build\lua\macroapi_manual.en\macroapi_manual.en.chm ci\%configuration%.%platform_name%\Encyclopedia
   - copy /Y enc\build\lua\macroapi_manual.ru\macroapi_manual.ru.chm ci\%configuration%.%platform_name%\Encyclopedia
+  - copy /Y enc\build\lua\macroapi_manual.pl\macroapi_manual.pl.chm ci\%configuration%.%platform_name%\Encyclopedia
   #copy misc docs and addons
   - xcopy /e /q /y /k extra\* ci\%configuration%.%platform_name%\
   #test & archive 
   - cd ci\%configuration%.%platform_name%
   #Run macrotest.lua, on failure %ERRORLEVEL% is non zero
-  - if not "%platform_name%" == "ARM64" Far.exe -service "lua:far.MacroPost([=[R=win.GetEnv('FARHOME');R=R or os.exit(1); R=R..[[\Plugins\LuaMacro\macrotest.lua]]; R=loadfile(R);R=R or os.exit(2); OK,R=pcall(R);OK=OK or os.exit(3); OK,R=pcall(R.test_all);os.exit(OK and 0 or 4);]=],nil,'CtrlShiftF12')"
+  - if not "%platform_name%" == "ARM64" Far.exe -service "macro:test"
   #set NAME_PREFIX variable as otherwise it is not available when artifacts are collected
   - set NAME_PREFIX="Far%NAME_ADD%.%platform_name%.%appveyor_build_version%.%APPVEYOR_REPO_COMMIT%"
   - appveyor SetVariable -Name NAME_PREFIX -Value "%NAME_PREFIX%"
@@ -151,14 +152,14 @@ after_build:
   - if "%configuration%" == "Release" 7z a -m0=LZMA -mf=BCJ2 -mx9 -xr!*.pdb "%APPVEYOR_BUILD_FOLDER%\%NAME_PREFIX%.7z"
   - cd ..\..
   #create msi
-  - cd misc\msi-installer
-  - appveyor DownloadFile https://raw.githubusercontent.com/FarGroup/thirdparty/master/wix314-binaries-v3-14-0-5722.zip
-  - 7z x wix314-binaries-v3-14-0-5722.zip -owix
-  - set PATH=%PATH%;wix
-  - set SOURCE_DIR=%APPVEYOR_BUILD_FOLDER%\ci\%configuration%.%platform_name%
-  - set NIGHTLY=1
-  - nmake -nologo %ADD_MAKE_MSI%
-  - cd ..\..
+  - if "%configuration%" == "Release" cd misc\msi-installer
+  - if "%configuration%" == "Release" appveyor DownloadFile https://raw.githubusercontent.com/FarGroup/thirdparty/master/wix314-binaries-v3-14-0-5722.zip
+  - if "%configuration%" == "Release" 7z x wix314-binaries-v3-14-0-5722.zip -owix
+  - if "%configuration%" == "Release" set PATH=%PATH%;wix
+  - if "%configuration%" == "Release" set SOURCE_DIR=%APPVEYOR_BUILD_FOLDER%\ci\%configuration%.%platform_name%
+  - if "%configuration%" == "Release" set NIGHTLY=1
+  - if "%configuration%" == "Release" nmake -nologo %ADD_MAKE_MSI%
+  - if "%configuration%" == "Release" cd ..\..
   - if "%configuration%" == "Release" move ci\%configuration%.%platform_name%\final.msi "%APPVEYOR_BUILD_FOLDER%\%NAME_PREFIX%.msi"
 
 artifacts:

@@ -42,6 +42,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "map_file.hpp"
 #include "pathmix.hpp"
 #include "string_utils.hpp"
+#include "strmix.hpp"
 
 // Platform:
 #include "platform.env.hpp"
@@ -110,12 +111,22 @@ namespace os::debug
 		return Name.get();
 	}
 
-	static void** dummy_current_exception(NTSTATUS const Code)
+	static void** dummy_noncontinuable_exception(NTSTATUS const Code)
 	{
 		static EXCEPTION_RECORD DummyRecord{};
 
 		DummyRecord.ExceptionCode = static_cast<DWORD>(Code);
 		DummyRecord.ExceptionFlags = EXCEPTION_NONCONTINUABLE;
+
+		static void* DummyRecordPtr = &DummyRecord;
+		return &DummyRecordPtr;
+	}
+
+	static void** dummy_continuable_exception(NTSTATUS const Code)
+	{
+		static EXCEPTION_RECORD DummyRecord{};
+
+		DummyRecord.ExceptionCode = static_cast<DWORD>(Code);
 
 		static void* DummyRecordPtr = &DummyRecord;
 		return &DummyRecordPtr;
@@ -134,7 +145,7 @@ namespace os::debug
 #else
 	static void** __current_exception()
 	{
-		return dummy_current_exception(EH_EXCEPTION_NUMBER);
+		return dummy_noncontinuable_exception(EH_EXCEPTION_NUMBER);
 	}
 
 	static void** __current_exception_context()
@@ -155,11 +166,11 @@ namespace os::debug
 		};
 	}
 
-	EXCEPTION_POINTERS fake_exception_information(unsigned const Code)
+	EXCEPTION_POINTERS fake_exception_information(unsigned const Code, bool const Continuable)
 	{
 		return
 		{
-			static_cast<EXCEPTION_RECORD*>(*dummy_current_exception(Code)),
+			static_cast<EXCEPTION_RECORD*>(*(Continuable? dummy_continuable_exception : dummy_noncontinuable_exception)(Code)),
 			static_cast<CONTEXT*>(*dummy_current_exception_context())
 		};
 	}
@@ -399,15 +410,15 @@ namespace os::debug
 
 namespace os::debug::symbols
 {
-	static bool initialize(HANDLE const Process, string const& Path)
+	static std::optional<bool> initialize(HANDLE const Process, string const& Path)
 	{
 		if (imports.SymInitializeW)
 			return imports.SymInitializeW(Process, EmptyToNull(Path), TRUE) != FALSE;
 
 		if (imports.SymInitialize)
-			return imports.SymInitialize(Process, EmptyToNull(encoding::ansi::get_bytes(Path)), TRUE);
+			return imports.SymInitialize(Process, EmptyToNull(encoding::ansi::get_bytes(Path)), TRUE) != FALSE;
 
-		return false;
+		return {};
 	}
 
 	static auto event_level(DWORD const EventSeverity)
@@ -462,7 +473,7 @@ namespace os::debug::symbols
 		}
 	}
 
-	static bool register_callback(HANDLE const Process)
+	static std::optional<bool> register_callback(HANDLE const Process)
 	{
 		if (imports.SymRegisterCallbackW64)
 			return imports.SymRegisterCallbackW64(Process, callback, context_encoding::unicode) != FALSE;
@@ -470,7 +481,7 @@ namespace os::debug::symbols
 		if (imports.SymRegisterCallback64)
 			return imports.SymRegisterCallback64(Process, callback, context_encoding::ansi) != FALSE;
 
-		return false;
+		return {};
 	}
 
 	static void append_to_search_path(string& Path, string_view const Str)
@@ -487,7 +498,7 @@ namespace os::debug::symbols
 			// This stupid function doesn't fill the buffer if it's not large enough.
 			// It also doesn't provide any way to detect that.
 			wchar_t Buffer[MAX_PATH * 4];
-			if (imports.SymGetSearchPathW(Process, Buffer, std::size(Buffer)))
+			if (imports.SymGetSearchPathW(Process, Buffer, static_cast<DWORD>(std::size(Buffer))))
 				ExistingPath = Buffer;
 			else
 				LOGWARNING(L"SymGetSearchPathW(): {}"sv, os::last_error());
@@ -495,7 +506,7 @@ namespace os::debug::symbols
 		else if (imports.SymGetSearchPath)
 		{
 			char Buffer[MAX_PATH * 4];
-			if (imports.SymGetSearchPath(Process, Buffer, std::size(Buffer)))
+			if (imports.SymGetSearchPath(Process, Buffer, static_cast<DWORD>(std::size(Buffer))))
 				ExistingPath = encoding::ansi::get_chars(Buffer);
 			else
 				LOGWARNING(L"SymGetSearchPath(): {}"sv, os::last_error());
@@ -583,7 +594,7 @@ namespace os::debug::symbols
 		const auto Process = GetCurrentProcess();
 
 		const auto Result = initialize(Process, Path);
-		if (!Result)
+		if (Result == false) // optional
 		{
 			if (const auto LastError = last_error(); LastError.Win32Error == ERROR_INVALID_PARAMETER)
 			{
@@ -594,10 +605,10 @@ namespace os::debug::symbols
 				LOGWARNING(L"SymInitialize({}): {}"sv, Path, LastError);
 		}
 
-		if (!register_callback(Process))
+		if (register_callback(Process) == false) // optional
 			LOGWARNING(L"SymRegisterCallback(): {}"sv, last_error());
 
-		return Result;
+		return Result.value_or(false);
 	}
 
 	void clean()
@@ -766,6 +777,18 @@ namespace os::debug::symbols
 		return { Buffer.FileName, Buffer.LineNumber, Displacement };
 	}
 
+	static HMODULE module_from_address(uintptr_t const Address)
+	{
+		if (HMODULE Module; imports.GetModuleHandleExW && imports.GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, std::bit_cast<LPCWSTR>(Address), &Module))
+			return Module;
+
+		MEMORY_BASIC_INFORMATION mbi;
+		if (VirtualQuery(std::bit_cast<void*>(Address), &mbi, sizeof(mbi)))
+			return std::bit_cast<HMODULE>(mbi.AllocationBase);
+
+		return {};
+	}
+
 	static void handle_frame(
 		HANDLE const Process,
 		string_view const ModuleName,
@@ -782,10 +805,38 @@ namespace os::debug::symbols
 		Module->SizeOfStruct = static_cast<DWORD>(aligned_size(offsetof(IMAGEHLP_MODULEW64, LoadedImageName), 8));
 
 		if (!imports.SymGetModuleInfoW64 || !imports.SymGetModuleInfoW64(Process, Frame.Address, &*Module))
-			Module.reset();
+		{
+			if (const auto ModuleFromAddress = module_from_address(Frame.Address))
+			{
+				Module->BaseOfImage = std::bit_cast<uintptr_t>(ModuleFromAddress);
 
-		const auto BaseAddress = Module? Module->BaseOfImage : 0;
-		const auto ImageName = Module? Module->ImageName : L""sv;
+				if (string ModuleFromAddressFileName; fs::get_module_file_name({}, ModuleFromAddress, ModuleFromAddressFileName))
+					xwcsncpy(Module->ImageName, ModuleFromAddressFileName.data(), std::size(Module->ImageName));
+			}
+			else
+				Module.reset();
+		}
+
+		const auto BaseAddress = [&]() -> uintptr_t
+		{
+			if (Module)
+				return static_cast<uintptr_t>(Module->BaseOfImage);
+
+			const auto ModuleNamePtr = EmptyToNull(null_terminated(ModuleName).c_str());
+
+			if (const auto ModuleBaseAddress = std::bit_cast<uintptr_t>(GetModuleHandle(ModuleNamePtr)); ModuleBaseAddress < Frame.Address)
+				return ModuleBaseAddress;
+
+			if (!ModuleNamePtr)
+				return 0;
+
+			if (const auto ModuleBaseAddress = std::bit_cast<uintptr_t>(GetModuleHandle({})); ModuleBaseAddress < Frame.Address)
+				return ModuleBaseAddress;
+
+			return 0;
+		}();
+
+		const auto ImageName = Module && *Module->ImageName? Module->ImageName : ModuleName;
 
 		symbol Symbol;
 		location Location;
@@ -803,15 +854,9 @@ namespace os::debug::symbols
 				Location = frame_get_location(Process, Frame.Address, Storage);
 			}
 
-			if (Symbol.Name.empty() && Module)
+			if (Symbol.Name.empty())
 			{
-				auto& MapFile = MapFiles.try_emplace(
-					Module->BaseOfImage,
-					*Module->ImageName?
-					Module->ImageName :
-					ModuleName
-				).first->second;
-
+				auto& MapFile = MapFiles.try_emplace(BaseAddress, ImageName).first->second;
 				const auto Info = MapFile.get(Frame.Address - BaseAddress);
 				Symbol.Name = Info.Symbol;
 				Symbol.Displacement = Info.Displacement;

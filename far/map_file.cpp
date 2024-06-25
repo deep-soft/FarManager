@@ -41,6 +41,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "pathmix.hpp"
 #include "RegExp.hpp"
 #include "log.hpp"
+#include "global.hpp"
 
 // Platform:
 #include "platform.fs.hpp"
@@ -62,7 +63,13 @@ struct map_file::line
 
 static string get_map_name(string_view const ModuleName)
 {
-	return name_ext(ModuleName).first + L".map"sv;
+	return name_ext(
+		!ModuleName.empty()?
+		ModuleName :
+		Global?
+			Global->g_strFarModuleName :
+			os::fs::get_current_process_file_name()
+	).first + L".map"sv;
 }
 
 map_file::map_file(string_view const ModuleName)
@@ -186,7 +193,7 @@ static void read_vc(std::istream& Stream, unordered_string_set& Files, std::map<
 
 	uintptr_t BaseAddress{};
 
-	for (const auto& i: enum_lines(Stream, CP_UTF8))
+	for (const auto& i: enum_lines(Stream, encoding::codepage::ansi()))
 	{
 		if (i.Str.empty())
 			continue;
