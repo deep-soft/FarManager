@@ -279,6 +279,8 @@ namespace tests
 		copy_string(Str2, new wchar_t[Str2.size()]);
 
 		*new int = 42;
+
+		Global->WindowManager->ExitMainLoop(TRUE);
 	}
 
 	static void cpp_invalid_parameter()
