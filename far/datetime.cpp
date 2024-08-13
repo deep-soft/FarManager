@@ -47,6 +47,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // Common:
 #include "common/chrono.hpp"
 #include "common/from_string.hpp"
+#include "common/view/zip.hpp"
 
 // External:
 #include "format.hpp"
@@ -535,7 +536,7 @@ os::chrono::duration ParseDuration(string_view const Date, string_view const Tim
 	return days(DateN[0]) + hours(TimeN[0]) + minutes(TimeN[1]) + seconds(TimeN[2]) + os::chrono::hectonanoseconds(TimeN[3]);
 }
 
-std::tuple<string, string> ConvertDate(os::chrono::time_point const Point, int const TimeLength, int const FullYear, bool const Brief, bool const TextMonth)
+std::tuple<string, string> time_point_to_string(os::chrono::time_point const Point, int const TimeLength, int const FullYear, bool const Brief, bool const TextMonth)
 {
 	if (Point == os::chrono::time_point{})
 	{
@@ -649,38 +650,93 @@ std::tuple<string, string> ConvertDate(os::chrono::time_point const Point, int c
 	return { std::move(DateText), std::move(TimeText) };
 }
 
-std::tuple<string, string> ConvertDuration(os::chrono::duration Duration)
+template<typename T> requires (T::period::num < T::period::den && T::period::num == 1 && T::period::den % 10 == 0)
+static constexpr auto decimal_duration_width()
+{
+	size_t Result = 0;
+
+	for (auto i = T::period::den; i != 1; i /= 10)
+		++Result;
+
+	return Result;
+}
+
+std::tuple<string, string> duration_to_string(os::chrono::duration Duration)
 {
 	using namespace std::chrono;
+	using namespace os::chrono;
 
-	const auto Result = split_duration<days, hours, minutes, seconds, os::chrono::hectonanoseconds>(Duration);
+	const auto Parts = split_duration<days, hours, minutes, seconds, hectonanoseconds>(Duration);
 
 	return
 	{
-		str(Result.get<days>() / 1_d),
-		far::format(L"{0:02}{4}{1:02}{4}{2:02}{5}{3:07}"sv,
-			Result.get<hours>() / 1h,
-			Result.get<minutes>() / 1min,
-			Result.get<seconds>() / 1s,
-			Result.get<os::chrono::hectonanoseconds>() / 1_hns,
+		str(Parts.get<days>() / 1_d),
+		far::format(L"{0:02}{4}{1:02}{4}{2:02}{5}{3:0{6}}"sv,
+			Parts.get<hours>() / 1h,
+			Parts.get<minutes>() / 1min,
+			Parts.get<seconds>() / 1s,
+			Parts.get<hectonanoseconds>() / 1_hns,
 			locale.time_separator(),
-			locale.decimal_separator()
+			locale.decimal_separator(),
+			decimal_duration_width<hectonanoseconds>()
 		)
 	};
 }
 
-string ConvertDurationToHMS(os::chrono::duration Duration)
+string duration_to_string_hms(os::chrono::duration Duration)
 {
 	using namespace std::chrono;
 
-	const auto Result = split_duration<hours, minutes, seconds>(Duration);
+	const auto Parts = split_duration<hours, minutes, seconds>(Duration);
 
 	return far::format(L"{0:02}{3}{1:02}{3}{2:02}"sv,
-		Result.get<hours>() / 1h,
-		Result.get<minutes>() / 1min,
-		Result.get<seconds>() / 1s,
+		Parts.get<hours>() / 1h,
+		Parts.get<minutes>() / 1min,
+		Parts.get<seconds>() / 1s,
 		locale.time_separator()
 	);
+}
+
+string duration_to_string_hr(os::chrono::duration Duration)
+{
+	using namespace std::chrono;
+	using namespace os::chrono;
+
+	const auto Parts = split_duration<days, hours, minutes, seconds, hectonanoseconds>(Duration);
+
+	const long long Values[]
+	{
+		Parts.get<days>() / 1_d,
+		Parts.get<hours>() / 1h,
+		Parts.get<minutes>() / 1min,
+	};
+
+	string Result;
+
+	for (const auto& [v, s]: zip(Values, L"dhm"sv))
+	{
+		if (v)
+			far::format_to(Result, L"{}{} "sv, v, s);
+	}
+
+	const auto Seconds = Parts.get<seconds>() / 1s;
+	const auto Decimals = Parts.get<hectonanoseconds>() / 1_hns;
+
+	if (Seconds || Decimals || Result.empty())
+	{
+		far::format_to(Result, L"{}"sv, Seconds);
+
+		if (Decimals)
+			far::format_to(Result, L".{:0{}}"sv, Decimals, decimal_duration_width<hectonanoseconds>());
+
+		Result += L's';
+	}
+	else
+	{
+		Result.pop_back();
+	}
+
+	return Result;
 }
 
 time_check::time_check(mode Mode) noexcept:
@@ -778,7 +834,7 @@ TEST_CASE("datetime.parse.duration")
 	for (const auto& i: Tests)
 	{
 		REQUIRE(ParseDuration(i.Date, i.Time) == i.Duration);
-		const auto& [Date, Time] = ConvertDuration(i.Duration);
+		const auto& [Date, Time] = duration_to_string(i.Duration);
 		REQUIRE(ParseDuration(Date, Time) == i.Duration);
 	}
 }
@@ -820,27 +876,49 @@ TEST_CASE("datetime.parse.timepoint")
 	}
 }
 
-TEST_CASE("datetime.ConvertDuration")
+TEST_CASE("datetime.decimal_duration_width")
+{
+	using namespace std::chrono;
+	using namespace os::chrono;
+
+	using bad_duration_1 = std::chrono::duration<int, std::ratio<2, 3>>;
+	using bad_duration_2 = std::chrono::duration<int, std::ratio<1, 3>>;
+
+	STATIC_REQUIRE_ERROR(bad_duration_1, decimal_duration_width<TestType>());
+	STATIC_REQUIRE_ERROR(bad_duration_2, decimal_duration_width<TestType>());
+	STATIC_REQUIRE_ERROR(minutes, decimal_duration_width<TestType>());
+	STATIC_REQUIRE_ERROR(seconds, decimal_duration_width<TestType>());
+
+	STATIC_REQUIRE(decimal_duration_width<milliseconds>() == 3);
+	STATIC_REQUIRE(decimal_duration_width<microseconds>() == 6);
+	STATIC_REQUIRE(decimal_duration_width<hectonanoseconds>() == 9 - 2);
+	STATIC_REQUIRE(decimal_duration_width<nanoseconds>() == 9);
+}
+
+TEST_CASE("datetime.duration_to_string")
 {
 	static const struct
 	{
 		os::chrono::duration Duration;
-		string_view Days, Timestamp, HMS;
+		string_view Days, Timestamp, HMS, HR;
 	}
 	Tests[]
 	{
-		{ 0s,                                         L"0"sv, L"00:00:00.0000000"sv, L"00:00:00"sv,  },
-		{ 7_d,                                        L"7"sv, L"00:00:00.0000000"sv, L"168:00:00"sv, },
-		{ 2_d +  7h + 13min +  47s +   7654321_hns,   L"2"sv, L"07:13:47.7654321"sv, L"55:13:47"sv,  },
-		{ 3_d + 25h + 81min + 120s + 123456789_hns,   L"4"sv, L"02:23:12.3456789"sv, L"98:23:12"sv,  },
+		{ 0s,                                         L"0"sv, L"00:00:00.0000000"sv, L"00:00:00"sv,  L"0s"sv },
+		{ 5min,                                       L"0"sv, L"00:05:00.0000000"sv, L"00:05:00"sv,  L"5m"sv },
+		{ 1_d + 1_hns,                                L"1"sv, L"00:00:00.0000001"sv, L"24:00:00"sv,  L"1d 0.0000001s"sv },
+		{ 7_d,                                        L"7"sv, L"00:00:00.0000000"sv, L"168:00:00"sv, L"7d"sv },
+		{ 2_d +  7h + 13min +  47s +   7654321_hns,   L"2"sv, L"07:13:47.7654321"sv, L"55:13:47"sv,  L"2d 7h 13m 47.7654321s"sv },
+		{ 3_d + 25h + 81min + 120s + 123456789_hns,   L"4"sv, L"02:23:12.3456789"sv, L"98:23:12"sv,  L"4d 2h 23m 12.3456789s"sv },
 	};
 
 	for (const auto& i: Tests)
 	{
-		const auto [Days, Timestamp] = ConvertDuration(i.Duration);
+		const auto [Days, Timestamp] = duration_to_string(i.Duration);
 		REQUIRE(i.Days == Days);
 		REQUIRE(i.Timestamp == Timestamp);
-		REQUIRE(i.HMS == ConvertDurationToHMS(i.Duration));
+		REQUIRE(i.HMS == duration_to_string_hms(i.Duration));
+		REQUIRE(i.HR == duration_to_string_hr(i.Duration));
 	}
 }
 

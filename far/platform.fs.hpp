@@ -424,6 +424,11 @@ namespace os::fs
 	[[nodiscard]]
 	bool is_not_empty_directory(string_view Object);
 
+	bool is_file_name_too_long(string_view LongName);
+	bool is_directory_name_too_long(string_view LongName);
+
+	bool shorten(string_view Name, string& ShortName, function_ref<bool(string_view)> IsTooLong);
+
 	class current_directory_guard
 	{
 	public:
