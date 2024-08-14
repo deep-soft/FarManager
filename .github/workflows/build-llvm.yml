@@ -52,6 +52,16 @@ jobs:
           - machine_target: aarch64
             c_lib: msvcrt
 
+    name: build-llvm_${{ matrix.machine_target }}_${{ matrix.c_lib }}_${{ matrix.build_type }}
+
+    env:
+      GCC_PREFIX: ${{ matrix.machine_target }}-w64-mingw32-
+      CLANG: 1
+      PYTHON: 1
+      SYS_LUA: 1
+      LUA_VER: '5.1.5'
+      ENABLE_TESTS: 0
+    
     steps:
       - name: Checkout source
         uses: deep-soft/checkout@v4
@@ -111,29 +121,26 @@ jobs:
       - name: Install luver
         uses: deep-soft/luver-action@v1
 
+      - name: Install lua ${{ env.LUA_VER }}
+        run: |
+          luver install lua $LUA_VER
+          luver use $LUA_VER
+
       - name: Download llvm-mingw
         id: download_llvm_mingw
         uses: deep-soft/release-downloader@v1.9
+        #preRelease: true
         with:
           repository: "mstorsjo/llvm-mingw"
           latest: true
-          preRelease: true
           fileName: "llvm-mingw-*-${{ matrix.c_lib }}-ubuntu-*-x86_64.tar.xz"
 
       - name: Install llvm-mingw
         run: |
           LLVM_MINGW=${{ fromJson(steps.download_llvm_mingw.outputs.downloaded_files)[0] }}
           tar -xf "$LLVM_MINGW"
+          rm -f "$LLVM_MINGW"
           echo "${{ github.workspace }}/$(basename -s .tar.xz $LLVM_MINGW)/bin" >> $GITHUB_PATH
-
-      - name: Setup build environment
-        run: |
-          echo "GCC_PREFIX=${{ matrix.machine_target }}-w64-mingw32-" >> "$GITHUB_ENV"
-          echo "CLANG=1" >> "$GITHUB_ENV"
-          echo "PYTHON=1" >> "$GITHUB_ENV"
-          echo "SYS_LUA=1" >> "$GITHUB_ENV"
-          echo "ENABLE_TESTS=0" >> "$GITHUB_ENV"
-          [[ ${{ matrix.build_type }} == Debug ]] && echo "DEBUG=1" >> "$GITHUB_ENV" && echo "USE_LLD=1" >> "$GITHUB_ENV" || true
 
       - name: Build far
         working-directory: far
@@ -145,8 +152,6 @@ jobs:
         working-directory: plugins
         run: |
           ${GCC_PREFIX}clang --version
-          luver install lua 5.1.5
-          luver use 5.1.5
           make -j $(($(nproc)+1)) -f makefile_all_gcc
 
 # release - begin
