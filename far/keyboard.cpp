@@ -61,7 +61,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // Platform:
 #include "platform.hpp"
-#include "platform.version.hpp"
 
 // Common:
 #include "common/algorithm.hpp"
@@ -73,6 +72,12 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 //----------------------------------------------------------------------------
 
+// Basic Latin         0020 - 007F
+// Latin-1 Supplement  00A0 - 00FF
+// Latin Extended-A    0100 - 017F
+// Latin Extended-B    0180 - 024F
+const auto latin_end = 0x250;
+
 /* start Глобальные переменные */
 
 FarKeyboardState IntKeyState{};
@@ -80,7 +85,7 @@ FarKeyboardState IntKeyState{};
 /* end Глобальные переменные */
 
 static std::array<short, WCHAR_MAX + 1> KeyToVKey;
-static std::array<wchar_t, 512> VKeyToASCII;
+static std::array<wchar_t, 512> VKeyToLatin;
 
 static unsigned int AltValue=0;
 static unsigned int KeyCodeForALT_LastPressed=0;
@@ -271,10 +276,10 @@ static const TFKey ModifKeyName[]
 	{ KEY_SHIFT,    lng::MKeyShift,  L"Shift"sv, },
 };
 
-static auto& Layout()
+static const auto& Layouts()
 {
-	static auto s_Layout = os::get_keyboard_layout_list();
-	return s_Layout;
+	static const auto s_Layouts = os::get_keyboard_layout_list();
+	return s_Layouts;
 }
 
 /*
@@ -285,7 +290,7 @@ static auto& Layout()
 void InitKeysArray()
 {
 	KeyToVKey.fill(0);
-	VKeyToASCII.fill(0);
+	VKeyToLatin.fill(0);
 
 	//KeyToVKey - используется чтоб проверить если два символа это одна и та же кнопка на клаве
 	//*********
@@ -303,7 +308,7 @@ void InitKeysArray()
 	{
 		KeyState[VK_SHIFT] = j * 0x80;
 
-		for (const auto& i: Layout())
+		for (const auto& i: Layouts())
 		{
 			for (const auto VK : std::views::iota(0, 256))
 			{
@@ -313,11 +318,11 @@ void InitKeysArray()
 					if (!KeyToVKey[idx])
 						KeyToVKey[idx] = VK + j * 0x100;
 
-					// VKeyToASCII - используется вместе с KeyToVKey чтоб подменить нац. символ на US-ASCII
+					// VKeyToLatin - используется вместе с KeyToVKey чтоб подменить нац. символ на Latin
 					// Имея мапирование юникод -> VK строим обратное мапирование
-					// VK -> символы с кодом меньше 0x80, т.е. только US-ASCII символы
-					if (idx < 0x80 && !VKeyToASCII[VK + j * 0x100])
-						VKeyToASCII[VK + j * 0x100] = upper(idx);
+					// VK -> символы с кодом меньше latin_end
+					if (idx < latin_end && !VKeyToLatin[VK + j * 0x100])
+						VKeyToLatin[VK + j * 0x100] = upper(idx);
 				}
 			}
 		}
@@ -344,10 +349,13 @@ bool KeyToKeyLayoutCompare(int Key, int CompareKey)
 //Должно вернуть клавишный Eng эквивалент Key
 int KeyToKeyLayout(int Key)
 {
+	if (Key < latin_end)
+		return Key;
+
 	const auto VK = KeyToVKey[Key&0xFFFF];
 
-	if (VK && VKeyToASCII[VK])
-		return VKeyToASCII[VK];
+	if (VK && VKeyToLatin[VK])
+		return VKeyToLatin[VK];
 
 	return Key;
 }
@@ -1400,10 +1408,7 @@ int KeyNameToKey(string_view Name)
 				// если были модификаторы Alt/Ctrl, то преобразуем в "физическую клавишу" (независимо от языка)
 				if (Key&(KEY_ALT|KEY_RCTRL|KEY_CTRL|KEY_RALT))
 				{
-					if (Chr > 0x7F)
-						Chr=KeyToKeyLayout(Chr);
-
-					Chr=upper(Chr);
+					Chr = upper(KeyToKeyLayout(Chr));
 				}
 
 				Key|=Chr;
@@ -1566,7 +1571,7 @@ int TranslateKeyToVK(int Key, INPUT_RECORD* Rec)
 			short Vk = VkKeyScanEx(static_cast<wchar_t>(FKey), console.GetKeyboardLayout());
 			if (Vk == -1)
 			{
-				for (const auto& i: Layout())
+				for (const auto& i: Layouts())
 				{
 					if ((Vk = VkKeyScanEx(static_cast<wchar_t>(FKey), i)) != -1)
 						break;

@@ -626,7 +626,81 @@ HKL make_hkl(string_view const LayoutStr)
 	return {};
 }
 
-std::vector<HKL> get_keyboard_layout_list()
+static auto get_keyboard_layout_list_registry_ctf()
+{
+	std::vector<HKL> Result;
+
+	const auto CtfSortOrderPath = L"SOFTWARE\\Microsoft\\CTF\\SortOrder"sv;
+
+	struct language_item
+	{
+		size_t Index;
+		uint32_t Id;
+		string IdStr;
+	};
+
+	std::vector<language_item> Languages;
+
+	const auto LanguageKey = os::reg::key::current_user.open(far::format(L"{}\\Language"sv, CtfSortOrderPath), KEY_QUERY_VALUE);
+	if (!LanguageKey)
+		return Result;
+
+	for (const auto& IndexStr: LanguageKey->enum_values())
+	{
+		try
+		{
+			const auto Index = from_string<size_t>(IndexStr.name());
+			const auto LanguageIdStr = IndexStr.get_string();
+			const auto LanguageId = from_string<uint32_t>(LanguageIdStr, {}, 16);
+			Languages.emplace_back(Index, LanguageId, LanguageIdStr);
+		}
+		catch (far_exception const& e)
+		{
+			LOGWARNING(L"{}"sv, e);
+		}
+	}
+
+	std::ranges::sort(Languages, {}, & language_item::Index);
+
+	struct layout_item
+	{
+		size_t Index;
+		uint32_t Id;
+	};
+
+	std::vector<layout_item> Layouts;
+
+	for (const auto& Language: Languages)
+	{
+		Layouts.clear();
+
+		// GUID_TFCAT_TIP_KEYBOARD
+		const auto LayoutsKey = os::reg::key::current_user.open(far::format(L"{}\\AssemblyItem\\0x{:08X}\\{{34745C63-B2F0-4784-8B67-5E12C8701A31}}"sv, CtfSortOrderPath, Language.Id), KEY_ENUMERATE_SUB_KEYS);
+		if (!LayoutsKey)
+			continue;
+
+		for (const auto& IndexStr: LayoutsKey->enum_keys())
+		{
+			try
+			{
+				const auto Index = from_string<size_t>(IndexStr);
+				const auto Layout = LayoutsKey->get_dword(IndexStr, L"KeyboardLayout"sv);
+				Layouts.emplace_back(Index, *Layout);
+			}
+			catch (far_exception const& e)
+			{
+				LOGWARNING(L"{}"sv, e);
+			}
+		}
+
+		std::ranges::sort(Layouts, {}, &layout_item::Index);
+		std::ranges::transform(Layouts, std::back_inserter(Result), [](layout_item const& i){ return os::make_hkl(i.Id); });
+	}
+
+	return Result;
+}
+
+static auto get_keyboard_layout_list_api()
 {
 	std::vector<HKL> Result;
 
@@ -634,25 +708,28 @@ std::vector<HKL> get_keyboard_layout_list()
 	{
 		Result.resize(LayoutNumber);
 		Result.resize(GetKeyboardLayoutList(LayoutNumber, Result.data())); // if less than expected
-
-		return Result;
 	}
-
-	// GetKeyboardLayoutList can fail in telnet mode, which is, technically, a right thing to do.
-	// However, we still need to map the keys.
-	// The code below emulates it in the hope that your client and server layouts are more or less similar.
-	LOGWARNING(L"GetKeyboardLayoutList(): {}"sv, os::last_error());
-
-	const auto Key = reg::key::current_user.open(L"Keyboard Layout\\Preload"sv, KEY_QUERY_VALUE);
-	if (!Key)
+	else
 	{
-		LOGWARNING(L"Cannot open Keyboard Layout\\Preload key"sv);
-		return Result;
+		LOGWARNING(L"GetKeyboardLayoutList(): {}"sv, os::last_error());
 	}
+
+	return Result;
+}
+
+static auto get_keyboard_layout_list_registry_base()
+{
+	std::vector<HKL> Result;
+
+	const auto PreloadKey = reg::key::current_user.open(L"Keyboard Layout\\Preload"sv, KEY_QUERY_VALUE);
+	if (!PreloadKey)
+		return Result;
+
+	const auto SubstitutesKey = reg::key::current_user.open(L"Keyboard Layout\\Substitutes"sv, KEY_QUERY_VALUE);
 
 	Result.reserve(10);
 
-	for (const auto& i: Key.enum_values())
+	for (const auto& i: PreloadKey->enum_values())
 	{
 		try
 		{
@@ -663,14 +740,19 @@ std::vector<HKL> get_keyboard_layout_list()
 			const auto Preload = from_string<uint32_t>(PreloadStr, {}, 16);
 			const auto PrimaryLanguageId = extract_integer<uint16_t, 0>(Preload);
 
-			const auto LayoutStr = reg::key::current_user.get<string>(L"Keyboard Layout\\Substitutes"sv, PreloadStr);
+			std::optional<string> LayoutStr;
+
+			if (SubstitutesKey)
+				if (auto SubstitutedValueStr = SubstitutesKey->get_string(PreloadStr))
+					LayoutStr = std::move(*SubstitutedValueStr);
+
 			const auto LayoutValue = LayoutStr? from_string<uint32_t>(*LayoutStr, {}, 16) : Preload;
 
 			const auto SecondaryLanguageId = extract_integer<uint16_t, 0>(LayoutValue);
 
 			const string_view LayoutView = LayoutValue == Preload? PreloadStr : *LayoutStr;
 
-			const auto LayoutIdStr = reg::key::local_machine.get<string>(concat(L"SYSTEM\\CurrentControlSet\\Control\\Keyboard Layouts\\"sv, LayoutView), L"Layout Id"sv);
+			const auto LayoutIdStr = reg::key::local_machine.get_string(concat(L"SYSTEM\\CurrentControlSet\\Control\\Keyboard Layouts\\"sv, LayoutView), L"Layout Id"sv);
 			const auto LayoutId = LayoutIdStr? from_string<int>(*LayoutIdStr, {}, 16) : 0;
 
 			const auto FinalLayout = make_integer<uint32_t, uint16_t>(PrimaryLanguageId, LayoutId? (LayoutId & 0xfff) | 0xf000 : SecondaryLanguageId);
@@ -683,8 +765,49 @@ std::vector<HKL> get_keyboard_layout_list()
 		}
 	}
 
+	return Result;
+}
+
+static auto default_keyboard_layout()
+{
+	if (HKL DefaultLayout; SystemParametersInfo(SPI_GETDEFAULTINPUTLANG, 0, &DefaultLayout, 0))
+		return DefaultLayout;
+
+	return GetKeyboardLayout(0);
+}
+
+static std::vector<HKL> try_get_keyboard_list(function_ref<std::vector<HKL>()> Callable)
+{
+	try
+	{
+		return Callable();
+	}
+	catch (far_exception const& e)
+	{
+		LOGWARNING(L"{}", e);
+		return {};
+	}
+}
+
+std::vector<HKL> get_keyboard_layout_list()
+{
+	auto Result = try_get_keyboard_list(get_keyboard_layout_list_registry_ctf);
+
 	if (Result.empty())
-		Result.emplace_back(make_hkl(0x04090409)); // Fallback to US
+		Result = try_get_keyboard_list(get_keyboard_layout_list_api);
+
+	if (Result.empty())
+		Result = try_get_keyboard_list(get_keyboard_layout_list_registry_base);
+
+	// Only the CTF method returns layouts in the correct order.
+	// We want to prioritise the default layout, because InitKeysArray uses the first match strategy,
+	// and this is likely what the user expects.
+	const auto DefaultLayout = default_keyboard_layout();
+
+	if (const auto Iterator = std::ranges::find(Result, DefaultLayout); Iterator != Result.end())
+		std::ranges::rotate(Result.begin(), Iterator, Iterator + 1);
+	else
+		Result.insert(Result.begin(), DefaultLayout);
 
 	return Result;
 }
