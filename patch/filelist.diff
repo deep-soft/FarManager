@@ -1,0 +1,44 @@
+diff --git a/far/filelist.cpp b/far/filelist.cpp
+index 0f0ecf9..8b5a324 100644
+--- a/far/filelist.cpp
++++ b/far/filelist.cpp
+@@ -3690,7 +3690,7 @@ bool FileList::FindPartName(string_view const Name,int Next,int Direct)
+ 		NameView.remove_suffix(1);
+ 	}
+ 
+-	const auto strMask = exclude_sets(NameView + L'*');
++	auto strMask = exclude_sets(NameView + L'*');
+ 
+ 	const auto Match = [&](int const I)
+ 	{
+@@ -3710,17 +3710,21 @@ bool FileList::FindPartName(string_view const Name,int Next,int Direct)
+ 		return false;
+ 	};
+ 
+-
+-	for (int I=m_CurFile+(Next?Direct:0); I >= 0 && I < static_cast<int>(m_ListData.size()); I+=Direct)
++	for (int attempt=0; attempt<2; attempt++)
+ 	{
+-		if (Match(I))
+-			return true;
+-	}
++		for (int I=m_CurFile+(Next?Direct:0); I >= 0 && I < static_cast<int>(m_ListData.size()); I+=Direct)
++		{
++			if (Match(I))
++				return true;
++		}
+ 
+-	for (int I=(Direct > 0)?0:static_cast<int>(m_ListData.size()-1); (Direct > 0) ? I < m_CurFile:I > m_CurFile; I+=Direct)
+-	{
+-		if (Match(I))
+-			return true;
++		for (int I=(Direct > 0)?0:static_cast<int>(m_ListData.size()-1); (Direct > 0) ? I < m_CurFile:I > m_CurFile; I+=Direct)
++		{
++			if (Match(I))
++				return true;
++		}
++		if (!strMask.starts_with(L'*'))
++			strMask = L'*' + strMask;
+ 	}
+ 
+ 	return false;
