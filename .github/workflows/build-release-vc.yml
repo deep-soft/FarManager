@@ -93,9 +93,9 @@ jobs:
 #          - { build: msbuild_cl_x64_debug,     compiler: msbuild_cl, arch: amd64,       platform_sln: x64,   platform_name: x64,   build_config: Debug   }
 #          - { build: msbuild_cl_x86_debug,     compiler: msbuild_cl, arch: amd64_x86,   platform_sln: Win32, platform_name: x86,   build_config: Debug   }
         exclude:
-          - msbuild_cl_x64_release:   ${{ msbuild_cl_x64_release_input   != true }}
-          - msbuild_cl_x86_release:   ${{ msbuild_cl_x86_release_input   != true }}
-          - msbuild_cl_ARM64_release: ${{ msbuild_cl_ARM64_release_input != true }}
+          - msbuild_cl_x64_release:   ${{ inputs.msbuild_cl_x64_release_input   != true }}
+          - msbuild_cl_x86_release:   ${{ inputs.msbuild_cl_x86_release_input   != true }}
+          - msbuild_cl_ARM64_release: ${{ inputs.msbuild_cl_ARM64_release_input != true }}
 
     steps:
       - name: test var
