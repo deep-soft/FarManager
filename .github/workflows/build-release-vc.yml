@@ -1,4 +1,5 @@
-# 2024-02-10 22:30
+# 2024-09-02 00:40
+# soft_fast_search patch
 name: Build release VC
 
 on:
@@ -26,6 +27,10 @@ on:
       msbuild_cl_ARM64_release:
         default: true
         type: boolean
+      soft_fast_search_patch:
+        default: true
+        type: boolean
+
 
 env:
   PROG_NAME: "Far3"
@@ -96,6 +101,15 @@ jobs:
 
       - name: Checkout source
         uses: deep-soft/checkout@v4
+
+      - name: soft_fast_search_patch
+        if: ${{ inputs.soft_fast_search_patch }}
+        continue-on-error: false
+        run: |
+          ls -la patch/filelist.diff || true;
+          if [[ -f patch/filelist.diff]]; then
+            git apply --verbose patch/filelist.diff
+          fi
 
       - name: Get program version
         continue-on-error: false
