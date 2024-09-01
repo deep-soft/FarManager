@@ -108,11 +108,11 @@ jobs:
 
       - name: soft_fast_search_patch
         if: ${{ inputs.soft_fast_search_patch }}
-        continue-on-error: false
+        continue-on-error: true
         shell: bash
         run: |
           ls -la patch/filelist.diff || true;
-          if [[ -f patch/filelist.diff]]; then
+          if [[ -f patch/filelist.diff ]]; then
             git apply --verbose patch/filelist.diff
           fi
 
