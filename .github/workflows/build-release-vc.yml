@@ -18,13 +18,13 @@ on:
       hlf-checks:
         default: true
         type: boolean
-      msbuild_cl_x64_release:
+      msbuild_cl_x64_release_input:
         default: true
         type: boolean
-      msbuild_cl_x86_release:
+      msbuild_cl_x86_release_input:
         default: true
         type: boolean
-      msbuild_cl_ARM64_release:
+      msbuild_cl_ARM64_release_input:
         default: true
         type: boolean
       soft_fast_search_patch:
@@ -92,6 +92,10 @@ jobs:
           - { build: msbuild_cl_ARM64_release, compiler: msbuild_cl, arch: amd64_arm64, platform_sln: ARM64, platform_name: ARM64, build_config: Release }
 #          - { build: msbuild_cl_x64_debug,     compiler: msbuild_cl, arch: amd64,       platform_sln: x64,   platform_name: x64,   build_config: Debug   }
 #          - { build: msbuild_cl_x86_debug,     compiler: msbuild_cl, arch: amd64_x86,   platform_sln: Win32, platform_name: x86,   build_config: Debug   }
+        exclude:
+          msbuild_cl_x64_release:   ${{ msbuild_cl_x64_release_input   != true }}
+          msbuild_cl_x86_release:   ${{ msbuild_cl_x86_release_input   != true }}
+          msbuild_cl_ARM64_release: ${{ msbuild_cl_ARM64_release_input != true }}
 
     steps:
       - name: test var
@@ -105,6 +109,7 @@ jobs:
       - name: soft_fast_search_patch
         if: ${{ inputs.soft_fast_search_patch }}
         continue-on-error: false
+        shell: bash
         run: |
           ls -la patch/filelist.diff || true;
           if [[ -f patch/filelist.diff]]; then
