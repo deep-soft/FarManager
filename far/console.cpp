@@ -1677,7 +1677,7 @@ protected:
 					(
 						encoding::utf16::is_high_surrogate(Cell.Char) ||
 						// FFFD can be wide too
-						(Cell.Char == encoding::replace_char && char_width::is_wide(encoding::replace_char))
+						(Cell.Char == encoding::replace_char && Cell.Reserved1 <= std::numeric_limits<wchar_t>::max() && char_width::is_wide(encoding::replace_char))
 					)
 				)
 				{
@@ -1952,7 +1952,6 @@ protected:
 			ConsoleBuffer.reserve(SubRect.width() * SubRect.height());
 
 			foreign_blocks_list ForeignBlocksList;
-			std::optional<rectangle> ForeignBlock;
 
 			if (char_width::is_enabled())
 			{
