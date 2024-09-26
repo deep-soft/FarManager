@@ -318,10 +318,15 @@ static_assert(MCODE_V_MENUINFOID == 0x80844);           // Menu.Info.Id
 struct DlgParam
 {
 	unsigned long long Flags;
-	FARMACROAREA Area;
+	const FARMACROAREA Area;
 	DWORD Key;
-	int Recurse;
 	bool Changed;
+};
+
+enum ASSIGN_MACRO_KEY_STATUS {
+	AMK_CANCELED,   // operation was canceled
+	AMK_NOTCHANGED, // Macro Settings dialog was not called
+	AMK_CHANGED,    // Macro Settings dialog was called
 };
 
 static const wchar_t* GetMacroLanguage(FARKEYMACROFLAGS Flags)
@@ -414,7 +419,7 @@ static bool TryToPostMacro(FARMACROAREA Area,const string& TextKey,DWORD IntKey)
 
 KeyMacro::KeyMacro():
 	m_Area(MACROAREA_SHELL),
-	m_StartMode(MACROAREA_OTHER),
+	m_StartArea(MACROAREA_OTHER),
 	m_Recording(MACROSTATE_NOMACRO)
 {
 }
@@ -443,7 +448,7 @@ bool KeyMacro::LoadMacros(bool FromFar, bool InitedRAM, const FarMacroLoad *Data
 	return CallMacroPlugin(&info);
 }
 
-bool KeyMacro::SaveMacros(bool /*always*/)
+bool KeyMacro::SaveMacros()
 {
 	OpenMacroPluginInfo info{ MCT_WRITEMACROS };
 	return CallMacroPlugin(&info);
@@ -573,7 +578,7 @@ bool KeyMacro::ProcessEvent(const FAR_INPUT_RECORD *Rec)
 			}
 
 			// Где мы?
-			m_StartMode=m_Area;
+			m_StartArea=m_Area;
 			// В зависимости от того, КАК НАЧАЛИ писать макрос, различаем общий режим (Ctrl-.
 			// с передачей плагину кеев) или специальный (Ctrl-Shift-. - без передачи клавиш плагину)
 			m_Recording=ctrldot?MACROSTATE_RECORDING_COMMON:MACROSTATE_RECORDING;
@@ -606,7 +611,7 @@ bool KeyMacro::ProcessEvent(const FAR_INPUT_RECORD *Rec)
 			unsigned long long Flags = 0;
 			int AssignRet=AssignMacroKey(MacroKey,Flags);
 
-			if (AssignRet && AssignRet!=2 && !m_RecCode.empty())
+			if (AssignRet == AMK_NOTCHANGED && !m_RecCode.empty())
 			{
 				m_RecCode = concat(L"Keys(\""sv, m_RecCode, L"\")"sv);
 				// добавим проверку на удаление
@@ -614,25 +619,21 @@ bool KeyMacro::ProcessEvent(const FAR_INPUT_RECORD *Rec)
 				//if (MacroKey != (DWORD)-1 && (Key==KEY_CTRLSHIFTDOT || Recording==2) && RecBufferSize)
 				if (ctrlshiftdot && !GetMacroSettings(MacroKey,Flags))
 				{
-					AssignRet=0;
+					AssignRet = AMK_CANCELED;
 				}
 			}
 			m_InternalInput=0;
-			if (AssignRet)
+			if (AssignRet != AMK_CANCELED)
 			{
 				const auto strKey = KeyToText(MacroKey);
 				Flags |= m_Recording == MACROSTATE_RECORDING_COMMON? MFLAGS_NONE : MFLAGS_NOSENDKEYSTOPLUGINS;
-				LM_ProcessRecordedMacro(m_StartMode, strKey, m_RecCode, Flags, m_RecDescription);
+				LM_ProcessRecordedMacro(m_StartArea, strKey, m_RecCode, Flags, m_RecDescription);
+				if (Global->Opt->AutoSaveSetup)
+					SaveMacros();
 			}
 
 			m_Recording=MACROSTATE_NOMACRO;
-			m_RecCode.clear();
-			m_RecDescription.clear();
 			Global->ScrBuf->RestoreMacroChar();
-
-			if (Global->Opt->AutoSaveSetup)
-				SaveMacros(false); // записать только изменения!
-
 			return true;
 		}
 		else
@@ -1213,8 +1214,7 @@ bool KeyMacro::GetMacroSettings(int Key, unsigned long long& Flags, string_view 
 	MacroSettingsDlg[MS_EDIT_SEQUENCE].strData = Src.empty()? m_RecCode : Src;
 	MacroSettingsDlg[MS_EDIT_DESCR].strData = Descr.empty()? m_RecDescription : Descr;
 
-	DlgParam Param{ 0, MACROAREA_OTHER, 0 };
-	const auto Dlg = Dialog::create(MacroSettingsDlg, std::bind_front(&KeyMacro::ParamMacroDlgProc, this), &Param);
+	const auto Dlg = Dialog::create(MacroSettingsDlg, std::bind_front(&KeyMacro::ParamMacroDlgProc, this), nullptr);
 	Dlg->SetPosition({ -1, -1, 73, 21 });
 	Dlg->SetHelp(L"KeyMacroSetting"sv);
 	Dlg->Process();
@@ -1319,8 +1319,9 @@ DWORD KeyMacro::GetMacroParseError(point& ErrPos, string& ErrSrc)
 // обработчик диалогового окна назначения клавиши
 intptr_t KeyMacro::AssignMacroDlgProc(Dialog* Dlg,intptr_t Msg,intptr_t Param1,void* Param2)
 {
-	static unsigned LastKey = 0;
-	static DlgParam *KMParam=nullptr;
+	static int Recurse;
+	static unsigned LastKey;
+	static DlgParam *KMParam;
 	const INPUT_RECORD* record=nullptr;
 	unsigned key = 0;
 	bool KeyIsValid = false;
@@ -1340,6 +1341,7 @@ intptr_t KeyMacro::AssignMacroDlgProc(Dialog* Dlg,intptr_t Msg,intptr_t Param1,v
 	{
 		KMParam = static_cast<DlgParam*>(Param2);
 		LastKey=0;
+		Recurse=0;
 		// <Клавиши, которые нельзя ввести в диалоге назначения>
 		static const DWORD PreDefKeyMain[]=
 		{
@@ -1384,7 +1386,7 @@ intptr_t KeyMacro::AssignMacroDlgProc(Dialog* Dlg,intptr_t Msg,intptr_t Param1,v
 		LastKey=0;
 		key = KeyNameToKey(static_cast<FarDialogItem*>(Param2)->Data);
 
-		if (key && !KMParam->Recurse)
+		if (key && !Recurse)
 			KeyIsValid = true;
 	}
 	else if (Msg == DN_CONTROLINPUT && record->EventType==KEY_EVENT && (((key&KEY_END_SKEY) < KEY_END_FKEY) ||
@@ -1497,9 +1499,9 @@ intptr_t KeyMacro::AssignMacroDlgProc(Dialog* Dlg,intptr_t Msg,intptr_t Param1,v
 			}
 		}
 
-		KMParam->Recurse++;
+		Recurse++;
 		Dlg->SendMessage(DM_SETTEXTPTR,2, UNSAFE_CSTR(strKeyText));
-		KMParam->Recurse--;
+		Recurse--;
 		//if(key == KEY_F1 && LastKey == KEY_F1)
 		//LastKey=-1;
 		//else
@@ -1536,7 +1538,7 @@ int KeyMacro::AssignMacroKey(DWORD &MacroKey, unsigned long long& Flags)
 		{DI_COMBOBOX,  {{5,  3}, {28, 3}}, DIF_FOCUS | DIF_DEFAULTBUTTON, },
 	});
 
-	DlgParam Param{ Flags, m_StartMode, 0 };
+	DlgParam Param{ Flags, m_StartArea, 0 };
 	Global->IsProcessAssignMacroKey++;
 	const auto Dlg = Dialog::create(MacroAssignDlg, std::bind_front(&KeyMacro::AssignMacroDlgProc, this), &Param);
 	Dlg->SetPosition({ -1, -1, 34, 6 });
@@ -1545,9 +1547,9 @@ int KeyMacro::AssignMacroKey(DWORD &MacroKey, unsigned long long& Flags)
 	Global->IsProcessAssignMacroKey--;
 
 	if (Dlg->GetExitCode() < 0)
-		return 0;
+		return AMK_CANCELED;
 
 	MacroKey = Param.Key;
 	Flags = Param.Flags;
-	return Param.Changed ? 2 : 1;
+	return Param.Changed ? AMK_CHANGED : AMK_NOTCHANGED;
 }

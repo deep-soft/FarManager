@@ -93,7 +93,7 @@ public:
 	static bool IsHistoryDisabled(int TypeHistory);
 	static bool MacroExists(int Key, FARMACROAREA Area, bool UseCommon);
 	static void RunStartMacro();
-	static bool SaveMacros(bool always);
+	static bool SaveMacros();
 	static void SetMacroConst(int ConstIndex, long long Value);
 	static long long GetMacroConst(int ConstIndex);
 	static bool PostNewMacro(const wchar_t* Sequence, FARKEYMACROFLAGS InputFlags, DWORD AKey = 0);
@@ -123,7 +123,7 @@ private:
 	void RestoreMacroChar() const;
 
 	FARMACROAREA m_Area;
-	FARMACROAREA m_StartMode;
+	FARMACROAREA m_StartArea;
 	FARMACROSTATE m_Recording;
 	string m_RecCode;
 	string m_RecDescription;
