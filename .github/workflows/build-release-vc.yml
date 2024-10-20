@@ -169,13 +169,28 @@ jobs:
         continue-on-error: true
         shell: bash
         run: |
-          pushd '_build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}/Plugins'
+          pushd '_build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}/Plugins';
           for extra_plug in Far-NetBox Far-Colorer ; do
-            mkdir $extra_plug
-            cd $extra_plug
-            curl -LOJ "https://github.com/deep-soft/$extra_plug/releases/download/$extra_plug-latest/$extra_plug.${{ matrix.platform_name }}.7z"
-            7z x $extra_plug.${{ matrix.platform_name }}.7z
-            rm $extra_plug.${{ matrix.platform_name }}.7z
+            mkdir $extra_plug;
+            cd $extra_plug;
+            f_name="$extra_plug.${{ matrix.platform_name }}.7z";
+            curl -LOJ "https://github.com/deep-soft/$extra_plug/releases/download/$extra_plug-latest/$extra_plug.${{ matrix.platform_name }}.7z";
+
+            f_size=$(stat --format=%s $f_name);
+            echo "f_size=$f_size";
+            min_f_size=1000000;
+            if [[ f_size -le min_f_size ]]; then
+              echo "something wrong";
+              f_name="$extra_plug.${{ matrix.platform_name }}-ok.7z";
+              curl -LOJ "https://github.com/deep-soft/$extra_plug/releases/download/$extra_plug-latest/$extra_plug.${{ matrix.platform_name }}-ok.7z";
+              f_size=$(stat --format=%s $f_name);
+              echo "f_size=$f_size";
+            else
+              echo "ok";
+            fi
+
+            7z x $extra_plug.${{ matrix.platform_name }}.7z;
+            rm $extra_plug.${{ matrix.platform_name }}.7z;
             cd ..
           done
           popd
