@@ -97,6 +97,13 @@ namespace os::security
 	{
 		static const auto Result = []
 		{
+			// Vista+
+			TOKEN_ELEVATION Elevation;
+			DWORD ReturnLength;
+			if (GetTokenInformation(GetCurrentProcessToken(), TokenElevation, &Elevation, sizeof(Elevation), &ReturnLength))
+				return Elevation.TokenIsElevated != 0;
+
+			// Old method
 			SID_IDENTIFIER_AUTHORITY NtAuthority = SECURITY_NT_AUTHORITY;
 			const auto AdministratorsGroup = make_sid(&NtAuthority, 2, SECURITY_BUILTIN_DOMAIN_RID, DOMAIN_ALIAS_RID_ADMINS);
 			if (!AdministratorsGroup)
@@ -109,11 +116,23 @@ namespace os::security
 		return Result;
 	}
 
+	TOKEN_ELEVATION_TYPE elevation_type()
+	{
+		TOKEN_ELEVATION_TYPE ElevationType;
+		DWORD ReturnLength;
+		return GetTokenInformation(GetCurrentProcessToken(), TokenElevationType, &ElevationType, sizeof(ElevationType), &ReturnLength)?
+			ElevationType :
+			TokenElevationTypeDefault;
+	}
+
 	handle open_current_process_token(DWORD const DesiredAccess)
 	{
 		HANDLE Handle;
 		if (!OpenProcessToken(GetCurrentProcess(), DesiredAccess, &Handle))
+		{
+			LOGWARNING(L"open_current_process_token({}): {}"sv, DesiredAccess, last_error());
 			return {};
+		}
 
 		return handle(Handle);
 	}
@@ -126,6 +145,9 @@ namespace os::security
 		const block_ptr<TOKEN_PRIVILEGES> NewState(sizeof(TOKEN_PRIVILEGES) + sizeof(LUID_AND_ATTRIBUTES) * (Names.size() - 1));
 		NewState->PrivilegeCount = 0;
 
+		std::vector<size_t> NameIndices;
+		NameIndices.reserve(Names.size());
+
 		for (const auto& i: Names)
 		{
 			const auto& Luid = lookup_privilege_value(i);
@@ -133,21 +155,36 @@ namespace os::security
 				continue;
 
 			NewState->Privileges[NewState->PrivilegeCount++] = { *Luid, SE_PRIVILEGE_ENABLED };
+			NameIndices.emplace_back(&i - Names.data());
 		}
 
 		const auto Token = open_current_process_token(TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY);
 		if (!Token)
-		{
-			LOGWARNING(L"open_current_process_token: {}"sv, last_error());
 			return;
-		}
 
 		DWORD ReturnLength;
 		m_SavedState.reset(NewState.size());
 		m_Changed = AdjustTokenPrivileges(Token.native_handle(), FALSE, NewState.data(), static_cast<DWORD>(m_SavedState.size()), m_SavedState.data(), &ReturnLength) && m_SavedState->PrivilegeCount;
+		const auto LastError = last_error();
+		if (LastError.Win32Error == ERROR_SUCCESS)
+			return;
 
-		if (m_SavedState->PrivilegeCount != NewState->PrivilegeCount)
-			LOGWARNING(L"AdjustTokenPrivileges(): {}"sv, last_error());
+		LOGWARNING(L"AdjustTokenPrivileges(): {}"sv, LastError);
+
+		if (LastError.Win32Error != ERROR_NOT_ALL_ASSIGNED)
+			return;
+
+		std::span const
+			Privileges(NewState->Privileges, NewState->PrivilegeCount),
+			Changed(m_SavedState->Privileges, m_SavedState->PrivilegeCount);
+
+		for (const auto& i: Privileges)
+		{
+			if (std::ranges::find(Changed, i.Luid, &LUID_AND_ATTRIBUTES::Luid) == Changed.end())
+			{
+				LOGWARNING(L"{} not enabled"sv, Names[NameIndices[&i - Privileges.data()]]);
+			}
+		}
 	}
 
 	privilege::~privilege()
@@ -157,69 +194,41 @@ namespace os::security
 
 		const auto Token = open_current_process_token(TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY);
 		if (!Token)
-		{
-			LOGWARNING(L"open_current_process_token: {}"sv, last_error());
 			return;
-		}
 
 		SCOPED_ACTION(os::last_error_guard);
 
-		if (!AdjustTokenPrivileges(Token.native_handle(), FALSE, m_SavedState.data(), 0, nullptr, nullptr))
-			LOGWARNING(L"AdjustTokenPrivileges(): {}"sv, last_error());
-	}
-
-	static auto get_token_privileges(HANDLE TokenHandle)
-	{
-		block_ptr<TOKEN_PRIVILEGES> Result(1024);
-
-		if (!os::detail::ApiDynamicReceiver(Result.bytes(),
-			[&](std::span<std::byte> const Buffer)
-			{
-				DWORD LengthNeeded = 0;
-				if (!GetTokenInformation(TokenHandle, TokenPrivileges, static_cast<TOKEN_PRIVILEGES*>(static_cast<void*>(Buffer.data())), static_cast<DWORD>(Buffer.size()), &LengthNeeded))
-					return static_cast<size_t>(LengthNeeded);
-				return Buffer.size();
-			},
-			[](size_t ReturnedSize, size_t AllocatedSize)
-			{
-				return ReturnedSize > AllocatedSize;
-			},
-			[](std::span<std::byte const>)
-			{}
-		))
-		{
-			Result.reset();
-		}
-
-		return Result;
+		AdjustTokenPrivileges(Token.native_handle(), FALSE, m_SavedState.data(), 0, {}, {});
+		if (const auto LastError = last_error(); LastError.Win32Error != ERROR_SUCCESS)
+			LOGWARNING(L"AdjustTokenPrivileges(): {}"sv, LastError);
 	}
 
 	bool privilege::check(std::span<const wchar_t* const> const Names)
 	{
 		const auto Token = open_current_process_token(TOKEN_QUERY);
 		if (!Token)
-		{
-			LOGWARNING(L"open_current_process_token: {}"sv, last_error());
 			return false;
-		}
 
-		const auto TokenPrivileges = get_token_privileges(Token.native_handle());
-		if (!TokenPrivileges)
+		const block_ptr<PRIVILEGE_SET> PrivilegeSet(sizeof(PRIVILEGE_SET) + sizeof(LUID_AND_ATTRIBUTES) * (Names.size() - 1));
+		PrivilegeSet->PrivilegeCount = 0;
+		PrivilegeSet->Control = PRIVILEGE_SET_ALL_NECESSARY;
+
+		for (const auto& i: Names)
 		{
-			LOGWARNING(L"get_token_privileges: {}"sv, last_error());
-			return false;
-		}
-
-		const std::span Privileges(TokenPrivileges->Privileges, TokenPrivileges->PrivilegeCount);
-
-		return std::ranges::all_of(Names, [&](const wchar_t* const Name)
-		{
-			const auto& Luid = lookup_privilege_value(Name);
+			const auto& Luid = lookup_privilege_value(i);
 			if (!Luid)
 				return false;
 
-			const auto ItemIterator = std::ranges::find(Privileges, *Luid, &LUID_AND_ATTRIBUTES::Luid);
-			return ItemIterator != Privileges.end() && ItemIterator->Attributes & (SE_PRIVILEGE_ENABLED | SE_PRIVILEGE_ENABLED_BY_DEFAULT);
-		});
+			PrivilegeSet->Privilege[PrivilegeSet->PrivilegeCount++] = { *Luid };
+		}
+
+		BOOL Result;
+		if (!PrivilegeCheck(Token.native_handle(), PrivilegeSet.data(), &Result))
+		{
+			LOGWARNING(L"PrivilegeCheck(): {}"sv, os::last_error());
+			return false;
+		}
+
+		return Result != FALSE;
 	}
 }

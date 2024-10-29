@@ -1,4 +1,55 @@
 --------------------------------------------------------------------------------
+drkns 2024-10-29 18:54:27+00:00 - build 6387
+
+1. Continue 6385.5.
+
+--------------------------------------------------------------------------------
+drkns 2024-10-29 02:35:48+00:00 - build 6386
+
+1. Continue 6385.5.
+
+--------------------------------------------------------------------------------
+drkns 2024-10-26 20:17:00+01:00 - build 6385
+
+1. Show elevation type in InfoPanel & bug reports.
+
+2. Preserve inherited attributes when saving files.
+
+3. Fix power notifications when 2 InfoPanels are opened simultaneously.
+
+4. gh-674: Panel refresh stops working after certain actions.
+
+5. Experimental: FS monitor refactoring.
+
+--------------------------------------------------------------------------------
+drkns 2024-10-26 00:32:56+01:00 - build 6384
+
+1. gh-878: FAR sets nanosecond filetime incorrectly.
+
+2. Refactoring.
+
+--------------------------------------------------------------------------------
+drkns 2024-10-24 22:36:31+01:00 - build 6383
+
+1. Correction of 6381.1.
+
+2. gh-875 (maybe).
+
+--------------------------------------------------------------------------------
+skipik 2024-10-23 22:50:00+03:00 - build 6382
+
+1. SQLite v3.47.0.
+
+--------------------------------------------------------------------------------
+drkns 2024-10-22 02:30:00+01:00 - build 6381
+
+1. Drop redundant (and expensive) conversions.
+
+2. Improve logging.
+
+3. Warnings.
+
+--------------------------------------------------------------------------------
 shmuel 2024-10-09 07:18:28+03:00 - build 6380
 
 1. Change KeyMacros.CONVFMT from .6g to .14g to be consistent with Lua.
