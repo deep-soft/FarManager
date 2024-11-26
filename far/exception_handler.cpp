@@ -389,7 +389,10 @@ static void read_modules(std::span<HMODULE const> const Modules, string& To, str
 
 	for (const auto& i: Modules)
 	{
-		To += str(static_cast<void const*>(i));
+		if (MODULEINFO Info; GetModuleInformation(GetCurrentProcess(), i, &Info, sizeof(Info)))
+			far::format_to(To, L"{} - {}"sv, str(Info.lpBaseOfDll), str(std::bit_cast<void*>(std::bit_cast<uintptr_t>(Info.lpBaseOfDll) + Info.SizeOfImage)));
+		else
+			To += str(static_cast<void const*>(i));
 
 		if (!os::fs::get_module_file_name({}, i, Name))
 		{
@@ -956,18 +959,23 @@ static handler_result ExcConsole(bool const CanContinue, string const& ReportLoc
 
 static string get_locale()
 {
-	wchar_t NameBuffer[LOCALE_NAME_MAX_LENGTH];
-	string_view Name;
-
-	if (size_t const SizeWith0 = GetLocaleInfo(LOCALE_SYSTEM_DEFAULT, LOCALE_SNAME, NameBuffer, static_cast<int>(std::size(NameBuffer))))
-		Name = { NameBuffer, SizeWith0 - 1 };
-	else
-		Name = L"Unknown"sv;
+	string LocaleName;
+	if (!os::get_locale_value(LOCALE_SYSTEM_DEFAULT, LOCALE_SNAME, LocaleName))
+	{
+		string LangName, CountryName;
+		if (
+			os::get_locale_value(LOCALE_SYSTEM_DEFAULT, LOCALE_SISO639LANGNAME, LangName) &&
+			os::get_locale_value(LOCALE_SYSTEM_DEFAULT, LOCALE_SISO3166CTRYNAME, CountryName)
+			)
+			LocaleName = concat(LangName, L'-', CountryName);
+		else
+			LocaleName = L"Unknown"sv;
+	}
 
 	const auto LocaleId = GetUserDefaultLCID();
 	const auto LanguageId = LANGIDFROMLCID(LocaleId);
 	return far::format(L"{} | LCID={:08X} (Lang={:04X} (Primary={:03X} Sub={:02X}) Sort={:X} SortVersion={:X}) | ANSI={} OEM={}"sv,
-		Name,
+		LocaleName,
 		LocaleId,
 		LanguageId,
 		PRIMARYLANGID(LanguageId),

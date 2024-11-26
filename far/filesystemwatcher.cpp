@@ -75,7 +75,6 @@ public:
 
 			if (!m_Thread.joinable() || m_Thread.is_signaled())
 			{
-				LOGINFO(L"MAKING THREAD"sv);
 				m_Thread = os::thread(&background_watcher::process, this);
 			}
 		}
@@ -233,7 +232,7 @@ FileSystemWatcher::~FileSystemWatcher()
 
 		m_DirectoryHandle = {};
 
-		switch (const auto Status = m_Overlapped.Internal)
+		switch (const auto Status = static_cast<NTSTATUS>(m_Overlapped.Internal))
 		{
 		case STATUS_NOTIFY_CLEANUP:
 		case STATUS_NOTIFY_ENUM_DIR:
@@ -244,7 +243,7 @@ FileSystemWatcher::~FileSystemWatcher()
 			break;
 
 		default:
-			LOGDEBUG(L"Overlapped.Internal: {}"sv, os::error_state{ ERROR_SUCCESS, static_cast<NTSTATUS>(m_Overlapped.Internal) });
+			LOGDEBUG(L"Overlapped.Internal: {}"sv, os::error_state{ ERROR_SUCCESS, Status });
 			break;
 		}
 	}

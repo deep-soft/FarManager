@@ -250,17 +250,18 @@ namespace colors
 
 			const auto Index = index_value(Colour);
 
-			if (Index <= index::nt_last)
-				return Alpha | (index::nt_last - Index);
-
-			if (Index <= index::cube_last)
+			static constexpr std::pair<uint8_t, uint8_t> Boundaries[]
 			{
-				const auto CubeIndex = Index - index::cube_first;
-				return Alpha | (index::cube_last - CubeIndex);
-			}
+				{ index::nt_first,   index::nt_last },
+				{ index::cube_first, index::cube_last },
+				{ index::grey_first, index::grey_last },
+			};
 
-			const auto GreyIndex = Index - index::grey_first;
-			return Alpha | (index::grey_last - GreyIndex);
+			for (const auto& [First, Last]: Boundaries)
+				if (Index <= Last)
+					return Alpha | (Last - Index + First);
+
+			std::unreachable();
 		}
 
 		return Alpha | color_bits(~color_bits(Colour));
@@ -505,7 +506,7 @@ namespace colors
 			);
 		};
 
-		return Map.emplace(Color, std::ranges::min_element(Palette.begin() + Skip, Palette.end(), {}, distance) - Palette.begin()).first->second;
+		return Map.try_emplace(Color, std::ranges::min_element(Palette.begin() + Skip, Palette.end(), {}, distance) - Palette.begin()).first->second;
 	}
 
 	struct index_color_16

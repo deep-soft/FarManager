@@ -172,12 +172,12 @@ namespace os
 			return *multi_wait(Handles, false);
 		}
 
-		std::optional<size_t> handle_implementation::wait_any(span<HANDLE const> const Handles, std::optional<std::chrono::milliseconds> const Timeout)
+		std::optional<size_t> handle_implementation::wait_any(std::chrono::milliseconds const Timeout, span<HANDLE const> const Handles)
 		{
 			return multi_wait(Handles, false, Timeout);
 		}
 
-		bool handle_implementation::wait_all(span<HANDLE const> const Handles, std::optional<std::chrono::milliseconds> const Timeout)
+		bool handle_implementation::wait_all(std::chrono::milliseconds const Timeout, span<HANDLE const> const Handles)
 		{
 			return multi_wait(Handles, true, Timeout).has_value();
 		}
@@ -685,7 +685,12 @@ static auto get_keyboard_layout_list_registry_ctf()
 			{
 				const auto Index = from_string<size_t>(IndexStr);
 				const auto Layout = LayoutsKey->get_dword(IndexStr, L"KeyboardLayout"sv);
-				Layouts.emplace_back(Index, *Layout);
+
+				// Seems to be IME
+				if (!*Layout && !extract_integer<uint16_t, 1>(Language.Id))
+					Layouts.emplace_back(Index, make_integer<uint32_t, uint16_t>(Language.Id, Language.Id));
+				else
+					Layouts.emplace_back(Index, *Layout);
 			}
 			catch (far_exception const& e)
 			{
@@ -694,6 +699,8 @@ static auto get_keyboard_layout_list_registry_ctf()
 		}
 
 		std::ranges::sort(Layouts, {}, &layout_item::Index);
+		const auto [First, Last] = std::ranges::unique(Layouts, {}, &layout_item::Id);
+		Layouts.erase(First, Last);
 		std::ranges::transform(Layouts, std::back_inserter(Result), [](layout_item const& i){ return os::make_hkl(i.Id); });
 	}
 
@@ -776,6 +783,66 @@ static auto default_keyboard_layout()
 	return GetKeyboardLayout(0);
 }
 
+static auto keyboard_layout_list_hr(std::span<HKL const> const List)
+{
+	string Result;
+
+	const auto is_ime     = [](HKL const i){ return (std::bit_cast<intptr_t>(i) & 0xF000'0000) == 0xE000'0000; };
+	const auto is_special = [](HKL const i){ return (std::bit_cast<intptr_t>(i) & 0xF000'0000) == 0xF000'0000; };
+
+	const auto LayoutsPath = L"SYSTEM\\CurrentControlSet\\Control\\Keyboard Layouts"sv;
+
+	std::unordered_map<short, string> SpecialLayouts;
+
+	if (std::ranges::any_of(List, is_special))
+	{
+		if (const auto LayoutsKey = reg::key::local_machine.open(LayoutsPath, KEY_ENUMERATE_SUB_KEYS))
+		{
+			for (const auto& Key: LayoutsKey->enum_keys())
+			{
+				const auto LayoutIdStr = reg::key::local_machine.get_string(concat(LayoutsPath, L"\\", Key), L"Layout Id"sv);
+				if (!LayoutIdStr)
+					continue;
+
+				short LayoutId;
+				if (!from_string(*LayoutIdStr, LayoutId, {}, 16))
+					continue;
+
+				SpecialLayouts.try_emplace(LayoutId, Key);
+			}
+		}
+	}
+
+	for (const auto& Layout: List)
+	{
+		const auto LayoutValue = static_cast<uint32_t>(std::bit_cast<intptr_t>(Layout));
+
+		// https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getkeyboardlayout
+		// The low word contains a Language Identifier for the input language
+		// and the high word contains a device handle to the physical layout of the keyboard.
+		const auto InputLangugeId = extract_integer<uint16_t, 0>(LayoutValue);
+		const auto LayoutHandle = extract_integer<uint16_t, 1>(LayoutValue);
+
+		const auto LayoutKey =
+			is_special(Layout)? SpecialLayouts[LayoutHandle & 0xFFF] :
+			far::format(L"{:08X}"sv, is_ime(Layout)? LayoutValue : LayoutHandle);
+
+		const auto Locale = MAKELCID(InputLangugeId, SORT_DEFAULT);
+
+		string LanguageName;
+
+		if (!get_locale_value(Locale, LOCALE_SENGLISHDISPLAYNAME, LanguageName)) // >= Windows 7
+			if (!get_locale_value(Locale, LOCALE_SLOCALIZEDDISPLAYNAME, LanguageName)) // < Windows 7
+				LanguageName = far::format(L"{:08X}"sv, Locale);
+
+		const auto LayoutName = reg::key::local_machine.get_string(concat(LayoutsPath, L"\\", LayoutKey), L"Layout Text"sv);
+
+		far::format_to(Result, L"\n{:08X} {} / {}"sv, LayoutValue, LanguageName, LayoutName? *LayoutName : LayoutKey);
+	}
+
+	return Result;
+}
+
 static std::vector<HKL> try_get_keyboard_list(function_ref<std::vector<HKL>()> Callable)
 {
 	try
@@ -808,6 +875,8 @@ std::vector<HKL> get_keyboard_layout_list()
 		std::ranges::rotate(Result.begin(), Iterator, Iterator + 1);
 	else
 		Result.insert(Result.begin(), DefaultLayout);
+
+	LOGINFO(L"Detected keyboard layouts:{}\n"sv, keyboard_layout_list_hr(Result));
 
 	return Result;
 }
