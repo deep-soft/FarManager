@@ -1937,8 +1937,10 @@ bool FileList::ProcessKey(const Manager::Key& Key)
 						{
 							if (EnableExternal)
 							{
-								ProcessExternal(Global->Opt->strExternalEditor, strFileName, strShortFileName, PluginMode, TemporaryDirectory);
-								UploadFile = file_state::get(strFileName) != SavedState;
+								UploadFile =
+									ProcessExternal(Global->Opt->strExternalEditor, strFileName, strShortFileName, PluginMode, TemporaryDirectory) &&
+									file_state::get(strFileName) != SavedState;
+
 								Modaling = PluginMode; // External editor from plugin panel is Modal!
 							}
 							else if (PluginMode)
@@ -5178,7 +5180,11 @@ bool FileList::ApplyCommand()
 				break;
 
 			bool PreserveLFN = false;
-			if (string strConvertedCommand = strCommand; SubstFileName(strConvertedCommand, { i.FileName, i.AlternateFileName() }, &PreserveLFN) && !strConvertedCommand.empty())
+			string strConvertedCommand = strCommand;
+			if (!SubstFileName(strConvertedCommand, { i.FileName, i.AlternateFileName() }, &PreserveLFN))
+				break;
+
+			if (!strConvertedCommand.empty())
 			{
 				SCOPED_ACTION(PreserveLongName)(i.FileName, PreserveLFN);
 
@@ -8294,12 +8300,15 @@ bool FileList::ConvertName(const string_view SrcName, string& strDest, const siz
 		auto SpacesBetween =
 			VisualNameLength + AlignedVisualExtensionLength <= MaxLength?
 				MaxLength - VisualNameLength - AlignedVisualExtensionLength:
-				1;
+				0;
 
-		if (!SpacesBetween && VisualNameLength + VisualExtensionLength < MaxLength)
+		if (!SpacesBetween && VisualNameLength + VisualExtensionLength <= MaxLength)
 			SpacesBetween = MaxLength - VisualNameLength - VisualExtensionLength;
 
-		const auto SpacesAfter = MaxLength - VisualNameLength - SpacesBetween - VisualExtensionLength;
+		const auto SpacesAfter =
+			VisualNameLength + SpacesBetween + VisualExtensionLength <= MaxLength?
+			MaxLength - VisualNameLength - SpacesBetween - VisualExtensionLength :
+			0;
 
 		strDest += Name;
 		strDest.append(SpacesBetween, L' ');
