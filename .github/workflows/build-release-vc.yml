@@ -165,12 +165,12 @@ jobs:
 #           Compress-Archive . ../${{ env.PROG_NAME }}.${{ matrix.build_config }}.${{ matrix.platform_sln }}.${{ env.VERSION }}.zip
 #           dir ../
 
-      - name: Add extra plugins NetBox and Colorer
+      - name: Add extra plugins NetBox
         continue-on-error: true
         shell: bash
         run: |
           pushd '_build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}/Plugins';
-          for extra_plug in Far-NetBox Far-Colorer ; do
+          for extra_plug in Far-NetBox ; do
             mkdir $extra_plug;
             cd $extra_plug;
             f_name="$extra_plug.${{ matrix.platform_name }}.7z";
@@ -191,6 +191,54 @@ jobs:
 
             7z x $extra_plug.${{ matrix.platform_name }}.7z;
             rm $extra_plug.${{ matrix.platform_name }}.7z;
+            cd ..
+          done
+          popd
+
+      - name: Add extra plugins Colorer
+        continue-on-error: true
+        shell: bash
+        run: |
+          pushd '_build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}/Plugins';
+          for extra_plug in Far-Colorer ; do
+            mkdir $extra_plug;
+            cd $extra_plug;
+
+            variant_ok=0;
+            f_variant=".icu";
+            f_name="$extra_plug$f_variant.${{ matrix.platform_name }}.7z";
+            curl -LOJ "https://github.com/deep-soft/$extra_plug/releases/download/$extra_plug-latest/$f_name";
+            f_size=$(stat --format=%s $f_name);
+            echo "f_size=$f_size";
+            min_f_size=1000000;
+            if [[ f_size -le min_f_size ]]; then
+              echo "something wrong: $f_variant";
+              variant_ok=0;
+            else
+              echo "ok: $f_variant";
+              variant_ok=1;
+            fi
+
+            if [[ variant_ok -eq 0 ]]; then
+              f_name="$extra_plug.${{ matrix.platform_name }}.7z";
+              curl -LOJ "https://github.com/deep-soft/$extra_plug/releases/download/$extra_plug-latest/$f_name";
+
+              f_size=$(stat --format=%s $f_name);
+              echo "f_size=$f_size";
+              min_f_size=1000000;
+              if [[ f_size -le min_f_size ]]; then
+                echo "something wrong";
+                f_name="$extra_plug.${{ matrix.platform_name }}-ok.7z";
+                curl -LOJ "https://github.com/deep-soft/$extra_plug/releases/download/$extra_plug-latest/$f_name";
+                f_size=$(stat --format=%s $f_name);
+                echo "f_size=$f_size";
+              else
+                echo "ok";
+              fi
+            fi
+
+            7z x $f_name;
+            rm $f_name;
             cd ..
           done
           popd
