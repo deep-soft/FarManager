@@ -403,6 +403,24 @@ namespace
 		os::handle m_Buffer;
 	};
 
+	class sink_stdout: public no_config, public discardable<true>
+	{
+	public:
+		void handle_impl(message const& Message)
+		{
+			try
+			{
+				console.OriginalOutputStream() << far::format(L"[{}][{}][{}] {} [{}]"sv, Message.m_Time, Message.m_ThreadId, Message.m_LevelString, Message.m_Data, Message.m_Location) << std::endl;
+			}
+			catch (far_exception const& e)
+			{
+				LOGERROR(L"{}"sv, e);
+			}
+		}
+
+		static constexpr auto name = L"stdout"sv;
+	};
+
 	class sink_file: public no_config, public discardable<false>
 	{
 	public:
@@ -770,6 +788,7 @@ namespace
 		return create_sink<
 			sink_composite,
 			sink_console,
+			sink_stdout,
 			sink_pipe,
 			sink_debug,
 			sink_file,

@@ -148,7 +148,7 @@ bool GetLangParam(lang_file& LangFile, string_view const ParamName, string& Para
 	return false;
 }
 
-static bool SelectLanguage(bool HelpLanguage, string& Dest)
+static string SelectLanguage(bool HelpLanguage, string_view const Current)
 {
 	const auto Title = HelpLanguage? lng::MHelpLangTitle : lng::MLangTitle;
 	const auto Mask = HelpLanguage? Global->HelpFileMask : LangFileMask;
@@ -156,6 +156,9 @@ static bool SelectLanguage(bool HelpLanguage, string& Dest)
 	const auto LangMenu = VMenu2::create(msg(Title), {}, ScrY - 4);
 	LangMenu->SetMenuFlags(VMENU_WRAPMODE);
 	LangMenu->SetPosition({ ScrX / 2 - 8 + 5 * HelpLanguage, ScrY / 2 - 4 + 2 * HelpLanguage, 0, 0 });
+
+	// The key is ASCII English name, so the default sorting will do fine.
+	std::map<string, string> Languages;
 
 	for (const auto& FindData: os::fs::enum_files(path::join(Global->g_strFarPath, Mask)))
 	{
@@ -173,14 +176,18 @@ static bool SelectLanguage(bool HelpLanguage, string& Dest)
 		))
 			continue;
 
-		MenuItemEx LangMenuItem(!LangFile.Description.empty()? LangFile.Description: LangFile.Name);
+		Languages.try_emplace(LangFile.Name, LangFile.Description);
+	}
 
-		// No duplicate languages
-		if (LangMenu->FindItem(0, LangMenuItem.Name, LIFIND_EXACTMATCH) != -1)
-			continue;
+	const auto MaxNameLength = std::ranges::fold_left(Languages, 0uz, [](size_t const Value, const auto& i){ return std::max(Value, i.first.size()); });
 
-		LangMenuItem.SetSelect(equal_icase(Dest, LangFile.Name));
-		LangMenuItem.ComplexUserData = LangFile.Name;
+	for (const auto& [Name, Description]: Languages)
+	{
+		string EntryName = far::format(L"{0:{1}} {2} {3}"sv, Name, MaxNameLength, BoxSymbols[BS_V1], Description);
+		MenuItemEx LangMenuItem(EntryName);
+
+		LangMenuItem.SetSelect(Current == Name);
+		LangMenuItem.ComplexUserData = Name;
 		LangMenu->AddItem(LangMenuItem);
 	}
 
@@ -188,14 +195,14 @@ static bool SelectLanguage(bool HelpLanguage, string& Dest)
 	LangMenu->Run();
 
 	if (LangMenu->GetExitCode()<0)
-		return false;
+		return {};
 
-	Dest = *LangMenu->GetComplexUserDataPtr<string>();
-	return true;
+	return *LangMenu->GetComplexUserDataPtr<string>();
+
 }
 
-bool SelectInterfaceLanguage(string& Dest) {return SelectLanguage(false, Dest);}
-bool SelectHelpLanguage(string& Dest) {return SelectLanguage(true, Dest);}
+string SelectInterfaceLanguage(string_view const Current) {return SelectLanguage(false, Current);}
+string SelectHelpLanguage(string_view const Current) {return SelectLanguage(true, Current);}
 
 static wchar_t extract(string_view::const_iterator& Iterator, string_view::const_iterator const End)
 {

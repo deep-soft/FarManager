@@ -3362,8 +3362,14 @@ void Options::ShellOptions(bool LastCommand, const MOUSE_EVENT_RECORD *MouseEven
 				break;
 			case MENU_OPTIONS_LANGUAGES:   // Languages
 				{
-					auto InterfaceLanguage = strLanguage.Get();
-					if (SelectInterfaceLanguage(InterfaceLanguage))
+					const auto InterfaceLanguage = SelectInterfaceLanguage(strLanguage);
+
+					// User pressed Esc, quit
+					if (InterfaceLanguage.empty())
+						break;
+
+					// Try to load only if changed
+					if (InterfaceLanguage != strLanguage.Get())
 					{
 						try
 						{
@@ -3380,18 +3386,27 @@ void Options::ShellOptions(bool LastCommand, const MOUSE_EVENT_RECORD *MouseEven
 								{ lng::MOk });
 						}
 
-						auto HelpLanguage = strHelpLanguage.Get();
-						if (SelectHelpLanguage(HelpLanguage))
+						// Update only if loaded
+						if (strLanguage.Get() == InterfaceLanguage)
 						{
-							strHelpLanguage = HelpLanguage;
+							Global->CtrlObject->Plugins->ReloadLanguage();
+							os::env::set(L"FARLANG"sv, strLanguage);
+							PrepareUnitStr();
+							Global->WindowManager->InitKeyBar();
+							Global->CtrlObject->Cp()->RedrawKeyBar();
+							Global->CtrlObject->Cp()->SetScreenPosition();
 						}
-						Global->CtrlObject->Plugins->ReloadLanguage();
-						os::env::set(L"FARLANG"sv, strLanguage);
-						PrepareUnitStr();
-						Global->WindowManager->InitKeyBar();
-						Global->CtrlObject->Cp()->RedrawKeyBar();
-						Global->CtrlObject->Cp()->SetScreenPosition();
 					}
+
+					const auto HelpLanguage = SelectHelpLanguage(strHelpLanguage);
+
+					// User pressed Esc, quit
+					if (HelpLanguage.empty())
+						break;
+
+					// Try to load only if changed
+					if (HelpLanguage != strHelpLanguage.Get())
+						strHelpLanguage = HelpLanguage;
 
 					break;
 				}
