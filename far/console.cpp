@@ -559,31 +559,6 @@ protected:
 		std::optional<DWORD> m_ConsoleMode;
 	};
 
-	class scoped_vt_input
-	{
-	public:
-		NONCOPYABLE(scoped_vt_input);
-
-		scoped_vt_input():
-			m_ConsoleMode(::console.UpdateMode(::console.GetInputHandle(), ENABLE_VIRTUAL_TERMINAL_INPUT, ENABLE_LINE_INPUT))
-		{
-		}
-
-		~scoped_vt_input()
-		{
-			if (m_ConsoleMode)
-				::console.SetMode(::console.GetInputHandle(), *m_ConsoleMode);
-		}
-
-		explicit operator bool() const
-		{
-			return m_ConsoleMode.has_value();
-		}
-
-	private:
-		std::optional<DWORD> m_ConsoleMode;
-	};
-
 	static string query_vt(string_view const Command)
 	{
 		// A VT query works as follows:
@@ -615,12 +590,12 @@ protected:
 		// Fortunately, it seems that user input is queued before and/or after the responses,
 		// but does not interlace with them.
 
-		// We also need to enable VT input, otherwise it will only work in a real console.
+		// We also need to disable line input, otherwise we will hang.
+		// It's usually disabled anyway, but just in case if we get here too early or too late.
 		// Are you not entertained?
 
-		scoped_vt_input const VtInput;
-		if (!VtInput)
-			throw far_exception(L"scoped_vt_input"sv);
+		const auto CurrentConsoleMode = ::console.UpdateMode(::console.GetInputHandle(), 0, ENABLE_LINE_INPUT);
+		SCOPE_EXIT{ if (CurrentConsoleMode) ::console.SetMode(::console.GetInputHandle(), *CurrentConsoleMode);};
 
 		const auto Dummy = CSI L"0c"sv;
 
@@ -662,12 +637,14 @@ protected:
 
 			if (DA_ResponseSize && Response.size() >= DA_ResponseSize * 2)
 			{
-				if (const auto DA_Response = string_view(Response).substr(*FirstTokenPrefixPos, DA_ResponseSize); Response.ends_with(DA_Response))
-					break;
+				const auto FirstTokenEnd = *FirstTokenPrefixPos + DA_ResponseSize;
+				const auto DA_Response = string_view(Response).substr(*FirstTokenPrefixPos, FirstTokenEnd);
+				const auto SecondTokenPos = Response.find(DA_Response, FirstTokenEnd);
+
+				if (SecondTokenPos != Response.npos)
+					return Response.substr(FirstTokenEnd, SecondTokenPos - FirstTokenEnd);
 			}
 		}
-
-		return Response.substr(DA_ResponseSize, Response.size() - DA_ResponseSize * 2);
 	}
 
 	console::console():
@@ -1456,7 +1433,7 @@ protected:
 		{ FCF_FG_STRIKEOUT,    L"9"sv,     L"29"sv },
 		{ FCF_FG_FAINT,        L"2"sv,     L"22"sv },
 		{ FCF_FG_BLINK,        L"5"sv,     L"25"sv },
-		{ FCF_FG_INVERSE,      L"7"sv,     L"27"sv },
+		{ FCF_INVERSE,         L"7"sv,     L"27"sv },
 		{ FCF_FG_INVISIBLE,    L"8"sv,     L"28"sv },
 	};
 
@@ -1511,7 +1488,7 @@ protected:
 	static void make_vt_attributes(const FarColor& Color, string& Str, FarColor const& LastColor)
 	{
 		using colors::single_color;
-		const auto StyleMaskWithoutUnderline = FCF_STYLEMASK & ~FCF_FG_UNDERLINE_MASK;
+		const auto StyleMaskWithoutUnderline = FCF_STYLE_MASK & ~FCF_FG_UNDERLINE_MASK;
 
 		struct expanded_state
 		{
@@ -1533,7 +1510,7 @@ protected:
 					Style |= FCF_FG_OVERLINE;
 
 				if (Color.Flags & COMMON_LVB_REVERSE_VIDEO)
-					Style |= FCF_FG_INVERSE;
+					Style |= FCF_INVERSE;
 
 				if (Color.Flags & COMMON_LVB_UNDERSCORE && UnderlineStyle == UNDERLINE_STYLE::UNDERLINE_NONE)
 					UnderlineStyle = UNDERLINE_STYLE::UNDERLINE_SINGLE;
@@ -2164,7 +2141,7 @@ protected:
 				LOGDEBUG(L"VT palette read successfuly"sv);
 				return true;
 			}
-			catch (far_exception const& e)
+			catch (std::exception const& e)
 			{
 				LOGERROR(L"{}"sv, e);
 				return false;
@@ -3140,7 +3117,7 @@ protected:
 				std::unreachable();
 			}
 		}
-		catch (far_exception const& e)
+		catch (std::exception const& e)
 		{
 			LOGERROR(L"{}"sv, e);
 			return {};

@@ -1,15 +1,12 @@
-﻿#ifndef TINYXML_HPP_268E08DA_CDE4_4ADA_B082_64745EE1D62E
-#define TINYXML_HPP_268E08DA_CDE4_4ADA_B082_64745EE1D62E
+﻿#ifndef EXCEPTION_HPP_82CEF198_5774_4AA8_A946_0474EA37028E
+#define EXCEPTION_HPP_82CEF198_5774_4AA8_A946_0474EA37028E
 #pragma once
 
 /*
-tinyxml.hpp
-
-tinyxml wrapper
-
+exception.hpp
 */
 /*
-Copyright © 2011 Far Group
+Copyright © 2025 Far Group
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -35,52 +32,27 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-// Internal:
+#include "preprocessor.hpp"
+#include "source_location.hpp"
 
-// Platform:
+#include <stdexcept>
+#include <string>
+#include <string_view>
 
-// Common:
-#include "common/enumerator.hpp"
-#include "common/preprocessor.hpp"
+//----------------------------------------------------------------------------
 
-// External:
-
-namespace tinyxml_impl
+[[noreturn]]
+inline void throw_exception(std::string_view const Message, source_location const& Location = source_location::current())
 {
-WARNING_PUSH()
+#ifdef FAR_USE_INTERNALS
+	[[noreturn]]
+	void throw_far_exception(std::string_view /*Message*/, source_location const& /*Location*/);
 
-WARNING_DISABLE_GCC("-Wsuggest-override")
-WARNING_DISABLE_GCC("-Wtype-limits")
-WARNING_DISABLE_GCC("-Wzero-as-null-pointer-constant")
-
-WARNING_DISABLE_CLANG("-Weverything")
-
-#include "thirdparty/tinyxml2/tinyxml2.h"
-
-WARNING_POP()
+	throw_far_exception(Message, Location);
+#else
+	(void)Location;
+	throw std::runtime_error(std::string(Message));
+#endif
 }
 
-namespace tinyxml = tinyxml_impl::tinyxml2;
-
-namespace xml
-{
-	class [[nodiscard]] enum_nodes: public enumerator<enum_nodes, const tinyxml::XMLElement*, true>
-	{
-		IMPLEMENTS_ENUMERATOR(enum_nodes);
-
-	public:
-		NONCOPYABLE(enum_nodes);
-
-		enum_nodes(const tinyxml::XMLNode& Base, const char* Name);
-		enum_nodes(tinyxml::XMLHandle Base, const char* Name);
-
-	private:
-		[[nodiscard, maybe_unused]]
-		bool get(bool Reset, value_type& value) const;
-
-		const char* m_name;
-		const tinyxml::XMLNode* m_base;
-	};
-}
-
-#endif // TINYXML_HPP_268E08DA_CDE4_4ADA_B082_64745EE1D62E
+#endif // EXCEPTION_HPP_82CEF198_5774_4AA8_A946_0474EA37028E

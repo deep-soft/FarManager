@@ -108,11 +108,11 @@ protected:
 
 		explicit SQLiteStmt(sqlite::sqlite3_stmt* Stmt): m_Stmt(Stmt) {}
 
-		SQLiteStmt& Reset();
+		SQLiteStmt const& Reset() const;
 		bool Step() const;
 		void Execute() const;
 
-		auto& Bind(auto&&... Args)
+		auto& Bind(auto&&... Args) const
 		{
 			(..., BindImpl(FWD(Args)));
 			return *this;
@@ -126,12 +126,12 @@ protected:
 		column_type GetColType(int Col) const;
 
 	private:
-		SQLiteStmt& BindImpl(int Value);
-		SQLiteStmt& BindImpl(long long Value);
-		SQLiteStmt& BindImpl(string_view Value);
-		SQLiteStmt& BindImpl(bytes_view Value);
-		SQLiteStmt& BindImpl(unsigned int Value) { return BindImpl(static_cast<int>(Value)); }
-		SQLiteStmt& BindImpl(unsigned long long Value) { return BindImpl(static_cast<long long>(Value)); }
+		void BindImpl(int Value) const;
+		void BindImpl(long long Value) const;
+		void BindImpl(string_view Value) const;
+		void BindImpl(bytes_view Value) const;
+		void BindImpl(unsigned int const Value)  const { return BindImpl(static_cast<int>(Value)); }
+		void BindImpl(unsigned long long const Value) const { return BindImpl(static_cast<long long>(Value)); }
 
 		sqlite::sqlite3* db() const;
 
@@ -140,15 +140,15 @@ protected:
 
 		struct stmt_deleter { void operator()(sqlite::sqlite3_stmt*) const noexcept; };
 		std::unique_ptr<sqlite::sqlite3_stmt, stmt_deleter> m_Stmt;
-		int m_Param{};
+		mutable int m_Param{};
 	};
 
 	struct statement_reset
 	{
-		void operator()(SQLiteStmt* Statement) const { Statement->Reset(); }
+		void operator()(SQLiteStmt const* Statement) const { Statement->Reset(); }
 	};
 
-	using auto_statement = std::unique_ptr<SQLiteStmt, statement_reset>;
+	using auto_statement = std::unique_ptr<SQLiteStmt const, statement_reset>;
 
 	template<typename T>
 	using stmt_init = std::pair<T, std::string_view>;
@@ -234,7 +234,7 @@ private:
 	database_ptr m_Db;
 	SQLiteStmt m_stmt_BeginTransaction;
 	SQLiteStmt m_stmt_EndTransaction;
-	mutable std::vector<SQLiteStmt> m_Statements;
+	std::vector<SQLiteStmt> m_Statements;
 	std::atomic_size_t m_ActiveTransactions{};
 };
 

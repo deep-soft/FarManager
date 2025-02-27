@@ -50,9 +50,14 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "config.hpp"
 #include "lang.hpp"
 #include "manager.hpp"
+#include "message.hpp"
 #include "global.hpp"
 #include "lockscrn.hpp"
 #include "FarDlgBuilder.hpp"
+#include "pathmix.hpp"
+#include "exception.hpp"
+#include "log.hpp"
+#include "tinyxml.hpp"
 
 // Platform:
 
@@ -62,12 +67,13 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // External:
 #include "format.hpp"
 
+#include <share.h>
+
 //----------------------------------------------------------------------------
 
-static void ChangeColor(PaletteColors PaletteIndex, PaletteColors const* const BottomPaletteIndex)
+static void ChangeColor(PaletteColors PaletteIndex, FarColor const* const BottomColor)
 {
-	auto NewColor = Global->Opt->Palette[PaletteIndex];
-	const auto BottomColor = BottomPaletteIndex? &Global->Opt->Palette[*BottomPaletteIndex] : nullptr;
+	auto NewColor = colors::PaletteColorToFarColor(PaletteIndex);
 
 	auto Reset = false;
 
@@ -136,7 +142,7 @@ struct color_item
 	PaletteColors Color;
 	// libc++ decided to follow the standard literally and prohibit incomplete types in spans :(
 	color_item_span SubColor;
-	PaletteColors const* BottomColor;
+	std::initializer_list<PaletteColors> BottomColorIndices;
 };
 
 constexpr color_item_span::operator std::span<color_item const>() const
@@ -161,13 +167,26 @@ static void SetItemColors(std::span<const color_item> const Items, point Positio
 		if (Msg != DN_CLOSE || ItemsCode < 0)
 			return 0;
 
-		if (!Items[ItemsCode].SubColor.empty())
+		const auto& CurrentItems = Items[ItemsCode];
+
+		if (!CurrentItems.SubColor.empty())
 		{
-			SetItemColors(Items[ItemsCode].SubColor, Position);
+			SetItemColors(CurrentItems.SubColor, Position);
 		}
 		else
 		{
-			ChangeColor(Items[ItemsCode].Color, Items[ItemsCode].BottomColor);
+			std::optional<FarColor> BakedBottomColor;
+
+			for (const auto& i: CurrentItems.BottomColorIndices)
+			{
+				const auto BottomColor = colors::PaletteColorToFarColor(i);
+				if (!BakedBottomColor)
+					BakedBottomColor = BottomColor;
+				else
+					*BakedBottomColor = colors::merge(BottomColor, *BakedBottomColor);
+			}
+
+			ChangeColor(CurrentItems.Color, BakedBottomColor? &*BakedBottomColor : nullptr);
 		}
 
 		return 1;
@@ -182,19 +201,120 @@ static void ConfigurePalette()
 	Builder.ShowDialog();
 }
 
+static void list_themes(function_ref<void(string_view, string_view)> const Processor)
+{
+	const auto ThemesPath = path::join(Global->g_strFarPath, L"Addons\\Colors\\Interface"sv);
+	for (const auto& i: os::fs::enum_files(path::join(ThemesPath, L"*.farconfig"sv)))
+	{
+		Processor(name_ext(i.FileName).first, path::join(ThemesPath, i.FileName));
+	}
+}
+
+static void load_theme(string_view const File, tinyxml::XMLDocument& Document)
+{
+	const file_ptr XmlFile(_wfsopen(nt_path(File).c_str(), L"rb", _SH_DENYWR));
+	if (!XmlFile)
+		throw far_exception(far::format(L"Error opening file \"{}\": {}"sv, File, os::format_errno(errno)));
+
+	if (const auto LoadResult = Document.LoadFile(XmlFile.get()); LoadResult != tinyxml::XML_SUCCESS)
+		throw far_exception(encoding::utf8::get_chars(Document.ErrorIDToName(LoadResult)), false);
+}
+
+static void apply_external_theme(string_view const File)
+{
+	tinyxml::XMLDocument Document;
+	load_theme(File, Document);
+	tinyxml::XMLHandle Root(Document.RootElement());
+
+	unordered_string_map<tinyxml::XMLElement const*> ColorEntries;
+
+	for (const auto& e: xml::enum_nodes(Root.FirstChildElement("colors"), "object"))
+	{
+		if (const auto Name = e.Attribute("name"))
+			ColorEntries.emplace(encoding::utf8::get_chars(Name), &e);
+	}
+
+	Global->Opt->Palette.LoadTheme([&](string_view const Key, FarColor const& Default)
+	{
+		const auto Iterator = ColorEntries.find(Key);
+		if (Iterator == ColorEntries.cend())
+			return Default;
+
+		return deserialize_color([&](char const* const AttributeName){ return Iterator->second->Attribute(AttributeName); }, Default);
+	});
+}
+
+static void try_apply_external_theme(string const& File)
+{
+	try
+	{
+		apply_external_theme(File);
+	}
+	catch (std::exception const& e)
+	{
+		LOGERROR(L"{}"sv, e);
+
+		Message(MSG_WARNING, e,
+			msg(lng::MError),
+			{
+				File,
+			},
+			{ lng::MOk });
+	}
+}
+
+static void choose_theme()
+{
+	const auto ThemesMenu = VMenu2::create(msg(lng::MColorThemes), {});
+
+	const auto DefaultIndexId = static_cast<int>(ThemesMenu->size());
+	ThemesMenu->AddItem(msg(lng::MDefaultTheme));
+	const auto DefaultRGBId = static_cast<int>(ThemesMenu->size());
+	ThemesMenu->AddItem(msg(lng::MDefaultThemeRGB));
+
+	list_themes([&, SeparatorAdded = false](string_view const Name, string_view const FullPath) mutable
+	{
+		if (!SeparatorAdded)
+		{
+			ThemesMenu->AddItem(MenuItemEx{ {}, LIF_SEPARATOR });
+			SeparatorAdded = true;
+		}
+
+		MenuItemEx Item(Name);
+		Item.ComplexUserData = string(FullPath);
+		ThemesMenu->AddItem(Item);
+	});
+
+	ThemesMenu->SetPosition({ 2, 1, 0, 0 });
+	ThemesMenu->SetMenuFlags(VMENU_WRAPMODE);
+	ThemesMenu->SetHelp(L"ColorThemes"sv);
+
+	const auto ThemeCode = ThemesMenu->Run();
+	if (ThemeCode < 0)
+		return;
+
+	if (ThemeCode == DefaultIndexId)
+		Global->Opt->Palette.ResetToDefaultIndex();
+	else if (ThemeCode == DefaultRGBId)
+		Global->Opt->Palette.ResetToDefaultRGB();
+	else
+		try_apply_external_theme(std::any_cast<string>(ThemesMenu->at(ThemeCode).ComplexUserData));
+}
+
 void SetColors()
 {
-	static constexpr color_item
+	// NOT constexpr, wrong codegen in color_item::BottomColorIndices
+	static const color_item
 	PanelItems[]
 	{
 		{ lng::MSetColorPanelNormal,                COL_PANELTEXT },
-		{ lng::MSetColorPanelSelected,              COL_PANELSELECTEDTEXT },
+		{ lng::MSetColorPanelSelected,              COL_PANELSELECTEDTEXT, {}, { COL_PANELTEXT } },
 		{ lng::MSetColorPanelHighlightedText,       COL_PANELHIGHLIGHTTEXT },
 		{ lng::MSetColorPanelHighlightedInfo,       COL_PANELINFOTEXT },
 		{ lng::MSetColorPanelDragging,              COL_PANELDRAGTEXT },
 		{ lng::MSetColorPanelBox,                   COL_PANELBOX },
-		{ lng::MSetColorPanelNormalCursor,          COL_PANELCURSOR },
-		{ lng::MSetColorPanelSelectedCursor,        COL_PANELSELECTEDCURSOR },
+		{ lng::MSetColorPanelNormalCursor,          COL_PANELCURSOR, {}, { COL_PANELTEXT } },
+		{ lng::MSetColorPanelSelectedCursor,        COL_PANELSELECTEDCURSOR, {}, { COL_PANELCURSOR, COL_PANELSELECTEDTEXT, COL_PANELTEXT } },
 		{ lng::MSetColorPanelNormalTitle,           COL_PANELTITLE },
 		{ lng::MSetColorPanelSelectedTitle,         COL_PANELSELECTEDTITLE },
 		{ lng::MSetColorPanelColumnTitle,           COL_PANELCOLUMNTITLE },
@@ -379,7 +499,7 @@ void SetColors()
 	EditorItems[]
 	{
 		{ lng::MSetColorEditorNormal,                 COL_EDITORTEXT },
-		{ lng::MSetColorEditorSelected,               COL_EDITORSELECTEDTEXT, {}, &EditorItems[0].Color },
+		{ lng::MSetColorEditorSelected,               COL_EDITORSELECTEDTEXT, {}, { COL_EDITORTEXT } },
 		{ lng::MSetColorEditorStatus,                 COL_EDITORSTATUS },
 		{ lng::MSetColorEditorScrollbar,              COL_EDITORSCROLLBAR },
 	},
@@ -429,10 +549,8 @@ void SetColors()
 			GroupsMenu->AddItem(tmp);
 		}
 
-		const auto DefaultIndexId = static_cast<int>(GroupsMenu->size());
-		GroupsMenu->AddItem(msg(lng::MSetDefaultColors));
-		const auto DefaultRGBId = static_cast<int>(GroupsMenu->size());
-		GroupsMenu->AddItem(msg(lng::MSetDefaultColorsRGB));
+		const auto ThemesId = static_cast<int>(GroupsMenu->size());
+		GroupsMenu->AddItem(msg(lng::MColorThemes));
 		GroupsMenu->SetHelp(L"ColorGroups"sv);
 
 		{
@@ -455,13 +573,9 @@ void SetColors()
 			return 1;
 		});
 
-		if (GroupsCode == DefaultIndexId)
+		if (GroupsCode == ThemesId)
 		{
-			Global->Opt->Palette.ResetToDefaultIndex();
-		}
-		else if (GroupsCode == DefaultRGBId)
-		{
-			Global->Opt->Palette.ResetToDefaultRGB();
+			choose_theme();
 		}
 		else if (GroupsCode == PaletteId)
 		{

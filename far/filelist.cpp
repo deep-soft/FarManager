@@ -8064,28 +8064,24 @@ void FileList::ShowFileList(bool Fast)
 
 FarColor FileList::GetShowColor(int Position, bool FileColor) const
 {
-	auto ColorAttr = colors::PaletteColorToFarColor(COL_PANELTEXT);
-
 	if (static_cast<size_t>(Position) >= data_size())
-		return ColorAttr;
+		return colors::PaletteColorToFarColor(COL_PANELTEXT);
 
 	const auto DataLock = lock_data();
 	const auto& m_ListData = *DataLock;
 
-	int Pos = highlight::color::normal;
+	auto ColorIndex = highlight::color::normal;
 
 	if (m_CurFile == Position && IsFocused() && !m_ListData.empty())
 	{
-		Pos=m_ListData[Position].Selected? highlight::color::selected_current : highlight::color::normal_current;
+		ColorIndex = m_ListData[Position].Selected? highlight::color::selected_current : highlight::color::normal_current;
 	}
 	else if (m_ListData[Position].Selected)
 	{
-		Pos = highlight::color::selected;
+		ColorIndex = highlight::color::selected;
 	}
 
-	const auto HighlightingEnabled = Global->Opt->Highlight && (m_PanelMode != panel_mode::PLUGIN_PANEL || !(m_CachedOpenPanelInfo.Flags & OPIF_DISABLEHIGHLIGHTING));
-
-	if (HighlightingEnabled)
+	if (Global->Opt->Highlight && (m_PanelMode != panel_mode::PLUGIN_PANEL || !(m_CachedOpenPanelInfo.Flags & OPIF_DISABLEHIGHLIGHTING)))
 	{
 		if (!m_ListData[Position].Colors)
 		{
@@ -8093,25 +8089,14 @@ FarColor FileList::GetShowColor(int Position, bool FileColor) const
 			m_ListData[Position].Colors = Global->CtrlObject->HiFiles->GetHiColor(m_ListData[Position], this, UseAttrHighlighting);
 		}
 
-		auto Colors = m_ListData[Position].Colors->Color[Pos];
-		highlight::configuration::ApplyFinalColor(Colors, Pos);
-		ColorAttr = FileColor ? Colors.FileColor : Colors.MarkColor;
+		auto Colors = m_ListData[Position].Colors->Color;
+		highlight::configuration::ApplyFinalColor(Colors, ColorIndex);
+		return FileColor? Colors[ColorIndex].FileColor : Colors[ColorIndex].MarkColor;
 	}
 
-	if (!HighlightingEnabled || (!ColorAttr.ForegroundColor && !ColorAttr.BackgroundColor)) // black on black, default
-	{
-		static const PaletteColors PalColor[]
-		{
-			COL_PANELTEXT,
-			COL_PANELSELECTEDTEXT,
-			COL_PANELCURSOR,
-			COL_PANELSELECTEDCURSOR
-		};
-
-		ColorAttr=colors::PaletteColorToFarColor(PalColor[Pos]);
-	}
-
-	return ColorAttr;
+	FarColor Result{};
+	highlight::configuration::InheritPaletteColor(Result, ColorIndex);
+	return Result;
 }
 
 void FileList::SetShowColor(int Position, bool FileColor) const
