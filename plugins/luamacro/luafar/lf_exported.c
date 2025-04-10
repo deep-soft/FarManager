@@ -2,9 +2,9 @@
 #include <windows.h>
 #include <stdlib.h>
 #include <signal.h>
-#include "luafar.h"
-#include "util.h"
-#include "ustring.h"
+#include "lf_luafar.h"
+#include "lf_util.h"
+#include "lf_string.h"
 
 extern int bit64_push(lua_State *L, INT64 v);
 extern int bit64_getvalue(lua_State *L, int pos, INT64 *target);
@@ -597,7 +597,6 @@ void LF_GetOpenPanelInfo(lua_State* L, struct OpenPanelInfo *aInfo)
 	int cpos;
 	size_t dfn;
 	struct OpenPanelInfo *Info;
-	aInfo->StructSize = sizeof(struct OpenPanelInfo);
 
 	if (!GetExportFunction(L, "GetOpenPanelInfo"))     //+1
 		return;
@@ -624,6 +623,7 @@ void LF_GetOpenPanelInfo(lua_State* L, struct OpenPanelInfo *aInfo)
 	Info = (struct OpenPanelInfo*) AddBufToCollector(L, cpos, sizeof(struct OpenPanelInfo));
 	//---------------------------------------------------------------------------
 	Info->StructSize = sizeof(struct OpenPanelInfo);
+	Info->hPanel     = aInfo->hPanel;
 	Info->FreeSize   = CAST(unsigned __int64, GetOptNumFromTable(L, "FreeSize", 0));
 	Info->Flags      = GetFlagsFromTable(L, -1, "Flags");
 	Info->HostFile   = AddStringToCollectorField(L, cpos, "HostFile");

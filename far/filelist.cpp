@@ -3569,7 +3569,8 @@ void FileList::ChangeDirectoriesFirst(bool Mode)
 	Panel::ChangeDirectoriesFirst(Mode);
 	SortFileList(true);
 	ProcessPluginEvent(FE_CHANGESORTPARAMS, nullptr);
-	Show();
+	if (IsVisible())
+		Show();
 }
 
 void FileList::OnSortingChange()
@@ -5522,7 +5523,8 @@ void FileList::ChangeSortOrder(bool Reverse)
 	Panel::ChangeSortOrder(Reverse);
 	SortFileList(true);
 	ProcessPluginEvent(FE_CHANGESORTPARAMS, nullptr);
-	Show();
+	if (IsVisible())
+		Show();
 }
 
 void FileList::UpdateKeyBar()
@@ -7770,6 +7772,8 @@ void FileList::ShowFileList(bool Fast)
 			UpdateIfChanged(m_UpdatePending);
 	}
 
+	Parent()->HideChildren();
+
 	bool CurFullScreen=IsFullScreen();
 	PrepareViewSettings(m_ViewMode);
 	CorrectPosition();
@@ -8059,6 +8063,7 @@ void FileList::ShowFileList(bool Fast)
 
 	if (m_PanelMode == panel_mode::PLUGIN_PANEL)
 		Parent()->RedrawKeyBar();
+	Parent()->ShowChildren();
 }
 
 

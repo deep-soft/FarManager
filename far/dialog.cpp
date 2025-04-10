@@ -1598,6 +1598,7 @@ void Dialog::ShowDialog(size_t ID)
 	   другим контролом (по координатам), то для "позднего"
 	   контрола тоже нужна прорисовка.
 	*/
+	if (!IsBypassInput())
 	{
 		bool CursorVisible=false;
 		DWORD CursorSize=0;
@@ -1735,13 +1736,14 @@ void Dialog::ShowDialog(size_t ID)
 					else if (CX1 != -1 && CX2 > CX1)
 					{
 						MaxWidth = CX2 - CX1 + 1;
+						size_t MaxWidthFixed = MaxWidth + (Item.Flags & DIF_SHOWAMPERSAND ? 0 : strStr.size() - HiStrlen(strStr));
 
 						if (Item.Flags & DIF_RIGHTTEXT)
-							inplace::fit_to_right(strStr, MaxWidth);
+							inplace::fit_to_right(strStr, MaxWidthFixed);
 						if (Item.Flags & DIF_CENTERTEXT)
-							inplace::fit_to_center(strStr, MaxWidth);
+							inplace::fit_to_center(strStr, MaxWidthFixed);
 						else
-							inplace::fit_to_left(strStr, MaxWidth);
+							inplace::fit_to_left(strStr, MaxWidthFixed);
 					}
 
 					auto LenText = LenStrItem(I, strStr);
@@ -2458,6 +2460,11 @@ bool Dialog::ProcessKey(const Manager::Key& Key)
 			return true;
 	}
 
+	if(IsBypassInput())
+	{
+		return false;
+	}
+
 	if (LocalKey() == KEY_NONE)
 	{
 		return false;
@@ -3133,6 +3140,11 @@ bool Dialog::ProcessMouse(const MOUSE_EVENT_RECORD *MouseEvent)
 	{
 		if (!DlgProc(DN_INPUT,0,&mouse))
 			return true;
+	}
+
+	if(IsBypassInput())
+	{
+		return false;
 	}
 
 	if (!DialogMode.Check(DMODE_SHOW))
@@ -4235,8 +4247,11 @@ intptr_t Dialog::CloseDialog()
 	if (DialogMode.Check(DMODE_BEGINLOOP))
 	{
 		DialogMode.Clear(DMODE_BEGINLOOP);
-		Global->WindowManager->DeleteWindow(shared_from_this());
-		Global->WindowManager->PluginCommit();
+		if (!IsBypassInput())
+		{
+			Global->WindowManager->DeleteWindow(shared_from_this());
+			Global->WindowManager->PluginCommit();
+		}
 	}
 	return result;
 }
@@ -4321,7 +4336,7 @@ void Dialog::ResizeConsole()
 intptr_t Dialog::DlgProc(intptr_t Msg,intptr_t Param1,void* Param2)
 {
 	if (DialogMode.Check(DMODE_ENDLOOP))
-		return 0;
+		return Msg==DN_INPUT?TRUE:FALSE;
 
 	FarDialogEvent de{ sizeof(de), this, Msg, Param1, Param2 };
 
@@ -4460,7 +4475,7 @@ intptr_t Dialog::SendMessage(intptr_t Msg,intptr_t Param1,void* Param2)
 	{
 		if (DialogMode.Check(DMODE_OBJECTS_INITED) && !DialogMode.Check(DMODE_DRAWING) && IsRedrawEnabled())
 		{
-			Global->WindowManager->RefreshWindow(shared_from_this());
+			Global->WindowManager->RefreshWindow(IsBypassInput() ? GetOwner() : shared_from_this());
 			Global->WindowManager->PluginCommit();
 			if (Flush)
 				Global->ScrBuf->Flush();
@@ -6126,7 +6141,8 @@ void Dialog::SetDeleting()
 
 void Dialog::ShowConsoleTitle()
 {
-	ConsoleTitle::SetFarTitle(DialogMode.Check(DMODE_KEEPCONSOLETITLE)? m_ConsoleTitle : GetTitle());
+	if(!IsBypassInput())
+		ConsoleTitle::SetFarTitle(DialogMode.Check(DMODE_KEEPCONSOLETITLE)? m_ConsoleTitle : GetTitle());
 }
 
 Dialog::suppress_redraw::suppress_redraw(Dialog* Dlg):

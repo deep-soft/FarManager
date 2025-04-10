@@ -1168,7 +1168,11 @@ void PluginManager::GetOpenPanelInfo(const plugin_panel* hPlugin, OpenPanelInfo 
 
 	Info->StructSize = sizeof(*Info);
 	Info->hPanel = hPlugin->panel();
-	hPlugin->plugin()->GetOpenPanelInfo(Info);
+
+	// See m_CachedOpenPanelInfo
+	auto InfoCopy = *Info;
+	hPlugin->plugin()->GetOpenPanelInfo(&InfoCopy);
+	*Info = InfoCopy;
 
 	if (Info->CurDir && *Info->CurDir && (Info->Flags & OPIF_REALNAMES) && (Global->CtrlObject->Cp()->ActivePanel()->GetPluginHandle() == hPlugin) && ParsePath(Info->CurDir)!=root_type::unknown)
 		os::fs::set_current_directory(Info->CurDir, false);
@@ -2109,7 +2113,7 @@ bool PluginManager::CallPlugin(const UUID& SysID,int OpenFrom, void *Data,void *
 
 	const auto pPlugin = FindPlugin(SysID);
 
-	if (exception_handling_in_progress() || !pPlugin || !pPlugin->has(iOpen))
+	if (exception_handling_in_progress() || !pPlugin || !pPlugin->has(iOpen) || (!pPlugin->m_Instance && pPlugin->WorkFlags.Check(PIWF_LOADED)))
 		return false;
 
 	auto PluginPanel = Open(pPlugin, OpenFrom, FarUuid, std::bit_cast<intptr_t>(Data));

@@ -1,4 +1,48 @@
 --------------------------------------------------------------------------------
+zg 2025-04-04 05:18:56+03:00 - build 6458
+
+1. continue 6454: various redraw fixes.
+
+--------------------------------------------------------------------------------
+zg 2025-03-29 11:52:25+02:00 - build 6457
+
+1. correction 6456.
+
+2. in some cases dialogs with FDLG_STAY_ON_TOP flag crashed on close.
+
+--------------------------------------------------------------------------------
+zg 2025-03-27 22:52:14+02:00 - build 6456
+
+1. crash at exit when dialog didn't free by far.DialogFree in LuaMacro.
+
+--------------------------------------------------------------------------------
+zg 2025-03-27 21:37:40+02:00 - build 6455
+
+1. DI_TEXT content could be cut off when hotkeys were present.
+
+--------------------------------------------------------------------------------
+zg 2025-03-26 13:38:18+02:00 - build 6454
+
+1. very experimental dialog flag FDLG_STAY_ON_TOP.
+
+--------------------------------------------------------------------------------
+drkns 2025-03-18 23:22:05+00:00 - build 6453
+
+1. Respect panel visibility in FCTL_SETSORTORDER & FCTL_SETDIRECTORIESFIRST API calls.
+
+--------------------------------------------------------------------------------
+drkns 2025-03-18 22:06:19+00:00 - build 6452
+
+1. Ensure that plugins cannot break recursive GetOpenPanelInfoW calls.
+
+--------------------------------------------------------------------------------
+MZK 2025-03-16 17:21:12-04:00 - build 6451
+
+1. gh-918: Introduced type segment
+   Using segment instead of std::pair<int, int> (or similar) because there
+   is no way to remember what the second item represents: length, end, or last.
+
+--------------------------------------------------------------------------------
 drkns 2025-03-07 17:43:00+00:00 - build 6450
 
 1. Revert 6449.
