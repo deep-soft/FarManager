@@ -766,9 +766,6 @@ void Dialog::InitDialogObjects(size_t ID, bool ReInit)
 				ListPtr->ChangeFlags(VMENU_AUTOHIGHLIGHT, (Item.Flags & DIF_LISTAUTOHIGHLIGHT) != 0);
 				ListPtr->ChangeFlags(VMENU_NOMERGEBORDER, (Item.Flags & DIF_LISTNOMERGEBORDER) != 0);
 
-				if (Item.Flags & DIF_LISTAUTOHIGHLIGHT)
-					ListPtr->AssignHighlights();
-
 				ListPtr->SetDialogStyle(DialogMode.Check(DMODE_WARNINGSTYLE));
 				ListPtr->SetPosition(
 					{
@@ -827,9 +824,6 @@ void Dialog::InitDialogObjects(size_t ID, bool ReInit)
 					ListPtr->ChangeFlags(VMENU_DISABLED, (Item.Flags& DIF_DISABLE) != 0);
 					ListPtr->ChangeFlags(VMENU_SHOWAMPERSAND, (Item.Flags& DIF_LISTNOAMPERSAND) == 0);
 					ListPtr->ChangeFlags(VMENU_AUTOHIGHLIGHT, (Item.Flags& DIF_LISTAUTOHIGHLIGHT) != 0);
-
-					if (Item.Flags & DIF_LISTAUTOHIGHLIGHT)
-						ListPtr->AssignHighlights();
 
 					if (Item.ListItems && !DialogMode.Check(DMODE_OBJECTS_CREATED))
 						ListPtr->AddItem(Item.ListItems);
@@ -940,10 +934,12 @@ void Dialog::InitDialogObjects(size_t ID, bool ReInit)
 				const auto ItemIterator = std::ranges::find_if(ListItems, [](FarListItem const& i) { return (i.Flags & LIF_SELECTED) != 0; });
 				if (ItemIterator != ListItems.end())
 				{
+					const auto Text = NullToEmpty(ItemIterator->Text);
+
 					if (Item.Flags & (DIF_DROPDOWNLIST | DIF_LISTNOAMPERSAND))
-						Item.strData = HiText2Str(ItemIterator->Text);
+						Item.strData = HiText2Str(Text);
 					else
-						Item.strData = ItemIterator->Text;
+						Item.strData = Text;
 				}
 			}
 
@@ -1300,8 +1296,6 @@ void Dialog::GetDialogObjectsData()
 {
 	for (auto& i: Items)
 	{
-		const auto IFlags = i.Flags;
-
 		switch (i.Type)
 		{
 			case DI_MEMOEDIT:
@@ -1312,49 +1306,7 @@ void Dialog::GetDialogObjectsData()
 			case DI_COMBOBOX:
 			{
 				if (i.ObjPtr)
-				{
-					const auto EditPtr = static_cast<const DlgEdit*>(i.ObjPtr);
-
-					// подготовим данные
-					// получим данные
-					const auto& strData = EditPtr->GetString();
-
-					if (m_ExitCode >=0 &&
-					        (IFlags & DIF_HISTORY) &&
-					        !(IFlags & DIF_MANUALADDHISTORY) && // при мануале не добавляем
-					        !i.strHistory.empty() &&
-					        Global->Opt->Dialogs.EditHistory)
-					{
-						AddToEditHistory(i, strData);
-					}
-#if 0
-					/* $ 01.08.2000 SVS
-					   ! В History должно заносится значение (для DIF_EXPAND...) перед
-					    расширением среды!
-					*/
-					/*$ 05.07.2000 SVS $
-					Проверка - этот элемент предполагает расширение переменных среды?
-					т.к. функция GetDialogObjectsData() может вызываться самостоятельно
-					Но надо проверить!*/
-					/* $ 04.12.2000 SVS
-					  ! Для DI_PSWEDIT и DI_FIXEDIT обработка DIF_EDITEXPAND не нужна
-					   (DI_FIXEDIT допускается для случая если нету маски)
-					*/
-
-					if ((IFlags&DIF_EDITEXPAND) && i.Type != DI_PSWEDIT && i.Type != DI_FIXEDIT)
-					{
-						strData = os::env::expand(strData);
-						//как бы грязный хак, нам нужно обновить строку чтоб отдавалась правильная строка
-						//для различных DM_* после закрытия диалога, но ни в коем случае нельзя чтоб
-						//высылался DN_EDITCHANGE для этого изменения, ибо диалог уже закрыт.
-						EditPtr->SetCallbackState(false);
-						EditPtr->SetString(strData);
-						EditPtr->SetCallbackState(true);
-
-					}
-#endif
-					i.strData = strData;
-				}
+					i.strData = static_cast<const DlgEdit*>(i.ObjPtr)->GetString();
 
 				break;
 			}
@@ -1736,7 +1688,7 @@ void Dialog::ShowDialog(size_t ID)
 					else if (CX1 != -1 && CX2 > CX1)
 					{
 						MaxWidth = CX2 - CX1 + 1;
-						size_t MaxWidthFixed = MaxWidth + (Item.Flags & DIF_SHOWAMPERSAND ? 0 : strStr.size() - HiStrlen(strStr));
+						size_t MaxWidthFixed = MaxWidth + (Item.Flags & DIF_SHOWAMPERSAND ? 0 : visual_string_length(strStr) - HiStrlen(strStr));
 
 						if (Item.Flags & DIF_RIGHTTEXT)
 							inplace::fit_to_right(strStr, MaxWidthFixed);
@@ -2560,7 +2512,6 @@ bool Dialog::ProcessKey(const Manager::Key& Key)
 			case KEY_MSWHEEL_RIGHT:
 			case KEY_NUMENTER:
 			case KEY_ENTER:
-			case KEY_NUMPAD5:
 				auto& List = Items[m_FocusPos].ListPtr;
 				int CurListPos=List->GetSelectPos();
 				List->ProcessKey(Key);
@@ -4239,6 +4190,15 @@ intptr_t Dialog::CloseDialog()
 	const auto result = DlgProc(DN_CLOSE, m_ExitCode, nullptr);
 	if (!result)
 		return 0;
+
+	if (m_ExitCode >= 0 && Global->Opt->Dialogs.EditHistory)
+	{
+		for (auto& i: Items)
+		{
+			if (i.Flags & DIF_HISTORY && !(i.Flags & DIF_MANUALADDHISTORY) && !i.strHistory.empty())
+				AddToEditHistory(i, i.strData);
+		}
+	}
 
 	GetDialogObjectsExpandData();
 	DialogMode.Set(DMODE_ENDLOOP);

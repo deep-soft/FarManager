@@ -838,7 +838,7 @@ intptr_t WINAPI apiMenuFn(
 				FarMenu->SetSelectPos(0,1);
 
 			if (Flags & (FMENU_AUTOHIGHLIGHT | FMENU_REVERSEAUTOHIGHLIGHT))
-				FarMenu->AssignHighlights((Flags & FMENU_REVERSEAUTOHIGHLIGHT) != 0);
+				FarMenu->EnableAutoHighlight((Flags & FMENU_REVERSEAUTOHIGHLIGHT) != 0);
 
 			FarMenu->SetTitle(NullToEmpty(Title));
 
@@ -2558,7 +2558,7 @@ static intptr_t WINAPI apiRegExpControl(HANDLE hHandle, FAR_REGEXP_CONTROL_COMMA
 		struct regex_handle
 		{
 			RegExp Regex;
-			named_regex_match NamedMatch;
+			std::vector<RegExpNamedGroup> NamedGroupsFlat;
 		};
 
 		switch (Command)
@@ -2574,7 +2574,9 @@ static intptr_t WINAPI apiRegExpControl(HANDLE hHandle, FAR_REGEXP_CONTROL_COMMA
 		case RECTL_COMPILE:
 			try
 			{
-				static_cast<regex_handle*>(hHandle)->Regex.Compile(static_cast<const wchar_t*>(Param2), OP_PERLSTYLE);
+				auto& Handle = *static_cast<regex_handle*>(hHandle);
+				Handle.NamedGroupsFlat.clear();
+				Handle.Regex.Compile(static_cast<const wchar_t*>(Param2), OP_PERLSTYLE);
 				return true;
 			}
 			catch (regex_exception const& e)
@@ -2587,27 +2589,17 @@ static intptr_t WINAPI apiRegExpControl(HANDLE hHandle, FAR_REGEXP_CONTROL_COMMA
 			return static_cast<regex_handle*>(hHandle)->Regex.Optimize();
 
 		case RECTL_MATCHEX:
-		{
-			auto& Handle = *static_cast<regex_handle*>(hHandle);
-			const auto data = static_cast<RegExpSearch*>(Param2);
-			regex_match Match;
-
-			if (!Handle.Regex.MatchEx({ data->Text, static_cast<size_t>(data->Length) }, data->Position, Match, &Handle.NamedMatch))
-				return false;
-
-			const auto MaxSize = std::min(static_cast<size_t>(data->Count), Match.Matches.size());
-			std::copy_n(Match.Matches.cbegin(), MaxSize, data->Match);
-			data->Count = MaxSize;
-			return true;
-		}
-
 		case RECTL_SEARCHEX:
 		{
 			auto& Handle = *static_cast<regex_handle*>(hHandle);
 			const auto data = static_cast<RegExpSearch*>(Param2);
 			regex_match Match;
 
-			if (!Handle.Regex.SearchEx({ data->Text, static_cast<size_t>(data->Length) }, data->Position, Match, &Handle.NamedMatch))
+			const auto Handler = Command == RECTL_SEARCHEX?
+				&RegExp::SearchEx :
+				&RegExp::MatchEx;
+
+			if (!(Handle.Regex.*Handler)({ data->Text, static_cast<size_t>(data->Length) }, data->Position, Match))
 				return false;
 
 			const auto MaxSize = std::min(static_cast<size_t>(data->Count), Match.Matches.size());
@@ -2623,9 +2615,30 @@ static intptr_t WINAPI apiRegExpControl(HANDLE hHandle, FAR_REGEXP_CONTROL_COMMA
 		{
 			const auto& Handle = *static_cast<regex_handle const*>(hHandle);
 			const auto Str = static_cast<wchar_t const*>(Param2);
-			const auto Iterator = Handle.NamedMatch.Matches.find(Str);
-			return Iterator == Handle.NamedMatch.Matches.cend()? 0 : Iterator->second;
+			const auto& NamedGroups = Handle.Regex.GetNamedGroups();
+			const auto Iterator = NamedGroups.find(Str);
+			return Iterator == NamedGroups.cend()? 0 : Iterator->second;
 		}
+
+		case RECTL_GETNAMEDGROUPS:
+			{
+				auto& Handle = *static_cast<regex_handle*>(hHandle);
+
+				if (Handle.NamedGroupsFlat.empty())
+				{
+					const auto& NamedGroups = Handle.Regex.GetNamedGroups();
+					Handle.NamedGroupsFlat.reserve(NamedGroups.size());
+					std::ranges::transform(NamedGroups, std::back_inserter(Handle.NamedGroupsFlat), [](const auto& i)
+					{
+						return RegExpNamedGroup{ i.second, i.first.c_str() };
+					});
+
+					std::ranges::sort(Handle.NamedGroupsFlat, {}, &RegExpNamedGroup::Index);
+				}
+
+				*static_cast<RegExpNamedGroup const**>(Param2) = Handle.NamedGroupsFlat.data();
+				return Handle.NamedGroupsFlat.size();
+			}
 
 		default:
 			return false;

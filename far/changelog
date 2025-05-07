@@ -1,4 +1,140 @@
 --------------------------------------------------------------------------------
+skipik 2025-05-07 19:52:21+03:00 - build 6479
+
+1. SQLite v3.49.2.
+
+--------------------------------------------------------------------------------
+drkns 2025-05-06 00:45:37+02:00 - build 6478
+
+1. gh-945: Edit box histories should not be saved on cancelled DN_CLOSE.
+
+--------------------------------------------------------------------------------
+drkns 2025-05-05 17:05:48+01:00 - build 6477
+
+1. Error handling improvements.
+
+2. gh-920: Initialization issue with inaccessible paths.
+
+--------------------------------------------------------------------------------
+drkns 2025-05-05 13:31:13+01:00 - build 6476
+
+1. A few fixes in setting file attributes:
+   - redundant attempts to set file owner when processing multiple file
+   - make setting file owner work on network paths (hopefully)
+   - UB during time comparison.
+
+2. Refactoring.
+
+--------------------------------------------------------------------------------
+drkns 2025-05-03 23:42:50+01:00 - build 6475
+
+1. From MZK: continue 6473.
+
+--------------------------------------------------------------------------------
+drkns 2025-05-03 22:26:40+01:00 - build 6474
+
+1. Continue (and fix) 6398.
+
+2. Refactoring.
+
+--------------------------------------------------------------------------------
+MZK 2025-05-03 16:58:59-04:00 - build 6473
+
+1. The found positions (row, character) in the Find All menu of the Internal Editor
+   are now displayed in two fixed columns at the left. These columns are always
+   visible and do not scroll horizontally with the found lines. The Shift+F5 key
+   combination toggles visibility of these columns.
+
+2. Refactoring.
+
+--------------------------------------------------------------------------------
+drkns 2025-05-03 16:58:08+01:00 - build 6472
+
+1. gh-944: Properly take character widths into account in a few more places.
+
+--------------------------------------------------------------------------------
+drkns 2025-04-29 19:42:21+01:00 - build 6471
+
+1. From Shmuel: crash on incorrect data from plugin.
+
+--------------------------------------------------------------------------------
+johnd0e 2025-04-29 18:27:59+02:00 - build 6470
+
+1. Fix incorrect item selection when opening combobox.
+
+--------------------------------------------------------------------------------
+drkns 2025-04-25 22:04:11+01:00 - build 6469
+
+1. Correction of 1434: restore trailing spaces trimming in command line history.
+
+--------------------------------------------------------------------------------
+drkns 2025-04-24 17:44:08+01:00 - build 6468
+
+1. gh-940: Editor Find All does not work.
+
+--------------------------------------------------------------------------------
+drkns 2025-04-22 21:28:12+01:00 - build 6467
+
+1. Fix replace in far:regex.
+
+2. Refactoring.
+
+--------------------------------------------------------------------------------
+drkns 2025-04-22 02:04:56+01:00 - build 6466
+
+1. far:regex: selecting matches in the list selects the corresponding part of the test string.
+
+--------------------------------------------------------------------------------
+drkns 2025-04-21 12:47:09+01:00 - build 6465
+
+1. Exception handling improvements.
+
+2. Regex improvements:
+   - Replace stops on unknown numbered or named groups.
+   - Minor far:regex UI improvements.
+   - Minor RECTL_GETNAMEDGROUPS changes:
+     - Returns all compiled groups, not only found ones.
+     - Results are valid till the next compile, not search/match.
+
+--------------------------------------------------------------------------------
+drkns 2025-04-20 21:28:54+01:00 - build 6464
+
+1. Fix inconsistency in regex replace.
+   Replace not found named groups with empty strings, same as not found numbered groups.
+
+--------------------------------------------------------------------------------
+drkns 2025-04-20 02:08:46+01:00 - build 6463
+
+1. Remove extra complexity from conversions between visual and real positions in edit controls.
+
+2. Optimize adding colors to editor.
+
+--------------------------------------------------------------------------------
+drkns 2025-04-16 21:31:45+01:00 - build 6462
+
+1. From Shmuel:
+   Plugin API: RECTL_GETNAMEDGROUPS.
+   Allows the caller to query named groups and their indices in the latest search/match.
+   Param2 - an out pointer to RegExpNamedGroup*.
+   Return value: the number of groups.
+   Results are valid until the next search/match.
+
+--------------------------------------------------------------------------------
+drkns 2025-04-16 20:01:22+01:00 - build 6461
+
+1. Refactoring.
+
+--------------------------------------------------------------------------------
+shmuel 2025-04-10 23:18:19+03:00 - build 6460
+
+1. Continue 6459.
+
+--------------------------------------------------------------------------------
+shmuel 2025-04-10 21:43:20+03:00 - build 6459
+
+1. MacroAPI: Correct Dlg.GetValue to return -1 where it should, according to the Encyclopedia.
+
+--------------------------------------------------------------------------------
 zg 2025-04-04 05:18:56+03:00 - build 6458
 
 1. continue 6454: various redraw fixes.

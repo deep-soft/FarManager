@@ -559,6 +559,29 @@ protected:
 		std::optional<DWORD> m_ConsoleMode;
 	};
 
+	static bool IsVtEnabled()
+	{
+		DWORD Mode;
+		return ::console.GetMode(::console.GetOutputHandle(), Mode) && Mode & ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+	}
+
+	static bool send_vt_command(string_view const Command)
+	{
+		// Happy path
+		if (IsVtEnabled())
+			return ::console.Write(Command);
+
+		// Legacy console
+		if (!::console.IsVtSupported())
+			return false;
+
+		// If VT is not enabled, we enable it temporarily
+		if ([[maybe_unused]] scoped_vt_output const VtOutput{})
+			return ::console.Write(Command);
+
+		return false;
+	}
+
 	static string query_vt(string_view const Command)
 	{
 		// A VT query works as follows:
@@ -599,8 +622,8 @@ protected:
 
 		const auto Dummy = CSI L"0c"sv;
 
-		if (!::console.Write(concat(Dummy, Command, Dummy)))
-			throw far_exception(L"WriteConsole"sv);
+		if (!send_vt_command(concat(Dummy, Command, Dummy)))
+			throw far_exception(L"send_vt_command"sv);
 
 		string Response;
 
@@ -2738,12 +2761,6 @@ protected:
 		return true;
 	}
 
-	bool console::IsVtEnabled() const
-	{
-		DWORD Mode;
-		return GetMode(GetOutputHandle(), Mode) && Mode & ENABLE_VIRTUAL_TERMINAL_PROCESSING;
-	}
-
 	short console::GetDelta() const
 	{
 		CONSOLE_SCREEN_BUFFER_INFO csbi;
@@ -3083,6 +3100,10 @@ protected:
 
 	std::optional<bool> console::is_grapheme_clusters_on() const
 	{
+		// No need to make noise on legacy systems
+		if (!IsVtSupported())
+			return {};
+
 		try
 		{
 #define DECRQM_REQUEST "?2027"
@@ -3110,8 +3131,16 @@ protected:
 
 			switch (ResponseData[Prefix.size()])
 			{
+			case L'0':
+				LOGWARNING(L"DECRQM 2027 query is not supported"sv);
+				return {};
+
+			case L'1':
 			case L'3': return true;
+
+			case L'2':
 			case L'4': return false;
+
 			default:
 				give_up();
 				std::unreachable();
@@ -3143,23 +3172,6 @@ protected:
 		}
 
 		return true;
-	}
-
-	bool console::send_vt_command(string_view Command) const
-	{
-		// Happy path
-		if (::console.IsVtEnabled())
-			return Write(Command);
-
-		// Legacy console
-		if (!IsVtSupported())
-			return false;
-
-		// If VT is not enabled, we enable it temporarily
-		if ([[maybe_unused]] scoped_vt_output const VtOutput{})
-			return Write(Command);
-
-		return false;
 	}
 }
 

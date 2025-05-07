@@ -117,24 +117,27 @@ intptr_t message_context::DlgProc(Dialog* Dlg,intptr_t Msg,intptr_t Param1,void*
 				case KEY_F3:
 					if(ErrorState)
 					{
-						const string Errors[]
+						const std::pair<wchar_t const*, string> Strings[]
 						{
-							ErrorState->ErrnoStr(),
-							ErrorState->Win32ErrorStr(),
-							ErrorState->NtErrorStr(),
+							{ L"errno:",     ErrorState->ErrnoStr() },
+							{ L"LastError:", ErrorState->Win32ErrorStr() },
+							{ L"NTSTATUS:",  ErrorState->NtErrorStr() },
+							{ L"Location:",  source_location_to_string(ErrorState->Location) },
 						};
 
-						const auto MaxStr = std::max(Errors[0].size(), Errors[1].size());
+						const auto SizeProjection = [](const auto& i){ return i.second.size(); };
+						const auto MaxStr = SizeProjection(*std::ranges::max_element(Strings, {}, SizeProjection));
 						const auto SysArea = 5 * 2;
 						const auto FieldsWidth = std::max(80 - SysArea, std::min(static_cast<int>(MaxStr), ScrX - SysArea));
 
 						DialogBuilder Builder(lng::MError);
-						Builder.AddText(L"errno:");
-						Builder.AddConstEditField(Errors[0], FieldsWidth);
-						Builder.AddText(L"LastError:");
-						Builder.AddConstEditField(Errors[1], FieldsWidth);
-						Builder.AddText(L"NTSTATUS:");
-						Builder.AddConstEditField(Errors[2], FieldsWidth);
+
+						for (const auto& [k, v]: Strings)
+						{
+							Builder.AddText(k);
+							Builder.AddConstEditField(v, FieldsWidth);
+						}
+
 						Builder.AddOK();
 						Builder.ShowDialog();
 					}
@@ -255,7 +258,9 @@ static message_result MessageImpl(
 			append(strClipText, ErrorMessage, Eol);
 
 		if (!SystemErrorMessage.empty())
-			append(strClipText, SystemErrorMessage, Eol, Eol);
+			append(strClipText, SystemErrorMessage, Eol);
+
+		append(strClipText, Eol);
 
 		if (!Strings.empty())
 			Strings.emplace_back(L"\x1"sv);

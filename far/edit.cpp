@@ -1873,14 +1873,14 @@ int Edit::RealPosToVisual(int const Pos, position_parser_state* const  State) co
 {
 	const auto TabSize = GetTabExpandMode() == EXPAND_ALLTABS? 1 : GetTabSize();
 
-	return static_cast<int>(string_pos_to_visual_pos(m_Str, Pos, TabSize));
+	return static_cast<int>(string_pos_to_visual_pos(m_Str, Pos, TabSize, State));
 }
 
 int Edit::VisualPosToReal(int const Pos, position_parser_state*const  State) const
 {
 	const auto TabSize = GetTabExpandMode() == EXPAND_ALLTABS? 1 : GetTabSize();
 
-	return static_cast<int>(visual_pos_to_string_pos(m_Str, Pos, TabSize));
+	return static_cast<int>(visual_pos_to_string_pos(m_Str, Pos, TabSize, State));
 }
 
 void Edit::Select(int Start,int End)
@@ -2036,6 +2036,9 @@ void Edit::ApplyColor(std::multiset<ColorItem> const& Colors, int XPos, int Focu
 			continue;
 
 		auto First = RealToVisual.get(CurItem.StartPos);
+		if (First - FocusedLeftPos >= Width)
+			continue;
+
 		const auto LastFirst = RealToVisual.get(CurItem.EndPos);
 		int LastLast = LastFirst;
 
@@ -2048,9 +2051,6 @@ void Edit::ApplyColor(std::multiset<ColorItem> const& Colors, int XPos, int Focu
 				break;
 			}
 		}
-
-		if (First - FocusedLeftPos >= Width)
-			continue;
 
 		if (LastLast < FocusedLeftPos)
 			continue;
