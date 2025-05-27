@@ -245,7 +245,7 @@ jobs:
 
       - name: Sign Windows exe and dll files
         continue-on-error: true
-        uses: deep-soft/code-sign-action@v9
+        uses: deep-soft/code-sign-action@v10
         with:
           certificate: '${{ secrets.WINDOWS_PFX_BASE64 }}'
           password: '${{ secrets.WINDOWS_PFX_PASSWORD }}'
@@ -342,7 +342,7 @@ jobs:
       - name: extra - Sign Windows exe and dll files
         if: always() && inputs.extra_plugins_profile && matrix.platform_sln == 'x64'
         continue-on-error: true
-        uses: deep-soft/code-sign-action@v9
+        uses: deep-soft/code-sign-action@v10
         with:
           certificate: '${{ secrets.WINDOWS_PFX_BASE64 }}'
           password: '${{ secrets.WINDOWS_PFX_PASSWORD }}'
