@@ -42,9 +42,6 @@ static void WINAPI FreeUserData(void* const UserData, const FarPanelItemFreeInfo
 bool GetList(PluginPanelItem*& pPanelItem, size_t& ItemsNumber, PerfThread& Thread)
 {
 	//    Lock l(&Thread); // it's already locked in Plist::GetFindData
-	FILETIME ftSystemTime;
-	//Prepare system time to subtract dwElapsedTime
-	GetSystemTimeAsFileTime(&ftSystemTime);
 	auto pData = Thread.ProcessData();
 
 	if (pData.empty() || !Thread.IsOK())
@@ -73,18 +70,14 @@ bool GetList(PluginPanelItem*& pPanelItem, size_t& ItemsNumber, PerfThread& Thre
 		CurItem.UserData.Data = new ProcessData();
 		CurItem.UserData.FreeData = FreeUserData;
 
-		if (!pd.ftCreation.dwHighDateTime && pd.dwElapsedTime)
+		ULARGE_INTEGER const CreationTime{ .QuadPart = pd.CreationTime };
+		FILETIME const CreationFileTime
 		{
-			ULARGE_INTEGER St;
-			St.LowPart = ftSystemTime.dwLowDateTime;
-			St.HighPart = ftSystemTime.dwHighDateTime;
-			ULARGE_INTEGER Cr;
-			Cr.QuadPart = St.QuadPart - pd.dwElapsedTime * 10000000;
-			pd.ftCreation.dwLowDateTime = Cr.LowPart;
-			pd.ftCreation.dwHighDateTime = Cr.HighPart;
-		}
+			.dwLowDateTime = CreationTime.LowPart,
+			.dwHighDateTime = CreationTime.HighPart,
+		};
 
-		CurItem.CreationTime = CurItem.LastWriteTime = CurItem.LastAccessTime = CurItem.ChangeTime = pd.ftCreation;
+		CurItem.CreationTime = CurItem.LastWriteTime = CurItem.LastAccessTime = CurItem.ChangeTime = CreationFileTime;
 		const auto ullSize = pd.qwCounters[IDX_WORKINGSET] + pd.qwCounters[IDX_PAGEFILE];
 		CurItem.FileSize = ullSize;
 		CurItem.AllocationSize = pd.qwResults[IDX_PAGEFILE];
@@ -96,7 +89,7 @@ bool GetList(PluginPanelItem*& pPanelItem, size_t& ItemsNumber, PerfThread& Thre
 		CurItem.NumberOfLinks = pd.dwThreads;
 		GetPData(*static_cast<ProcessData*>(CurItem.UserData.Data), pd);
 
-		if (pd.dwProcessId == 0 && pd.ProcessName == L"_Total")
+		if (pd.dwProcessId == 0 && pd.ProcessName == L"_Total"sv)
 			CurItem.FileAttributes |= FILE_ATTRIBUTE_HIDDEN;
 
 		if (pd.Bitness != Thread.GetDefaultBitness())

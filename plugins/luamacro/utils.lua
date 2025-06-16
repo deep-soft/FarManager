@@ -632,8 +632,8 @@ end
 -- ...nager\unicode_far\CommonProfile\Macros\scripts\test1.lua:9:
 -- attempt to perform arithmetic on a nil value
 
-local function ErrMsgLoad (msg, filename, isMoonScript, mode)
-  local title = isMoonScript and mode=="compile" and "MoonScript" or "LuaMacro"
+local function ErrMsgLoad (msg, filename, isMoonScript, mode, stacklevelinfo)
+  local title = "LuaMacro"
 
   if type(msg)~="string" and type(msg)~="number" then
     ErrMsg(filename..":\n<non-string error message>", title, nil, "w")
@@ -641,37 +641,16 @@ local function ErrMsgLoad (msg, filename, isMoonScript, mode)
   end
 
   if mode=="run" then
-    local fname, line, found
-    fname = msg:match("^error loading module .- from file '([^\n]+)':")
+    local fname, line
+    fname = msg:match("^error loading module .- from file '([^\n]+)':") or
+      msg:match("^[^\n]+\\moonscript.lua:%d+: ([^\n]+): Failed to parse:")
     if fname then
-      found = true
-      line = tonumber(msg:match("^.-\n.-:(%d+):"))
+      line = msg:match("^.-\n.-:(%d+):") or msg:match("^.-\n %[(%d+)%] >>")
+      line = line and tonumber(line)
     else
-      fname,line = msg:match("^(.-):(%d+):")
-      if fname then
-        line = tonumber(line)
-        if string_sub(fname,1,3) ~= "..." then
-          found = true
-        else
-          fname = string_sub(fname,4)
-          -- for k=1,5 do
-          --   if fname:utf8valid() then break end
-          --   fname = string_sub(fname,2)
-          -- end
-          fname = fname:gsub("/", "\\")
-          local middle = fname:match([=[^[^\\]*\[^\\]+\]=])
-          if middle then
-            local from = string_find(filename:lower(), middle:lower(), 1, true)
-            if from then
-              fname = string_sub(filename,1,from-1) .. fname
-              local attr = win.GetFileAttr(fname)
-              found = attr and not attr:find("d")
-            end
-          end
-        end
-      end
+      fname,line = stacklevelinfo.source:match("^@(.+)"), stacklevelinfo.currentline
     end
-    if found then
+    if fname and win.GetFileAttr(fname) then
       if 2 == ErrMsg(msg, title, "OK;Edit", "wl") then
         if isMoonScript then line = GetMoonscriptLineNumber(fname,line) end
         editor.Editor(fname,nil,nil,nil,nil,nil,nil,line or 1,nil,65001)
@@ -683,7 +662,6 @@ local function ErrMsgLoad (msg, filename, isMoonScript, mode)
     if 2 == far.Message(msg, title, "OK;Edit", "wl") then
       local pattern = isMoonScript and "%[(%d+)%] >>" or "^[^\n]-:(%d+):"
       local line = tonumber(msg:match(pattern))
-      if line and isMoonScript then line = GetMoonscriptLineNumber(filename,line) end
       editor.Editor(filename,nil,nil,nil,nil,nil,nil,line or 1,nil,65001)
     end
   end
@@ -778,6 +756,7 @@ local function LoadMacros (unload, paths)
       local f, msg = (isMoonScript and moonscript.loadfile or loadfile)(FullPath)
       if not f then
         numerrors=numerrors+1
+        msg = ('Error in MoonScript file: %s\n%s'):format(FullPath, string.gsub(msg, "\n\t", "\n   "))
         ErrMsgLoad(msg,FullPath,isMoonScript,"compile")
         return
       end
@@ -792,14 +771,18 @@ local function LoadMacros (unload, paths)
       for _,name in ipairs(FuncList2) do env[name]=DummyFunc; end
       setmetatable(env,gmeta)
       setfenv(f, env)
-      local ok, msg = xpcall(function() return f(FullPath, LoadCounter) end, debug.traceback)
+      local stacklevelinfo
+      local ok, msg = xpcall(function() return f(FullPath, LoadCounter) end, function (err)
+        stacklevelinfo = debug.getinfo(2)
+        return debug.traceback(err)
+      end)
       if ok then
         for _,name in ipairs(FuncList1) do env[name]=nil; end
         for _,name in ipairs(FuncList2) do env[name]=nil; end
       else
         numerrors=numerrors+1
         msg = string.gsub(msg,"\n\t","\n   ")
-        ErrMsgLoad(msg,FullPath,isMoonScript,"run")
+        ErrMsgLoad(msg,FullPath,isMoonScript,"run",stacklevelinfo)
       end
     end
 

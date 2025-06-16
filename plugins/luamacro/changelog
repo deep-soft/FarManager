@@ -1,3 +1,20 @@
+johnd0e 2025-06-08 21:28:12+02:00 - build 881
+
+1. Enhance message on moonscript macrofile loading to include error source filename.
+
+2. Enhance detecting macro loading error source.
+
+3. Fix edit position on moonscript parsing error.
+
+shmuel 2025-05-27 23:16:21+03:00 - build 880
+
+1. LuaFAR (far.Menu): refactoring.
+
+shmuel 2025-05-27 13:23:29+03:00 - build 879
+
+1. LuaFAR (far.Menu): allow each menu item to be specified
+   as either a string or a table (was: table only).
+
 shmuel 2025-05-16 21:19:24+03:00 - build 878
 
 1. Revert the last commit.

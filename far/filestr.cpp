@@ -38,7 +38,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "filestr.hpp"
 
 // Internal:
-#include "nsUniversalDetectorEx.hpp"
+#include "uchardet.hpp"
 #include "config.hpp"
 #include "codepage.hpp"
 #include "codepage_selection.hpp"
@@ -308,26 +308,62 @@ static bool GetUnicodeCpUsingBOM(const os::fs::file& File, uintptr_t& Codepage)
 static bool GetUnicodeCpUsingWindows(const void* Data, size_t Size, uintptr_t& Codepage)
 {
 	// MSDN documents IS_TEXT_UNICODE_BUFFER_TOO_SMALL but there is no such thing
-	if (Size < 2)
+	// We can also check the size ourselves (IS_TEXT_UNICODE_ODD_LENGTH) to avoid pointless calls
+	if (Size < 2 || Size & 1)
 		return false;
 
-	int Test = IS_TEXT_UNICODE_UNICODE_MASK | IS_TEXT_UNICODE_REVERSE_MASK | IS_TEXT_UNICODE_NOT_UNICODE_MASK | IS_TEXT_UNICODE_NOT_ASCII_MASK;
+	int Test = IS_TEXT_UNICODE_NOT_UNICODE_MASK | IS_TEXT_UNICODE_UNICODE_MASK | IS_TEXT_UNICODE_REVERSE_MASK;
 
 	// return value is ignored - only some tests might pass
 	IsTextUnicode(Data, static_cast<int>(Size), &Test);
 
-	if ((Test & IS_TEXT_UNICODE_NOT_UNICODE_MASK) || !(Test & IS_TEXT_UNICODE_NOT_ASCII_MASK))
+	if (Test & IS_TEXT_UNICODE_NOT_UNICODE_MASK)
 		return false;
 
-	if (Test & IS_TEXT_UNICODE_UNICODE_MASK)
+	// High confidence, non-ambiguous
+	if (Test & IS_TEXT_UNICODE_ASCII16)
 	{
 		Codepage = CP_UTF16LE;
 		return true;
 	}
 
-	if (Test & IS_TEXT_UNICODE_REVERSE_MASK)
+	// High confidence, non-ambiguous
+	if (Test & IS_TEXT_UNICODE_REVERSE_ASCII16)
 	{
 		Codepage = CP_UTF16BE;
+		return true;
+	}
+
+	// IS_TEXT_UNICODE_CONTROLS can be a big false positive due to CJK_SPACE being checked:
+	// U+3000 '　' in LE is the same as U+0030 ('0') in BE.
+	// In other words, any BE text with '0' in it will trigger IS_TEXT_UNICODE_CONTROLS.
+	// Looks like IS_TEXT_UNICODE_REVERSE_CONTROLS doesn't check it at all, so it's better to try it first:
+
+	// High confidence, non-ambiguous
+	if (Test & IS_TEXT_UNICODE_REVERSE_CONTROLS)
+	{
+		Codepage = CP_UTF16BE;
+		return true;
+	}
+
+	// Medium confidence, statistical analysis
+	if (Test & IS_TEXT_UNICODE_STATISTICS)
+	{
+		Codepage = CP_UTF16LE;
+		return true;
+	}
+
+	// Medium confidence, statistical analysis
+	if (Test & IS_TEXT_UNICODE_REVERSE_STATISTICS)
+	{
+		Codepage = CP_UTF16BE;
+		return true;
+	}
+
+	// Low confidence, false positives (see above)
+	if (Test & IS_TEXT_UNICODE_CONTROLS)
+	{
+		Codepage = CP_UTF16LE;
 		return true;
 	}
 
@@ -350,8 +386,8 @@ static bool GetCpUsingML(std::string_view Str, uintptr_t& Codepage, function_ref
 	// It the string size is 32768 (which we use by default), it can sometimes add up to 65536, which does not fit in unsigned short and becomes 0.
 	// That 0 later goes to a denominator somewhere with rather predictable results.
 	// MS didn't SEH-guard the function, so the exception leaks back into the process and crashes it.
-	// All the factors of 65536 are powers of two, so by reducing such sizes we ensure that even if it overflows, it won't add up to 65536, won't become 0 and won't crash.
-	if (std::has_single_bit(Str.size()))
+	// By reducing such a size we ensure that even if it overflows, it won't add up to 65536, won't become 0 and won't crash.
+	if (Str.size() == 32768)
 		Str.remove_suffix(1);
 
 	int Size = static_cast<int>(Str.size());
@@ -372,15 +408,21 @@ static bool GetCpUsingML(std::string_view Str, uintptr_t& Codepage, function_ref
 	return true;
 }
 
-static bool GetCpUsingHeuristicsWithExceptions(std::string_view const Str, uintptr_t& Codepage)
+static bool GetCpUsingHeuristicsWithExceptions(std::string_view const Str, uintptr_t& Codepage, bool const IgnoreUTF8)
 {
-	const auto IsCodepageNotBlacklisted = [](uintptr_t const Cp)
+	const auto IsCodepageNotBlacklisted = [IgnoreUTF8](uintptr_t const Cp)
 	{
+		if (IgnoreUTF8 && Cp == CP_UTF8)
+			return false;
+
 		return !contains(enum_tokens(Global->Opt->strNoAutoDetectCP.Get(), L",;"sv), str(Cp));
 	};
 
-	const auto IsCodepageWhitelisted = [](uintptr_t const Cp)
+	const auto IsCodepageWhitelisted = [IgnoreUTF8](uintptr_t const Cp)
 	{
+		if (IgnoreUTF8 && Cp == CP_UTF8)
+			return false;
+
 		if (!Global->Opt->CPMenuMode)
 			return true;
 
@@ -396,7 +438,7 @@ static bool GetCpUsingHeuristicsWithExceptions(std::string_view const Str, uintp
 			function_ref(IsCodepageWhitelisted) :
 			function_ref(IsCodepageNotBlacklisted);
 
-	if (GetCpUsingUniversalDetector(Str, Codepage) && IsCodepageAcceptable(Codepage))
+	if (GetCpUsingUniversalDetector(Str, Codepage, IsCodepageAcceptable))
 		return true;
 
 	return GetCpUsingML(Str, Codepage, IsCodepageAcceptable);
@@ -435,21 +477,23 @@ static bool GetFileCodepage(const os::fs::file& File, uintptr_t DefaultCodepage,
 	unsigned long long FileSize = 0;
 	const auto WholeFileRead = File.GetSize(FileSize) && ReadSize == FileSize;
 
-	if (const auto IsUtf8 = encoding::is_valid_utf8({ Buffer.data(), ReadSize }, !WholeFileRead); IsUtf8 != encoding::is_utf8::no)
+	switch (encoding::is_valid_utf8({ Buffer.data(), ReadSize }, !WholeFileRead))
 	{
-		if (IsUtf8 == encoding::is_utf8::yes)
-			Codepage = CP_UTF8;
-		else if (DefaultCodepage == CP_UTF8 || DefaultCodepage == encoding::codepage::ansi() || DefaultCodepage == encoding::codepage::oem())
-			Codepage = DefaultCodepage;
-		else
-			Codepage = encoding::codepage::ansi();
-
+	case encoding::is_utf8::yes:
+		Codepage = CP_UTF8;
 		return true;
+
+	case encoding::is_utf8::no:
+		NotUTF8 = true;
+		break;
+
+	case encoding::is_utf8::yes_ascii:
+		// Even though UTF-8 is a superset of ASCII, we can't take a shortcut yet and detect pure ASCII as UTF-8:
+		// there are multibyte 7-bit encodings, e.g. ISO-2022-JP, so it must go to the detector.
+		break;
 	}
 
-	NotUTF8 = true;
-
-	return GetCpUsingHeuristicsWithExceptions({ Buffer.data(), ReadSize }, Codepage);
+	return GetCpUsingHeuristicsWithExceptions({ Buffer.data(), ReadSize }, Codepage, NotUTF8);
 }
 
 uintptr_t GetFileCodepage(const os::fs::file& File, uintptr_t DefaultCodepage, bool* SignatureFound, bool UseHeuristics)
@@ -459,8 +503,12 @@ uintptr_t GetFileCodepage(const os::fs::file& File, uintptr_t DefaultCodepage, b
 	bool NotUTF8 = false;
 	bool NotUTF16 = false;
 
-	if (!GetFileCodepage(File, DefaultCodepage, Codepage, SignatureFoundValue, NotUTF8, NotUTF16, UseHeuristics))
+	if (!GetFileCodepage(File, DefaultCodepage, Codepage, SignatureFoundValue, NotUTF8, NotUTF16, UseHeuristics) || Codepage == 20127)
 	{
+		// Even though there's a dedicated code page for ASCII - 20127, detecting it as such is not particularly useful.
+		// E.g. if it's an editor and the user adds some localized text and saves the file, there will be useless warnings about unsupported characters.
+		// Better fall back to ANSI or the default.
+
 		Codepage =
 			(NotUTF8 && DefaultCodepage == CP_UTF8) || (NotUTF16 && IsUtf16CodePage(DefaultCodepage))?
 				encoding::codepage::ansi() :
@@ -601,15 +649,19 @@ TEST_CASE("GetCpUsingML_M4000")
 {
 	// https://bugs.farmanager.com/view.php?id=4000
 
-	char c[32768];
-	for (size_t i = 0; i != std::size(c); i += 2)
+	for (size_t i = 2; i != 65536; i *= 2)
 	{
-		c[i + 0] = 0x00;
-		c[i + 1] = 0xE0;
-	}
+		char_ptr c(i);
 
-	uintptr_t Cp;
-	GetCpUsingML({ c, std::size(c) }, Cp, [](uintptr_t){ return true; });
+		for (size_t j = 0; j != c.size(); j += 2)
+		{
+			c[j + 0] = 0x00;
+			c[j + 1] = 0xE0;
+		}
+
+		uintptr_t Cp;
+		GetCpUsingML({ c.data(), c.size() }, Cp, [](uintptr_t) { return true; });
+	}
 
 	SUCCEED();
 }

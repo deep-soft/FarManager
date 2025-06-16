@@ -1,5 +1,6 @@
 ﻿#include <algorithm>
 #include <mutex>
+#include <cassert>
 #include <cstddef>
 #include <cassert>
 
@@ -9,6 +10,8 @@
 #include "ipc.hpp"
 #include "guid.hpp"
 
+#include <algorithm.hpp>
+#include <smart_ptr.hpp>
 #include <utility.hpp>
 
 #include <winperf.h>
@@ -185,43 +188,103 @@ void PerfThread::unlock()
 	ReleaseMutex(hMutex.get());
 }
 
-ProcessPerfData* PerfThread::GetProcessData(DWORD dwPid, DWORD dwThreads)
+ProcessPerfData* PerfThread::GetProcessData(DWORD const Pid, std::wstring_view const ProcessName)
 {
-	std::pair<ProcessPerfData*, size_t> ZeroPid[10];
-	auto ZeroPidIterator = std::begin(ZeroPid);
+	const auto Key = !Pid && ProcessName == L"_Total"sv? static_cast<DWORD>(-1) : Pid;
 
-	if (dwPid)
-	{
-		if (const auto Iterator = m_ProcessesData.find(dwPid); Iterator != m_ProcessesData.end())
-		{
-			return &Iterator->second;
-		}
+	if (const auto Iterator = m_ProcessesData.find(Key); Iterator != m_ProcessesData.end())
+		return &Iterator->second;
 
-		return {};
-	}
-
-	if (ZeroPidIterator == ZeroPid + 1)
-		return ZeroPidIterator->first;
-
-	const auto threads_delta = [dwThreads](ProcessPerfData* Data)
-	{
-		return dwThreads > Data->dwThreads?
-			dwThreads - Data->dwThreads :
-			Data->dwThreads - dwThreads;
-	};
-
-	return std::min_element(std::begin(ZeroPid), ZeroPidIterator, [&](const auto& a, const auto& b)
-	{
-		return threads_delta(a.first) < threads_delta(b.first);
-	})->first;
+	return {};
 }
+
+struct PROCLIST_SYSTEM_PROCESS_INFORMATION
+{
+	ULONG NextEntryOffset;
+	ULONG NumberOfThreads;
+	LARGE_INTEGER WorkingSetPrivateSize;
+	ULONG HardFaultCount;
+	ULONG NumberOfThreadsHighWatermark;
+	ULONGLONG CycleTime;
+	LARGE_INTEGER CreateTime;
+	LARGE_INTEGER UserTime;
+	LARGE_INTEGER KernelTime;
+	UNICODE_STRING ImageName;
+	KPRIORITY BasePriority;
+	HANDLE UniqueProcessId;
+	HANDLE InheritedFromUniqueProcessId;
+	ULONG HandleCount;
+	ULONG SessionId;
+	ULONG_PTR UniqueProcessKey;
+	SIZE_T PeakVirtualSize;
+	SIZE_T VirtualSize;
+	ULONG PageFaultCount;
+	SIZE_T PeakWorkingSetSize;
+	SIZE_T WorkingSetSize;
+	SIZE_T QuotaPeakPagedPoolUsage;
+	SIZE_T QuotaPagedPoolUsage;
+	SIZE_T QuotaPeakNonPagedPoolUsage;
+	SIZE_T QuotaNonPagedPoolUsage;
+	SIZE_T PagefileUsage;
+	SIZE_T PeakPagefileUsage;
+	SIZE_T PrivatePageCount;
+	LARGE_INTEGER ReadOperationCount;
+	LARGE_INTEGER WriteOperationCount;
+	LARGE_INTEGER OtherOperationCount;
+	LARGE_INTEGER ReadTransferCount;
+	LARGE_INTEGER WriteTransferCount;
+	LARGE_INTEGER OtherTransferCount;
+	SYSTEM_THREAD_INFORMATION Threads[1];
+};
 
 bool PerfThread::RefreshImpl()
 {
+	block_ptr<PROCLIST_SYSTEM_PROCESS_INFORMATION> Info;
+	std::unordered_map<uintptr_t, PROCLIST_SYSTEM_PROCESS_INFORMATION const*> ProcessMap;
+
+	if (m_HostName.empty())
+	{
+		Info.reset(sizeof(*Info));
+
+		for (;;)
+		{
+			ULONG ReturnSize{};
+			const auto Result = pNtQuerySystemInformation(SystemProcessInformation, Info.data(), static_cast<ULONG>(Info.size()), &ReturnSize);
+			if (NT_SUCCESS(Result))
+				break;
+
+			if (any_of(Result, STATUS_INFO_LENGTH_MISMATCH, STATUS_BUFFER_OVERFLOW, STATUS_BUFFER_TOO_SMALL))
+			{
+				Info.reset(ReturnSize? ReturnSize : grow_exp(Info.size(), {}));
+				continue;
+			}
+
+			Info.reset();
+		}
+
+		if (!Info.empty())
+		{
+			for (size_t Offset = 0;;)
+			{
+				const auto& ProcessInfo = view_as<PROCLIST_SYSTEM_PROCESS_INFORMATION>(Info.data(), Offset);
+				ProcessMap.emplace(std::bit_cast<uintptr_t>(ProcessInfo.UniqueProcessId), &ProcessInfo);
+
+				if (ProcessInfo.NextEntryOffset)
+					Offset += ProcessInfo.NextEntryOffset;
+				else
+					break;
+			}
+		}
+	}
+
+	// TODO: call NtQuerySystemInformation for fallbacks?
+
 	DebugToken token;
 	const auto dwTicksBeforeRefresh = GetTickCount();
 	std::vector<BYTE> buf(512 * 1024);
 	DWORD dwDeltaTickCount{};
+
+	FILETIME SystemTime;
 
 	for (bool Read = false; !Read;)
 	{
@@ -232,6 +295,10 @@ bool PerfThread::RefreshImpl()
 		{
 		case ERROR_SUCCESS:
 			Read = true;
+
+			// To subtract dwElapsedTime. As close to the read as possible for best accuracy.
+			GetSystemTimeAsFileTime(&SystemTime);
+
 			break;
 
 		case ERROR_LOCK_FAILED:
@@ -318,53 +385,69 @@ bool PerfThread::RefreshImpl()
 		if (!pProcessId)
 			return false;
 
-		auto& Task = NewPData.emplace(*pProcessId, ProcessPerfData{})->second;
+		const auto IsTotal = *pProcessId == 0 && ProcessName == L"_Total"sv;
+
+		// Real process ids can't be odd, so it's fine
+		auto& Task = NewPData.emplace(IsTotal? static_cast<DWORD>(-1) : *pProcessId, ProcessPerfData{}).first->second;
 
 		Task.dwProcessId = *pProcessId;
 		Task.Bitness = DefaultBitness;
 
-		if (const auto Ptr = view_as_opt<DWORD>(pCounter, DataEnd, dwProcessIdCounter))
-			Task.dwProcessId = *Ptr;
-		else
-			return false;
-
-		if (dwThreadCounter)
+		const auto ProcessInfo = [&]() -> PROCLIST_SYSTEM_PROCESS_INFORMATION const*
 		{
-			if (const auto Ptr = view_as_opt<DWORD>(pCounter, DataEnd, dwThreadCounter))
-				Task.dwThreads = *Ptr;
-			else
-				return false;
-		}
+			if (IsTotal)
+				return nullptr;
+
+			const auto ProcesInfoIterator = ProcessMap.find(Task.dwProcessId);
+			return ProcesInfoIterator != ProcessMap.cend()? ProcesInfoIterator->second : nullptr;
+		}();
 
 		ProcessPerfData* pOldTask = {};
-		if (!m_ProcessesData.empty())  // Use prev data if any
+		if (!IsTotal && !m_ProcessesData.empty())  // Use prev data if any
 		{
 			//Get the pointer to the previous instance of this process
-			pOldTask = GetProcessData(Task.dwProcessId, Task.dwThreads);
+			pOldTask = GetProcessData(Task.dwProcessId, Task.ProcessName);
 			if (pOldTask)  // copy process' data from pOldTask to Task
 			{
 				Task = *pOldTask;
 			}
 		}
 
-		if (const auto Ptr = view_as_opt<DWORD>(pCounter, DataEnd, dwPriorityCounter))
-			Task.dwProcessPriority = *Ptr;
+		if (const auto Ptr = dwThreadCounter? view_as_opt<DWORD>(pCounter, DataEnd, dwThreadCounter) : nullptr)
+			Task.dwThreads = *Ptr;
+		else if (ProcessInfo)
+			Task.dwThreads = ProcessInfo->NumberOfThreads;
 		else
 			return false;
 
-		if (dwCreatingPIDCounter)
-		{
-			if (const auto Ptr = view_as_opt<DWORD>(pCounter, DataEnd, dwCreatingPIDCounter))
-				Task.dwCreatingPID = *Ptr;
-			else
-				return false;
-		}
 
-		if (const auto Ptr = view_as_opt<LONGLONG>(pCounter, DataEnd, dwElapsedCounter))
+		if (const auto Ptr = dwPriorityCounter? view_as_opt<DWORD>(pCounter, DataEnd, dwPriorityCounter) : nullptr)
+			Task.dwProcessPriority = *Ptr;
+		else if (ProcessInfo)
+			Task.dwProcessPriority = ProcessInfo->BasePriority;
+		else
+			return false;
+
+
+		if (const auto Ptr = dwCreatingPIDCounter? view_as_opt<DWORD>(pCounter, DataEnd, dwCreatingPIDCounter) : nullptr)
+			Task.dwCreatingPID = *Ptr;
+		else if (ProcessInfo)
+			Task.dwCreatingPID = static_cast<DWORD>(std::bit_cast<uintptr_t>(ProcessInfo->InheritedFromUniqueProcessId));
+		else
+			return false;
+
+
+		if (const auto Ptr = dwElapsedCounter? view_as_opt<LONGLONG>(pCounter, DataEnd, dwElapsedCounter) : nullptr)
 		{
 			if (*Ptr && pObj->PerfFreq.QuadPart)
-				Task.dwElapsedTime = ((pObj->PerfTime.QuadPart - *Ptr) / pObj->PerfFreq.QuadPart);
+			{
+				assert(pObj->PerfFreq.QuadPart == 10'000'000); // 100 ns
+
+				Task.dwElapsedTime = pObj->PerfTime.QuadPart - *Ptr;
+			}
 		}
+		else if (ProcessInfo)
+			Task.dwElapsedTime = ProcessInfo->CreateTime.QuadPart;
 		else
 			return false;
 
@@ -426,21 +509,52 @@ bool PerfThread::RefreshImpl()
 			}
 		}
 
-		if (!pOldTask)
+		if (ProcessInfo)
 		{
-			if (const auto hProcess = !m_HostName.empty() || Task.dwProcessId <= 8? nullptr :
-				handle(OpenProcessForced(&token, PROCESS_QUERY_INFORMATION | PROCESS_VM_READ | READ_CONTROL, Task.dwProcessId)))
+			Task.CreationTime = ProcessInfo->CreateTime.QuadPart;
+			Task.ProcessName = { ProcessInfo->ImageName.Buffer, ProcessInfo->ImageName.Length / sizeof(wchar_t) };
+		}
+
+		if (!pOldTask && m_HostName.empty() && Task.dwProcessId > 8)
+		{
+			auto hProcess = handle(OpenProcessForced(&token, PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, Task.dwProcessId));
+
+			// Try limited to at least get the times etc.
+			if (!hProcess)
+				hProcess = handle(OpenProcessForced(&token, PROCESS_QUERY_LIMITED_INFORMATION, Task.dwProcessId));
+
+			if (hProcess)
 			{
 				get_open_process_data(hProcess.get(), &Task.ProcessName, &Task.FullPath, &Task.CommandLine, {}, {});
-				FILETIME ftExit, ftKernel, ftUser;
-				GetProcessTimes(hProcess.get(), &Task.ftCreation, &ftExit, &ftKernel, &ftUser);
-				SetLastError(ERROR_SUCCESS);
-				Task.dwGDIObjects = pGetGuiResources(hProcess.get(), 0/*GR_GDIOBJECTS*/);
-				Task.dwUSERObjects = pGetGuiResources(hProcess.get(), 1/*GR_USEROBJECTS*/);
+
+				if (!Task.CreationTime)
+				{
+					FILETIME ftCreation, ftExit, ftKernel, ftUser;
+					GetProcessTimes(hProcess.get(), &ftCreation, &ftExit, &ftKernel, &ftUser);
+					Task.CreationTime = ULARGE_INTEGER
+					{
+						.LowPart = ftCreation.dwLowDateTime,
+						.HighPart = ftCreation.dwHighDateTime,
+					}
+					.QuadPart;
+				}
+
+				Task.dwGDIObjects = pGetGuiResources(hProcess.get(), GR_GDIOBJECTS);
+				Task.dwUSERObjects = pGetGuiResources(hProcess.get(), GR_USEROBJECTS);
 
 				if (is_wow64_process(hProcess.get()))
 					Task.Bitness = 32;
 			}
+		}
+
+		if (!Task.CreationTime && Task.dwElapsedTime)
+		{
+			Task.CreationTime = ULARGE_INTEGER
+			{
+				.LowPart = SystemTime.dwLowDateTime,
+				.HighPart = SystemTime.dwHighDateTime,
+			}
+			.QuadPart - Task.dwElapsedTime;
 		}
 
 		if (Task.ProcessName.empty() && !ProcessName.empty())  // if after all this it's still unfilled...
@@ -448,7 +562,7 @@ bool PerfThread::RefreshImpl()
 			// pointer to the process name
 			Task.ProcessName.assign(ProcessName);
 
-			if (Task.dwProcessId > 8)
+			if (!IsTotal && Task.dwProcessId > 8)
 				Task.ProcessName += L".exe";
 		}
 
@@ -579,7 +693,7 @@ void PerfThread::RefreshWMIData()
 		{
 			const std::scoped_lock l(*this);
 
-			if (auto* Data = GetProcessData(i.dwProcessId, i.dwThreads))
+			if (auto* Data = GetProcessData(i.dwProcessId, i.ProcessName))
 				*Data = i;
 		}
 	}
