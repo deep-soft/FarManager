@@ -1,3 +1,19 @@
+drkns 2025-06-21 22:21:00+01:00 - build 218
+
+1. Expose "Working Set - Private" performance counter.
+
+drkns 2025-06-20 22:06:53+01:00 - build 217
+
+1. Correction of 214.
+
+drkns 2025-06-20 20:03:46+01:00 - build 216
+
+1. Correction of 215.
+
+drkns 2025-06-19 21:34:03+01:00 - build 215
+
+1. Normalize CPU usage for multiprocessor systems.
+
 drkns 2025-06-14 01:25:36+01:00 - build 214
 
 1. Fix display of _Total.

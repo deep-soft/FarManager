@@ -2151,23 +2151,9 @@ static int far_Message(lua_State *L)
 	lua_settop(L,6);
 	Msg = NULL;
 
-	if (lua_isstring(L, 1))
-		Msg = check_utf8_string(L, 1, NULL);
-	else
-	{
-		lua_getglobal(L, "tostring");
-
-		if (lua_isfunction(L,-1))
-		{
-			lua_pushvalue(L,1);
-			lua_call(L,1,1);
-			Msg = check_utf8_string(L,-1,NULL);
-		}
-
-		if (Msg == NULL) luaL_argerror(L, 1, "cannot convert to string");
-
-		lua_replace(L,1);
-	}
+	luaL_tolstring(L, 1, NULL);
+	Msg = check_utf8_string(L, -1, NULL);
+	lua_replace(L,1);
 
 	Title   = opt_utf8_string(L, 2, L"Message");
 	Buttons = opt_utf8_string(L, 3, L";OK");
@@ -5343,23 +5329,12 @@ static int far_MakeMenuItems(lua_State *L)
 			const char *start;
 			char* str;
 
-			lua_getglobal(L, "tostring");          //+2
-
-			if (i == 1 && lua_type(L,-1) != LUA_TFUNCTION)
-				luaL_error(L, "global `tostring' is not function");
-
 			lua_pushvalue(L, i);                   //+3
-
-			if (0 != lua_pcall(L, 1, 1, 0))         //+2 (items,str)
-				luaL_error(L, lua_tostring(L, -1));
-
-			if (lua_type(L, -1) != LUA_TSTRING)
-				luaL_error(L, "tostring() returned a non-string value");
-
+			start = luaL_tolstring(L, -1, &len_arg);
 			sprintf(buf_prefix, "%*d%s ", maxno, i, delim);
-			start = lua_tolstring(L, -1, &len_arg);
 			str = (char*) malloc(len_arg + 1);
 			memcpy(str, start, len_arg + 1);
+			lua_pop(L, 2);                         //+1 (items)
 
 			for (j=0; j<len_arg; j++)
 				if (str[j] == '\0') str[j] = ' ';
@@ -5381,13 +5356,12 @@ static int far_MakeMenuItems(lua_State *L)
 				lua_setfield(L, -2, "text");         //+3
 				lua_pushvalue(L, i);
 				lua_setfield(L, -2, "arg");          //+3
-				lua_rawseti(L, -3, item++);          //+2 (items,str)
+				lua_rawseti(L, -2, item++);          //+2 (items,str)
 				strcpy(buf_prefix, buf_space);
 				start = nl;
 			}
 
 			free(str);
-			lua_pop(L, 1);                         //+1 (items)
 		}
 	}
 
@@ -6290,6 +6264,12 @@ static int far_DetectCodePage(lua_State *L)
 	return 1;
 }
 
+static int far_GetPluginId(lua_State *L)
+{
+	lua_pushlstring(L, (char*)GetPluginData(L)->PluginId, sizeof(UUID));
+	return 1;
+}
+
 #define PAIR(prefix,txt) {#txt, prefix ## _ ## txt}
 
 const luaL_Reg timer_methods[] =
@@ -6561,6 +6541,7 @@ const luaL_Reg far_funcs[] =
 	PAIR( far, GetNumberOfLinks),
 	PAIR( far, GetPathRoot),
 	PAIR( far, GetPluginDirList),
+	PAIR( far, GetPluginId),
 	PAIR( far, GetPluginInformation),
 	PAIR( far, GetPlugins),
 	PAIR( far, GetReparsePointInfo),

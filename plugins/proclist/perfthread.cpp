@@ -26,6 +26,7 @@ const counters Counters[]
 	{L"Page File Bytes Peak",    MPageFileBytesPeak , MColPageFileBytesPeak },
 	{L"Working Set",             MWorkingSet        , MColWorkingSet        },
 	{L"Working Set Peak",        MWorkingSetPeak    , MColWorkingSetPeak    },
+	{L"Working Set - Private",   MWorkingSetPrivate , MColWorkingSetPrivate },
 	{L"Pool Nonpaged Bytes",     MPoolNonpagedBytes , MColPoolNonpagedBytes },
 	{L"Pool Paged Bytes",        MPoolPagedBytes    , MColPoolPagedBytes    },
 	{L"Private Bytes",           MPrivateBytes      , MColPrivateBytes      },
@@ -196,6 +197,46 @@ ProcessPerfData* PerfThread::GetProcessData(DWORD const Pid, std::wstring_view c
 		return &Iterator->second;
 
 	return {};
+}
+
+static size_t get_logical_processor_count()
+{
+	block_ptr<SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX> Buffer(1024);
+
+	for (;;)
+	{
+		auto Size = static_cast<DWORD>(Buffer.size());
+		if (pGetLogicalProcessorInformationEx(RelationProcessorCore, Buffer.data(), &Size))
+			break;
+
+		if (GetLastError() != ERROR_INSUFFICIENT_BUFFER)
+		{
+			SYSTEM_INFO sysInfo;
+			GetSystemInfo(&sysInfo);
+			return sysInfo.dwNumberOfProcessors;
+		}
+
+		Buffer.reset(Size);
+	}
+
+	size_t LogicalProcessorCount{};
+
+	for (size_t Offset{}; Offset < Buffer.size();)
+	{
+		const auto& Info = *static_cast<SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX const*>(static_cast<void const*>(Buffer.bytes().data() + Offset));
+
+		Offset += Info.Size;
+
+		if (Info.Relationship != RelationProcessorCore)
+			continue;
+
+		for (const auto& i: std::span{ Info.Processor.GroupMask, Info.Processor.GroupCount })
+		{
+			LogicalProcessorCount += std::popcount(i.Mask);
+		}
+	}
+
+	return LogicalProcessorCount;
 }
 
 struct PROCLIST_SYSTEM_PROCESS_INFORMATION
@@ -403,10 +444,10 @@ bool PerfThread::RefreshImpl()
 		}();
 
 		ProcessPerfData* pOldTask = {};
-		if (!IsTotal && !m_ProcessesData.empty())  // Use prev data if any
+		if (!m_ProcessesData.empty())  // Use prev data if any
 		{
 			//Get the pointer to the previous instance of this process
-			pOldTask = GetProcessData(Task.dwProcessId, Task.ProcessName);
+			pOldTask = GetProcessData(Task.dwProcessId, ProcessName);
 			if (pOldTask)  // copy process' data from pOldTask to Task
 			{
 				Task = *pOldTask;
@@ -494,8 +535,11 @@ bool PerfThread::RefreshImpl()
 				// 64-bit Timer in 100 nsec units. Display suffix: "%"
 				if (pOldTask)
 				{
-					if (const auto Ptr = view_as_opt<LONGLONG>(pCounter, DataEnd, dwCounterOffsets[ii]))
-						Task.qwResults[ii] = (*Ptr - pOldTask->qwCounters[ii]) / (dwDeltaTickCount * 100);
+					static const auto LogicalProcessorCount = get_logical_processor_count();
+					const auto Factor = m_HostName.empty()? LogicalProcessorCount : 1;
+
+ 					if (const auto Ptr = view_as_opt<LONGLONG>(pCounter, DataEnd, dwCounterOffsets[ii]))
+						Task.qwResults[ii] = (*Ptr - pOldTask->qwCounters[ii]) / (dwDeltaTickCount * 100) / Factor;
 					else
 						return false;
 				}
