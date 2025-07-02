@@ -1,5 +1,5 @@
-# 2024-09-02 00:40
-# soft_fast_search patch
+# 2025-07-02 07:30 # 2024-09-02 00:40
+# copy files from extra folder, soft_fast_search patch
 name: Build release VC
 
 on:
@@ -164,6 +164,15 @@ jobs:
 #           dir ./
 #           Compress-Archive . ../${{ env.PROG_NAME }}.${{ matrix.build_config }}.${{ matrix.platform_sln }}.${{ env.VERSION }}.zip
 #           dir ../
+
+      - name: Add file from extra folder
+        continue-on-error: true
+        shell: bash
+        run: |
+          pushd extra;
+          cp -R * '../_build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}';
+          popd;
+          ls '_build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}';
 
       - name: Add extra plugins NetBox
         continue-on-error: true
