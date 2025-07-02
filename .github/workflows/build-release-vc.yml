@@ -170,9 +170,11 @@ jobs:
         shell: bash
         run: |
           pushd extra;
-          cp -R * '../_build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}';
+          rm -R ./Documentation/pol || true;
+          rm -R ./Documentation/rus || true;
+          cp -R * '../_build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}' || true;
           popd;
-          ls '_build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}';
+          ls -la '_build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}' || true;
 
       - name: Add extra plugins NetBox
         continue-on-error: true
