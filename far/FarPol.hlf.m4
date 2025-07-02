@@ -345,8 +345,8 @@ $ #Polecenia kontroli menu#
  Wyrównuje zaznaczone elementy do prawej.
 
  #Shift+F5#
- Some menus, e.g., ~all matching entries~@FindAllMenu@ in ~internal editor~@Editor@, have one or more
-fixed columns at the left. The #Shift+F5# key combination toggles visibility of these columns.
+ Niektóre menu, np. ~wszystkich znalezionych wystąpień~@FindAllMenu@ w ~wewnętrznym edytorze~@Editor@,
+co najmniej jedną stałą kolumnę po lewej. Kombinacja #Shift+F5# przełącza widoczność tych kolumn.
 
  Zobacz także listę ~klawiszy makropoleceń~@KeyMacroMenuList@, dostępnych w menu.
 
@@ -3435,6 +3435,12 @@ jest zgodna z odnalezionym ciągiem. Na przykład:
 @FindAllMenu
 $ #Edytor: menu wszystkich znalezionych wystąpień#
  Następujące kombinacje klawiszy są dostępne w tym menu:
+
+ #F4#
+ Copy all found lines into a new editor and close this menu.
+
+ #Alt+F4#
+ Copy all lines matching the current filter into a new editor and close this menu.
 
  #F5#
  Przełącza wielkość menu.

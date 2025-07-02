@@ -1,10 +1,36 @@
 --------------------------------------------------------------------------------
-drkns 2025-06-23 17:21:50+01:00 - build 6500
+MZK 2025-06-29 21:48:53-04:00 - build 6504
 
-1. Correction of 6483.
+1. New feature: Edit the content of Find All menu in a new Editor.
+   - #F4# copies all found lines into a new editor and closes the menu.
+   - #Alt+F4# copies all lines matching the current filter into a new editor
+     and closes the menu.
+
+   WARNING: The new Editor's behavior related to #Save# and #SaveAs#
+            may be unexpected in corner cases.
 
 --------------------------------------------------------------------------------
-drkns 2025-06-23 13:12:07+01:00 - build 6499
+yjh 2025-06-30 01:22:59+03:00 - build 6503
+
+1. SQLite: v3.50.2.
+
+--------------------------------------------------------------------------------
+drkns 2025-06-27 02:03:14+01:00 - build 6502
+
+1. Improve FSF.FormatFileSize behavior in corner cases.
+
+--------------------------------------------------------------------------------
+zg 2025-06-27 02:53:35+03:00 - build 6501
+
+1. bad codepage warning was only displayed if the problem was on the last line.
+
+--------------------------------------------------------------------------------
+drkns 2025-06-24 23:40:49+01:00 - build 6500
+
+1. Apply L flag in Owner panel column (show domain) to plugin panels too.
+
+--------------------------------------------------------------------------------
+drkns 2025-06-23 17:21:50+01:00 - build 6499
 
 1. Correction of 6483.
 
