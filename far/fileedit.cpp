@@ -182,14 +182,26 @@ bool dlgOpenEditor(string &strFileName, uintptr_t &codepage)
 	return false;
 }
 
-static bool dlgBadEditorCodepage(uintptr_t& codepage)
+static bool dlgBadEditorCodepage(uintptr_t& codepage, bytes_view const ErrorBytes)
 {
 	DialogBuilder Builder(lng::MWarning);
 
-	Builder.AddText(lng::MEditorLoadCPWarn1).Flags = DIF_CENTERTEXT;
-	Builder.AddText(lng::MEditorLoadCPWarn2).Flags = DIF_CENTERTEXT;
-	Builder.AddText(lng::MEditorSaveNotRecommended).Flags = DIF_CENTERTEXT;
-	Builder.AddSeparator();
+	const auto [UsupportedData, UsupportedDataMessage] = codepages::UnsupportedDataMessage(bytes{ ErrorBytes });
+
+	string const Messages[]
+	{
+		msg(lng::MUnsupportedCodePageSelectedCodepage),
+		far::vformat(msg(lng::MUnsupportedCodePageDoesNotSupport), msg(UsupportedDataMessage)),
+		UsupportedData,
+		msg(lng::MEditorSaveNotRecommended),
+	};
+
+	const auto add_line = [&Builder](lng_string const Text)
+	{
+		Builder.AddText(Text).Flags |= DIF_CENTERTEXT;
+	};
+
+	add_line(Messages[0]);
 
 	IntOption cp_val;
 	cp_val = codepage;
@@ -197,7 +209,14 @@ static bool dlgBadEditorCodepage(uintptr_t& codepage)
 	std::vector<DialogBuilderListItem> Items;
 	codepages::instance().FillCodePagesList(Items, true, false, true, false, false);
 
-	Builder.AddComboBox(cp_val, 46, Items);
+	const auto MaxLength = std::ranges::fold_left(Messages, 0uz, [](size_t const Value, string const& i){ return std::max(Value, i.size()); });
+
+	Builder.AddComboBox(cp_val, static_cast<int>(std::max(MaxLength, 46uz)), Items);
+
+	add_line(Messages[1]);
+	add_line(Messages[2]);
+	add_line(Messages[3]);
+
 	Builder.AddOKCancel();
 	Builder.SetDialogMode(DMODE_WARNINGSTYLE);
 	Builder.SetId(BadEditorCodePageId);
@@ -1452,6 +1471,12 @@ bool FileEditor::LoadFile(const string_view Name, int& UserBreak, error_state_ex
 	for (BitFlags f0 = m_editor->m_Flags; ; m_editor->m_Flags = f0)
 	{
 		m_editor->FreeAllocatedData();
+
+		// The rest of the code assumes that the editor always has at least 1 line.
+		// Without this we can crash in redraw code if there is an error during loading, e.g. an incorrect codepage.
+		m_editor->PushString({});
+		auto FakeFirstLine = true;
+
 		const auto Cached = LoadFromCache(pc);
 
 		const os::fs::file_status FileStatus(Name);
@@ -1508,11 +1533,11 @@ bool FileEditor::LoadFile(const string_view Name, int& UserBreak, error_state_ex
 		enum_lines EnumFileLines(Stream, m_codepage);
 		for (auto Str: EnumFileLines)
 		{
-			if (!BadConversion && EnumFileLines.conversion_error())
+			if (const auto ErrorBytes = EnumFileLines.error_bytes(); !ErrorBytes.empty() && !BadConversion)
 			{
 				BadConversion = true;
 				uintptr_t cp = m_codepage;
-				if (!dlgBadEditorCodepage(cp)) // cancel
+				if (!dlgBadEditorCodepage(cp, ErrorBytes)) // cancel
 				{
 					EditFile.Close();
 					SetLastError(ERROR_OPEN_FAILED); //????
@@ -1577,6 +1602,12 @@ bool FileEditor::LoadFile(const string_view Name, int& UserBreak, error_state_ex
 			if (m_editor->GlobalEOL == eol::none && Str.Eol != eol::none)
 			{
 				m_editor->GlobalEOL = Str.Eol;
+			}
+
+			if (FakeFirstLine)
+			{
+				m_editor->FreeAllocatedData();
+				FakeFirstLine = false;
 			}
 
 			m_editor->PushString(Str.Str);
@@ -1802,12 +1833,16 @@ int FileEditor::SaveFile(const string_view Name, bool bSaveAs, error_state_ex& E
 
 			if (Diagnostics.ErrorPosition)
 			{
+				const auto [UsupportedData, UsupportedDataMessage] = codepages::UnsupportedDataMessage(SaveStr[*Diagnostics.ErrorPosition]);
+
 				//SetMessageHelp(L"EditorDataLostWarning")
 				const auto Result = Message(MSG_WARNING,
 					msg(lng::MWarning),
 					{
-						codepages::UnsupportedCharacterMessage(SaveStr[*Diagnostics.ErrorPosition]),
+						msg(lng::MUnsupportedCodePageSelectedCodepage),
 						codepages::FormatName(Codepage),
+						far::vformat(msg(lng::MUnsupportedCodePageDoesNotSupport), msg(UsupportedDataMessage)),
+						UsupportedData,
 						msg(lng::MEditorSaveNotRecommended)
 					},
 					{ lng::MEditorSaveCPWarnShow, lng::MEditorSave, lng::MCancel });
@@ -2608,34 +2643,36 @@ uintptr_t FileEditor::GetCodePage() const
 	return m_codepage;
 }
 
+string FileEditor::GetCacheName() const
+{
+	if (strPluginData.empty())
+		return path::normalize_separators(strFullFileName);
+	else
+		return concat(strPluginData, PointToName(strFullFileName));
+}
+
 bool FileEditor::LoadFromCache(EditorPosCache &pc) const
 {
-	string strCacheName;
-
-	const auto PluginData = GetPluginData();
-	if (!PluginData.empty())
-	{
-		strCacheName = concat(PluginData, PointToName(strFullFileName));
-	}
-	else
-	{
-		strCacheName = path::normalize_separators(strFullFileName);
-	}
-
 	pc.Clear();
 
-	return FilePositionCache::GetPosition(strCacheName, pc);
+	if (m_Flags.Check(FFILEEDIT_EPHEMERAL))
+		return false;
+
+	return FilePositionCache::GetPosition(GetCacheName(), pc);
 }
 
 void FileEditor::SaveToCache() const
 {
+	if (m_Flags.Check(FFILEEDIT_EPHEMERAL))
+		return;
+
 	EditorPosCache pc;
 	m_editor->GetCacheParams(pc);
 
 	if (!m_Flags.Check(FFILEEDIT_OPENFAILED))   //????
 	{
 		pc.CodePage = BadConversion ? 0 : m_codepage;
-		FilePositionCache::AddPosition(strPluginData.empty()? strFullFileName : strPluginData + PointToName(strFullFileName), pc);
+		FilePositionCache::AddPosition(GetCacheName(), pc);
 	}
 }
 
@@ -2646,31 +2683,37 @@ bool FileEditor::SetCodePage(uintptr_t codepage)
 
 	uintptr_t ErrorCodepage;
 	size_t ErrorLine, ErrorPos;
-	wchar_t ErrorChar;
-	if (!m_editor->TryCodePage(m_codepage, codepage, ErrorCodepage, ErrorLine, ErrorPos, ErrorChar))
+	std::variant<wchar_t, bytes> ErrorData;
+	string EditorData;
+	if (!m_editor->TryCodePage(m_codepage, codepage, ErrorCodepage, ErrorLine, ErrorPos, ErrorData, EditorData))
 	{
+		auto [UsupportedData, UsupportedDataMessage] = codepages::UnsupportedDataMessage(ErrorData);
+		if (UsupportedDataMessage == lng::MUnsupportedCodePageByteSequence)
+			append(UsupportedData, L" (\""sv, EditorData, L"\")"sv);
+
 		switch (Message(MSG_WARNING,
 			msg(lng::MWarning),
 			{
-				codepages::UnsupportedCharacterMessage(ErrorChar),
+				msg(lng::MUnsupportedCodePageSelectedCodepage),
 				codepages::FormatName(ErrorCodepage),
+				far::vformat(msg(lng::MUnsupportedCodePageDoesNotSupport), msg(UsupportedDataMessage)),
+				UsupportedData,
 				msg(lng::MEditorSwitchCPConfirm)
 			},
-			{ lng::MCancel, lng::MEditorSaveCPWarnShow, lng::MOk })
+			{ lng::MEditorSaveCPWarnShow, lng::MOk, lng::MCancel })
 		)
 		{
-		default:
 		case message_result::first_button:
-			return false;
-
-		case message_result::second_button:
 			m_editor->GoToLine(static_cast<int>(ErrorLine));
 			m_editor->m_it_CurLine->SetCurPos(static_cast<int>(ErrorPos));
 			Show();
 			return false;
 
-		case message_result::third_button:
+		case message_result::second_button:
 			break;
+
+		default:
+			return false;
 		}
 	}
 

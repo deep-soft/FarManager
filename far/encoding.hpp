@@ -73,12 +73,14 @@ namespace encoding
 		void clear();
 
 		unsigned EnabledDiagnostics;
-		std::optional<size_t> ErrorPosition;
+		std::optional<size_t> ErrorPosition, ErrorPositionRollback;
 		size_t PartialInput{};
 		size_t PartialOutput{};
 
 		void set_is_utf8(is_utf8 IsUtf8);
 		is_utf8 get_is_utf8() const;
+
+		bytes error_data(bytes_view Data) const;
 
 	private:
 		is_utf8 m_IsUtf8{is_utf8::yes_ascii};
@@ -103,9 +105,6 @@ namespace encoding
 	[[nodiscard]] size_t get_chars_count(uintptr_t Codepage, bytes_view Str, diagnostics* Diagnostics = {});
 
 	//-------------------------------------------------------------------------
-
-	[[noreturn]]
-	void raise_exception(uintptr_t Codepage, string_view Str, size_t Position);
 
 	namespace detail
 	{

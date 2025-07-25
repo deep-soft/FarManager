@@ -672,7 +672,7 @@ void UpdateScreenSize()
 
 void ShowTime()
 {
-	if (!Global->Opt->Clock || Global->SuppressClock)
+	if (!Global->Opt->Clock || Global->ScreenSaverActive || (Global->SuppressClock && Global->WindowManager->GetCurrentWindowType() == windowtype_desktop))
 		return;
 
 	Global->CurrentTime.update();
@@ -1226,14 +1226,16 @@ size_t string_pos_to_visual_pos(string_view Str, size_t const StringPos, size_t 
 		return StringPos;
 
 	const auto CharWidthEnabled = char_width::is_enabled();
+	if (!CharWidthEnabled)
+	{
+		if (TabSize == 1 || !contains(Str, L'\t'))
+			return StringPos;
+	}
 
 	position_parser_state State;
 
-	if (SavedState && StringPos > SavedState->StringIndex)
+	if (SavedState && StringPos >= SavedState->StringIndex)
 		State = *SavedState;
-
-	const auto nop_signal = [](size_t, size_t){};
-	const auto signal = State.signal? State.signal : nop_signal;
 
 	const auto End = std::min(Str.size(), StringPos);
 	while (State.StringIndex < End)
@@ -1259,14 +1261,13 @@ size_t string_pos_to_visual_pos(string_view Str, size_t const StringPos, size_t 
 			CharVisualIncrement = 1;
 		}
 
-		signal(State.StringIndex + CharStringIncrement, State.VisualIndex + CharVisualIncrement);
+		const auto NextStringIndex = State.StringIndex + static_cast<unsigned>(CharStringIncrement);
 
-		State.StringIndex += CharStringIncrement;
-
-		if (State.StringIndex > End)
+		if (NextStringIndex > End)
 			break;
 
-		State.VisualIndex += CharVisualIncrement;
+		State.StringIndex = NextStringIndex;
+		State.VisualIndex += static_cast<unsigned>(CharVisualIncrement);
 	}
 
 	if (SavedState)
@@ -1281,16 +1282,19 @@ size_t visual_pos_to_string_pos(string_view Str, size_t const VisualPos, size_t 
 		return VisualPos;
 
 	const auto CharWidthEnabled = char_width::is_enabled();
+	if (!CharWidthEnabled)
+	{
+		if (TabSize == 1 || !contains(Str, L'\t'))
+			return VisualPos;
+	}
 
 	position_parser_state State;
 
-	if (SavedState && VisualPos > SavedState->VisualIndex)
+	if (SavedState && VisualPos >= SavedState->VisualIndex)
 		State = *SavedState;
 
-	const auto nop_signal = [](size_t, size_t){};
-	const auto signal = State.signal? State.signal : nop_signal;
-
 	const auto End = Str.size();
+	bool Overflow{};
 
 	while (State.VisualIndex < VisualPos && State.StringIndex != End)
 	{
@@ -1315,20 +1319,21 @@ size_t visual_pos_to_string_pos(string_view Str, size_t const VisualPos, size_t 
 			CharStringIncrement = 1;
 		}
 
-		signal(State.StringIndex + CharStringIncrement, State.VisualIndex + CharVisualIncrement);
-
-		State.VisualIndex += CharVisualIncrement;
-
-		if (State.VisualIndex > VisualPos)
+		const auto NextVisualIndex = State.VisualIndex + static_cast<unsigned>(CharVisualIncrement);
+		if (NextVisualIndex > VisualPos)
+		{
+			Overflow = true;
 			break;
+		}
 
-		State.StringIndex += CharStringIncrement;
+		State.VisualIndex = NextVisualIndex;
+		State.StringIndex += static_cast<unsigned>(CharStringIncrement);
 	}
 
 	if (SavedState)
 		*SavedState = State;
 
-	return State.StringIndex + (State.VisualIndex < VisualPos? VisualPos - State.VisualIndex : 0);
+	return State.StringIndex + (Overflow? 0 : VisualPos - State.VisualIndex);
 }
 
 size_t visual_string_length(string_view Str)
@@ -1956,6 +1961,25 @@ TEST_CASE("tabs")
 			REQUIRE(i.VisualPos == string_pos_to_visual_pos(Strs[i.Str], i.RealPos, i.TabSize));
 	}
 }
+
+TEST_CASE("tabs.cache")
+{
+	const auto Str = L"\t0"sv;
+
+	{
+		position_parser_state State;
+		REQUIRE(visual_pos_to_string_pos(Str, 1, 8, &State) == 0uz);
+		REQUIRE(string_pos_to_visual_pos(Str, 1, 8, &State) == 8uz);
+	}
+
+	{
+		position_parser_state State;
+		REQUIRE(visual_pos_to_string_pos(Str, 1, 8, &State) == 0uz);
+		REQUIRE(string_pos_to_visual_pos(Str, 1, 8, &State) == 8uz);
+	}
+
+}
+
 TEST_CASE("Scrollbar")
 {
 	static const struct

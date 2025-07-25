@@ -119,7 +119,7 @@ bool enum_lines::fill() const
 			const auto MissingBytes = CharSize - ExtraBytes;
 			std::fill_n(m_Buffer.begin() + Read, MissingBytes, '\0');
 			m_BufferView = { m_Buffer.data(), Read + MissingBytes };
-			m_Diagnostics.ErrorPosition = 0;
+			m_Diagnostics.ErrorPosition = {};
 		}
 
 		if (m_CodePage == CP_UTF16BE)
@@ -132,8 +132,8 @@ bool enum_lines::fill() const
 	return true;
 }
 
-template<typename T>
-bool enum_lines::GetTString(std::basic_string<T>& To, eol& Eol) const
+template<typename T, typename Traits>
+bool enum_lines::GetTString(std::basic_string<T, Traits>& To, eol& Eol) const
 {
 	To.clear();
 
@@ -144,14 +144,14 @@ bool enum_lines::GetTString(std::basic_string<T>& To, eol& Eol) const
 		return true;
 	}
 
-	const T
-		EolCr = m_Eol.cr(),
-		EolLf = m_Eol.lf();
+	const auto
+		EolCr = T{ m_Eol.cr() },
+		EolLf = T{ m_Eol.lf() };
 
 	for (;;)
 	{
 		const auto Char = !m_BufferView.empty() || fill()?
-			std::optional<T>{ std::basic_string_view<T>{ std::bit_cast<T const*>(m_BufferView.data()), m_BufferView.size() / sizeof(T) }.front() } :
+			std::optional<T>{ std::basic_string_view<T, Traits>{ std::bit_cast<T const*>(m_BufferView.data()), m_BufferView.size() / sizeof(T) }.front() } :
 			std::optional<T>{};
 
 		if (Char == EolLf)
@@ -261,10 +261,16 @@ bool enum_lines::GetString(string_view& Str, eol& Eol) const
 				if (m_IsUtf8 == encoding::is_utf8::yes_ascii)
 					m_IsUtf8 = m_Diagnostics.get_is_utf8();
 
-				if (TryUtf8 && m_Diagnostics.ErrorPosition && m_IsUtf8 != encoding::is_utf8::yes)
+				if (TryUtf8 && m_IsUtf8 == encoding::is_utf8::no)
 				{
 					*m_TryUtf8 = false;
 					continue;
+				}
+
+				if (m_Diagnostics.ErrorPosition)
+				{
+					if (m_FirstErrorBytes.empty())
+						m_FirstErrorBytes = m_Diagnostics.error_data(Data.m_Bytes);
 				}
 
 				if (Size <= Data.m_wBuffer.size())
@@ -526,7 +532,7 @@ uintptr_t GetFileCodepage(const os::fs::file& File, uintptr_t DefaultCodepage, b
 #include "testing.hpp"
 #include "mix.hpp"
 
-TEST_CASE("enum_lines")
+TEST_CASE("enum_lines.eol")
 {
 	static const struct
 	{
@@ -617,13 +623,13 @@ TEST_CASE("enum_lines")
 
 	for (const auto& i: Tests)
 	{
-		for (const auto Codepage: { CP_UTF16LE, CP_UTF16BE, static_cast<uintptr_t>(CP_UTF8) })
+		for (const auto Codepage: { CP_UTF16LE, CP_UTF16BE, encoding::codepage::utf8() })
 		{
 			auto Str = encoding::get_bytes(Codepage, i.Str);
 			std::istringstream Stream(Str);
 			Stream.exceptions(Stream.badbit | Stream.failbit);
 
-			const auto Enumerator = enum_lines(Stream, Codepage);
+			enum_lines const Enumerator(Stream, Codepage);
 
 			// Twice to make sure that reset works as expected
 			repeat(2, [&]
@@ -641,6 +647,83 @@ TEST_CASE("enum_lines")
 				REQUIRE(Stream.eof());
 				REQUIRE(Iterator == i.Result.end());
 			});
+		}
+	}
+}
+
+TEST_CASE("enum_lines.try_utf8")
+{
+	static const struct
+	{
+		string_view Str;
+		uintptr_t SourceCodepage;
+		bool IsASCII;
+		std::initializer_list<const std::pair<string_view, eol>> Result;
+	}
+	Tests[]
+	{
+		{ L"farcical\naquatic\nceremony"sv, 1252, true, {
+			{ L"farcical"sv, eol::unix },
+			{ L"aquatic"sv, eol::unix },
+			{ L"ceremony"sv, eol::none },
+		}},
+
+		{ L"Grzegorz\nBrzęczyszczykiewicz"sv, 1250, false, {
+			{ L"Grzegorz"sv, eol::unix },
+			{ L"Brzęczyszczykiewicz"sv, eol::none },
+		}},
+
+		{ L"残酷な天使のように\n少年よ　神話になれ"sv, 932, false, {
+			{ L"残酷な天使のように"sv, eol::unix },
+			{ L"少年よ　神話になれ"sv, eol::none },
+		}},
+	};
+
+	const auto
+		Utf8 = encoding::codepage::utf8(),
+		BrokenUtf8 = decltype(Utf8){};
+
+	for (const auto& i: Tests)
+	{
+		for (const auto Codepage: { i.SourceCodepage, Utf8, BrokenUtf8 })
+		{
+			const auto IsBrokenUtf8 = Codepage == BrokenUtf8;
+
+			auto Str = encoding::get_bytes(IsBrokenUtf8? Utf8 : Codepage, i.Str);
+
+			if (IsBrokenUtf8)
+				Str += '\xFF';
+
+			std::istringstream Stream(Str);
+			Stream.exceptions(Stream.badbit | Stream.failbit);
+
+			bool TryUtf8 = true;
+			enum_lines const Enumerator(Stream, i.SourceCodepage, &TryUtf8);
+
+			auto Iterator = i.Result.begin();
+			size_t LineIndex = 0;
+
+			for (const auto& Line: Enumerator)
+			{
+				REQUIRE(Iterator != i.Result.end());
+
+				if (IsBrokenUtf8 && LineIndex == i.Result.size() - 1)
+				{
+					REQUIRE(Iterator->first == Line.Str.substr(0, Line.Str.size() - 1));
+					REQUIRE(Line.Str.back() == (TryUtf8? L'\xDCFF' : encoding::get_chars(i.SourceCodepage, "\xFF"sv).front()));
+				}
+				else
+					REQUIRE(Iterator->first == Line.Str);
+
+				REQUIRE(Iterator->second == Line.Eol);
+
+				++Iterator;
+				++LineIndex;
+			}
+
+			REQUIRE(Stream.eof());
+			REQUIRE(Iterator == i.Result.end());
+			REQUIRE(TryUtf8 == ((Codepage == Utf8) || (IsBrokenUtf8 != i.IsASCII)));
 		}
 	}
 }

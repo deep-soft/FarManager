@@ -62,6 +62,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "uuids.far.hpp"
 #include "uuids.far.dialogs.hpp"
 #include "RegExp.hpp"
+#include "filemasks.hpp"
 #include "plugins.hpp"
 #include "lang.hpp"
 #include "string_utils.hpp"
@@ -4027,7 +4028,7 @@ void Editor::SaveFoundItemsToNewEditor(const VMenu& ListBox, const bool Matching
 			NewEditorLine->SetEOL(CurString->GetEOL());
 		}
 
-		if (Index == ExitCode)
+		if (static_cast<intptr_t>(Index) == ExitCode)
 		{
 			const auto CurrentFoundCoord{ *ListBox.GetComplexUserDataPtr<const FindCoord>(ExitCode) };
 			NewEditorFoundCoord =
@@ -4047,16 +4048,23 @@ void Editor::SaveFoundItemsToNewEditor(const VMenu& ListBox, const bool Matching
 
 string Editor::GetSearchAllFileName() const
 {
-	auto SearchAllFileName{ msg(lng::MEditSearchAllFileNameAppend) };
+	const auto OriginalFilename = [&]() -> string
+	{
+		const auto HostFileEditor{ GetHostFileEditor() };
+		if (!HostFileEditor) return {};
 
-	const auto HostFileEditor = GetHostFileEditor();
-	if (!HostFileEditor) return SearchAllFileName;
+		string Type, Name;
+		HostFileEditor->GetTypeAndName(Type, Name);
+		return Name;
+	}();
 
-	string HostType, HostName;
-	HostFileEditor->GetTypeAndName(HostType, HostName);
+	filemasks Mask;
+	const auto MsgId = Mask.assign(EdOpt.SearchAllUseAltFileNameFormat) && Mask.check(OriginalFilename)?
+		lng::MEditSearchAllFileNameFormatAlt :
+		lng::MEditSearchAllFileNameFormat;
 
-	const auto NameAndExt{ name_ext(HostName) };
-	return NameAndExt.first + SearchAllFileName + NameAndExt.second;
+	const auto [Stem, Ext] { name_ext(OriginalFilename) };
+	return far::vformat(msg(MsgId), Stem, Ext);
 }
 
 void Editor::PasteFromClipboard()
@@ -6817,14 +6825,14 @@ void Editor::GetCacheParams(EditorPosCache &pc) const
 	pc.bm=m_SavePos;
 }
 
-static std::string_view GetLineBytes(string_view const Str, std::vector<char>& Buffer, uintptr_t const Codepage, encoding::diagnostics* const Diagnostics)
+static bytes_view GetLineBytes(string_view const Str, std::vector<char>& Buffer, uintptr_t const Codepage, encoding::diagnostics* const Diagnostics)
 {
 	for (;;)
 	{
 		auto const Length = encoding::get_bytes(Codepage, Str, Buffer, Diagnostics);
 
 		if (Length <= Buffer.size())
-			return { Buffer.data(), Length };
+			return view_bytes(Buffer.data(), Length);
 
 		resize_exp(Buffer, Length);
 	}
@@ -6845,7 +6853,7 @@ bool Editor::SetLineCodePage(Edit& Line, uintptr_t CurrentCodepage, uintptr_t co
 	return Result;
 }
 
-bool Editor::TryCodePage(uintptr_t const CurrentCodepage, uintptr_t const NewCodepage, uintptr_t& ErrorCodepage, size_t& ErrorLine, size_t& ErrorPos, wchar_t& ErrorChar)
+bool Editor::TryCodePage(uintptr_t const CurrentCodepage, uintptr_t const NewCodepage, uintptr_t& ErrorCodepage, size_t& ErrorLine, size_t& ErrorPos, std::variant<wchar_t, bytes>& Data, string& EditorData)
 {
 	if (CurrentCodepage == NewCodepage)
 		return true;
@@ -6865,7 +6873,7 @@ bool Editor::TryCodePage(uintptr_t const CurrentCodepage, uintptr_t const NewCod
 			ErrorCodepage = CurrentCodepage;
 			ErrorLine = LineNumber;
 			ErrorPos = *Diagnostics.ErrorPosition;
-			ErrorChar = i->m_Str[ErrorPos];
+			Data = i->m_Str[ErrorPos];
 			return false;
 		}
 
@@ -6873,16 +6881,19 @@ bool Editor::TryCodePage(uintptr_t const CurrentCodepage, uintptr_t const NewCod
 		{
 			ErrorCodepage = NewCodepage;
 			ErrorLine = LineNumber;
+			ErrorPos = Diagnostics.ErrorPositionRollback.value_or(*Diagnostics.ErrorPosition);
+			Data = Diagnostics.error_data(Bytes);
+
+			auto ErrorEnd = *Diagnostics.ErrorPosition + 1;
 
 			// Position is in bytes, we might need to convert it back to chars
-			const auto Info = GetCodePageInfo(CurrentCodepage);
-			if (Info && Info->MaxCharSize == 1)
-				ErrorPos = *Diagnostics.ErrorPosition;
-			else
-				ErrorPos = encoding::get_chars_count(CurrentCodepage, { decoded.data(), std::min(*Diagnostics.ErrorPosition, Bytes.size()) });
+			if (const auto Info = GetCodePageInfo(CurrentCodepage); Info && Info->MaxCharSize > 1)
+			{
+				ErrorPos = encoding::get_chars_count(CurrentCodepage, { decoded.data(), std::min(ErrorPos, Bytes.size()) });
+				ErrorEnd = encoding::get_chars_count(CurrentCodepage, { decoded.data(), std::min(ErrorEnd, Bytes.size()) });
+			}
 
-			ErrorChar = i->m_Str[ErrorPos];
-
+			EditorData = i->m_Str.substr(ErrorPos, ErrorEnd - ErrorPos);
 			return false;
 		}
 	}

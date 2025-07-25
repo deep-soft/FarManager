@@ -162,10 +162,8 @@ size_t NumberOfEmptyLines(size_t Desired);
 
 struct position_parser_state
 {
-	size_t StringIndex{};
-	size_t VisualIndex{};
-
-	function_ref<void(size_t, size_t)> signal{nullptr};
+	unsigned StringIndex{};
+	unsigned VisualIndex{};
 };
 
 size_t string_pos_to_visual_pos(string_view Str, size_t StringPos, size_t TabSize, position_parser_state* SavedState = {});
