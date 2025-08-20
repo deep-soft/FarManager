@@ -489,10 +489,9 @@ static void FillMasksMenu(VMenu2& MasksMenu, int SelPos = 0)
 
 	for(const auto& [Name, Value]: ConfigProvider().GeneralCfg()->ValuesEnumerator<string>(L"Masks"sv))
 	{
-		MenuItemEx Item;
 		const int NameWidth = 10;
 		const auto DisplayName = pad_right(truncate_right(Name, NameWidth), NameWidth);
-		Item.Name = concat(DisplayName, L' ', BoxSymbols[BS_V1], L' ', Value);
+		menu_item_ex Item{ concat(DisplayName, L' ', BoxSymbols[BS_V1], L' ', Value) };
 		Item.ComplexUserData = Name;
 		MasksMenu.AddItem(Item);
 	}
@@ -1813,6 +1812,19 @@ Options::Options():
 		std::ranges::sort(Exec.ExcludeCmds, string_sort::less_icase);
 	}));
 
+	strNoAutoDetectCP.SetCallback(option::notifier([&](string_view const Value)
+	{
+		NoAutoDetectCP.clear();
+
+		for (const auto& i: enum_tokens(Value, L",;"sv))
+		{
+			if (unsigned Codepage; from_string(i, Codepage, {}, 10))
+				NoAutoDetectCP.emplace(Codepage);
+			else
+				LOGWARNING(L"Unsupported value in CodePages.NoAutoDetectCP: [{}]"sv, i);
+		}
+	}));
+
 	// По умолчанию - брать плагины из основного каталога
 	LoadPlug.MainPluginDir = true;
 	LoadPlug.PluginsPersonal = true;
@@ -3092,7 +3104,7 @@ void Options::ShellOptions(bool LastCommand, const MOUSE_EVENT_RECORD *MouseEven
 	};
 	const auto OptionsMenuStrings = VMenu::AddHotkeys(OptionsMenu);
 
-	menu_item RightMenu[]=
+	menu_item RightMenu[]
 	{
 		{ msg(lng::MMenuBriefView), LIF_SELECTED, KEY_CTRL1 },
 		{ msg(lng::MMenuMediumView), 0, KEY_CTRL2 },

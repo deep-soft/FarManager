@@ -2547,7 +2547,8 @@ bool Editor::ProcessKeyInternal(unsigned const KeyCode, bool& Refresh, Manager::
 								m_it_CurLine->ProcessKey(Manager::Key(i));
 						}
 
-						m_it_CurLine->SetTabCurPos(TabPos);
+						if (m_it_CurLine->GetTabCurPos() < TabPos)
+							m_it_CurLine->SetTabCurPos(TabPos);
 					}
 				}
 
@@ -3419,7 +3420,7 @@ namespace
 
 		void add_item(FindCoord FoundCoords, string_view ItemText)
 		{
-			MenuItemEx Item{ far::format(L"{:{}}{:{}}{}"sv,
+			menu_item_ex Item{ far::format(L"{:{}}{:{}}{}"sv,
 				FoundCoords.Line + 1, m_LineNumColumnMaxWidth,
 				FoundCoords.Pos + 1, m_FoundPosColumnMaxWidth,
 				ItemText) };

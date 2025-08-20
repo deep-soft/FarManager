@@ -1,4 +1,83 @@
 --------------------------------------------------------------------------------
+drkns 2025-08-19 17:30:40+01:00 - build 6533
+
+1. Take CodePages.NoAutoDetectCP into account when using IsTextUnicode API.
+
+--------------------------------------------------------------------------------
+MZK 2025-08-17 17:56:03-04:00 - build 6532
+
+1. Refactored menu_item_ex to address clang warnings like
+   config.cpp:494:20: warning: suggest braces around initialization of subobject [-Wmissing-braces]
+
+--------------------------------------------------------------------------------
+drkns 2025-08-17 22:31:28+01:00 - build 6531
+
+1. Ensure editor keybar redraw on (Shift+)F8.
+
+--------------------------------------------------------------------------------
+drkns 2025-08-14 23:52:44+01:00 - build 6530
+
+1. Attributes dialog fixes for plugin panels.
+
+--------------------------------------------------------------------------------
+drkns 2025-08-14 20:25:53+01:00 - build 6529
+
+1. Fix editor whitespace generation.
+
+--------------------------------------------------------------------------------
+drkns 2025-08-14 19:27:50+01:00 - build 6528
+
+1. Query AllocationSize only when needed (gh-988).
+
+2. Disable 567.4 in ScanTree (gh-988).
+
+--------------------------------------------------------------------------------
+shmuel 2025-08-10 21:39:18+03:00 - build 6527
+
+1. Plugins API: add FE_STARTSORT, FE_ENDSORT.
+
+--------------------------------------------------------------------------------
+drkns 2025-08-10 18:34:47+01:00 - build 6526
+
+1. Set ENABLE_VIRTUAL_TERMINAL_PROCESSING unconditionally.
+   We use it not only for "[x] Use Virtual Terminal for rendering" anyway
+   and flipping it back and forth can impact the overall performance (see M#4080).
+
+--------------------------------------------------------------------------------
+drkns 2025-08-07 17:19:50+01:00 - build 6525
+
+1. gh-746: Specifying active or passive panel path makes that panel visible.
+
+2. gh-986: Find File dialog + External editor.
+
+--------------------------------------------------------------------------------
+drkns 2025-08-06 21:21:29+01:00 - build 6524
+
+1. Improve 6523: make such GetMsg calls work.
+
+--------------------------------------------------------------------------------
+drkns 2025-08-06 19:07:31+01:00 - build 6523
+
+1. Crash on calling GetMsg with IDs of OEM plugins.
+
+--------------------------------------------------------------------------------
+drkns 2025-08-04 17:24:56+01:00 - build 6522
+
+1. Correction of 6521.1.
+
+--------------------------------------------------------------------------------
+drkns 2025-08-03 20:41:44+01:00 - build 6521
+
+1. Refactoring.
+
+2. Adjust CreateFile flags in a few places.
+
+--------------------------------------------------------------------------------
+yjh 2025-07-31 22:15:35+03:00 - build 6520
+
+1. SQLite: v3.50.4.
+
+--------------------------------------------------------------------------------
 drkns 2025-07-20 10:48:47+01:00 - build 6519
 
 1. Forum: Progress numbers are displayed wrong while copying files with filter.

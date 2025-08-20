@@ -807,9 +807,7 @@ intptr_t WINAPI apiMenuFn(
 
 			for (const auto& i: std::span(Item, ItemsNumber))
 			{
-				MenuItemEx CurItem;
-				CurItem.Flags = i.Flags;
-				CurItem.Name.clear();
+				menu_item_ex CurItem{ i.Flags };
 				// исключаем MultiSelected, т.к. у нас сейчас движок к этому не приспособлен, оставляем только первый
 				const auto SelCurItem = CurItem.Flags&LIF_SELECTED;
 				CurItem.Flags&=~LIF_SELECTED;
@@ -2325,7 +2323,7 @@ static uintptr_t WINAPI apiDetectCodePage(DetectCodePageInfo* Info) noexcept
 		assert(Info);
 		assert(Info->StructSize);
 
-		os::fs::file const File(Info->FileName, FILE_READ_DATA, os::fs::file_share_all, nullptr, OPEN_EXISTING);
+		os::fs::file const File(Info->FileName, FILE_READ_DATA, os::fs::file_share_all, nullptr, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN);
 		if (!File)
 			return uintptr_t{};
 

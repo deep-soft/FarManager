@@ -2033,13 +2033,13 @@ public:
   AttrDialog(const AttrList& attr_list): Far::Dialog(Far::get_msg(MSG_ATTR_DLG_TITLE), &c_attr_dialog_guid), attr_list(attr_list) {
   }
 
-  void show() {
+  bool show() {
     unsigned max_name_len = 0;
     unsigned max_value_len = 0;
     std::for_each(attr_list.begin(), attr_list.end(), [&] (const Attr& attr) {
       if (attr.name.size() > max_name_len)
         max_name_len = static_cast<unsigned>(attr.name.size());
-      if (attr.value.size() > max_value_len)
+      if (!attr.ignore_value_length && attr.value.size() > max_value_len)
         max_value_len = static_cast<unsigned>(attr.value.size());
     });
     max_value_len += 1;
@@ -2059,10 +2059,17 @@ public:
       new_line();
     });
 
-    Far::Dialog::show();
+    separator();
+    new_line();
+    def_button(Far::get_msg(MSG_BUTTON_OK), DIF_CENTERGROUP);
+    const auto more_ctrl_id = button(L"..."s, DIF_CENTERGROUP);
+    new_line();
+
+    return Far::Dialog::show() != more_ctrl_id;
   }
 };
 
-void attr_dialog(const AttrList& attr_list) {
-  AttrDialog(attr_list).show();
+bool attr_dialog(const AttrList& attr_list) {
+  AttrDialog dlg(attr_list);
+  return dlg.show();
 }

@@ -9,6 +9,8 @@
 #include "lf_luafar.h"
 #include "lf_util.h"
 #include "lf_string.h"
+#include "lf_bit64.h"
+#include "lf_service.h"
 
 #ifndef LUADLL
 # if LUA_VERSION_NUM == 501
@@ -20,11 +22,6 @@
 
 typedef struct PluginStartupInfo PSInfo;
 
-extern int bit64_push(lua_State *L, INT64 v);
-extern int bit64_pushuserdata(lua_State *L, INT64 v);
-extern int bit64_getvalue(lua_State *L, int pos, INT64 *target);
-
-extern int luaopen_bit64(lua_State *L);
 extern int luaopen_far_host(lua_State *L);
 extern int luaopen_regex(lua_State*);
 extern int luaopen_usercontrol(lua_State*);
@@ -5907,12 +5904,6 @@ static int timer_newindex(lua_State *L)
 	return 0;
 }
 
-BOOL dir_exist(const wchar_t* path)
-{
-	DWORD attr = GetFileAttributesW(path);
-	return (attr != 0xFFFFFFFF) && (attr & FILE_ATTRIBUTE_DIRECTORY);
-}
-
 typedef struct
 {
 	HANDLE Handle;
@@ -6835,7 +6826,10 @@ void LF_InitLuaState1(lua_State *L, lua_CFunction aOpenLibs)
 	}
 #endif
 
-	if (aOpenLibs) aOpenLibs(L);
+	if (aOpenLibs) {
+		lua_pushcfunction(L, aOpenLibs);
+		lua_call(L, 0, 0);
+	}
 
 	lua_pushcfunction(L, luaB_dofileW);
 	lua_setglobal(L, "dofile");

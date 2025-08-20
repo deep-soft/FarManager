@@ -1866,13 +1866,12 @@ void FarMacroApi::menushowFunc() const
 
 	while(CRFound)
 	{
-		MenuItemEx NewItem;
 		size_t SubstrLen=PosLF-CurrentPos;
 
 		if (SubstrLen==0)
 			SubstrLen=1;
 
-		NewItem.Name = strItems.substr(CurrentPos, SubstrLen);
+		menu_item_ex NewItem{ strItems.substr(CurrentPos, SubstrLen) };
 
 		if (NewItem.Name != L"\n"sv)
 		{
@@ -1913,7 +1912,7 @@ void FarMacroApi::menushowFunc() const
 
 	if (bSorting)
 	{
-		Menu->SortItems([](const MenuItemEx& a, const MenuItemEx& b, const SortItemParam& Param)
+		Menu->SortItems([](const menu_item_ex& a, const menu_item_ex& b, const SortItemParam& Param)
 		{
 			if (a.Flags & LIF_SEPARATOR || b.Flags & LIF_SEPARATOR)
 				return false;
@@ -3215,7 +3214,7 @@ void FarMacroApi::panelitemFunc() const
 			case 6:  // FileSize
 				return PassValue(filelistItem->FileSize);
 			case 7:  // AllocationSize
-				return PassValue(filelistItem->AllocationSize);
+				return PassValue(filelistItem->AllocationSize(fileList.get()));
 			case 8:  // Selected
 				return PassBoolean(filelistItem->Selected);
 			case 9:  // NumberOfLinks
