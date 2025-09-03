@@ -614,6 +614,7 @@ static const /*FARDIALOGFLAGS*/ uint32_t
 	FDLG_NODRAWPANEL         = 0x0000000000000008,
 	FDLG_KEEPCONSOLETITLE    = 0x0000000000000010,
 	FDLG_NONMODAL            = 0x0000000000000020,
+	FDLG_STAY_ON_TOP         = 0x0000000000000040,
 	FDLG_NONE                = 0;
 
 typedef intptr_t(__stdcall *FARWINDOWPROC)(
@@ -1186,6 +1187,9 @@ enum FARMACROVARTYPE
 	FMVT_ARRAY                  = 8,
 	FMVT_PANEL                  = 9,
 	FMVT_ERROR                  = 10,
+	FMVT_MBSTRING               = 11,
+	FMVT_NEWTABLE               = 12,
+	FMVT_SETTABLE               = 13,
 };
 
 struct FarMacroValue
@@ -1197,6 +1201,7 @@ struct FarMacroValue
 		long long        Boolean;
 		double         Double;
 		const wchar_t *String;
+		const char    *MBString;
 		void          *Pointer;
 		struct
 		{
@@ -1824,6 +1829,7 @@ enum FAR_REGEXP_CONTROL_COMMANDS
 	RECTL_SEARCHEX                  = 5,
 	RECTL_BRACKETSCOUNT             = 6,
 	RECTL_NAMEDGROUPINDEX           = 7,
+	RECTL_GETNAMEDGROUPS            = 8,
 };
 
 struct RegExpMatch
@@ -1839,6 +1845,12 @@ struct RegExpSearch
 	struct RegExpMatch* Match;
 	intptr_t Count;
 	void* Reserved;
+};
+
+struct RegExpNamedGroup
+{
+	size_t Index;
+	const wchar_t* Name;
 };
 
 enum FAR_SETTINGS_CONTROL_COMMANDS
@@ -2642,6 +2654,8 @@ enum FAR_EVENTS
 	FE_GOTFOCUS         =6,
 	FE_KILLFOCUS        =7,
 	FE_CHANGESORTPARAMS =8,
+	FE_STARTSORT        =9,
+	FE_ENDSORT          =10,
 };
 
 struct OpenInfo

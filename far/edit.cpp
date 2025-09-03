@@ -520,7 +520,7 @@ long long Edit::VMProcess(int OpCode, void* vParam, long long iParam)
 							case 0: // begin block (FirstLine & FirstPos)
 							case 1: // end block (LastLine & LastPos)
 							{
-								SetTabCurPos(iParam?m_SelEnd:m_SelStart);
+								SetCurPos(iParam? m_SelEnd : m_SelStart);
 								Show();
 								return 1;
 							}
@@ -536,15 +536,15 @@ long long Edit::VMProcess(int OpCode, void* vParam, long long iParam)
 					{
 						case 0:  // selection start
 						{
-							SetMacroSelectionStart(GetTabCurPos());
+							SetMacroSelectionStart(GetCurPos());
 							return 1;
 						}
 						case 1:  // selection finish
 						{
 							if (GetMacroSelectionStart() != -1)
 							{
-								if (GetMacroSelectionStart() != GetTabCurPos())
-									Select(GetMacroSelectionStart(),GetTabCurPos());
+								if (GetMacroSelectionStart() != GetCurPos())
+									Select(GetMacroSelectionStart(),GetCurPos());
 								else
 									RemoveSelection();
 
@@ -1723,8 +1723,19 @@ void Edit::InsertString(string_view Str)
 
 			m_Str.insert(m_CurPos, Str);
 
+			auto Length = static_cast<int>(Str.size());
+			if (m_SelStart!=-1)
+			{
+				if (m_SelEnd!=-1 && m_CurPos<m_SelEnd)
+					m_SelEnd+=Length;
+
+				if (m_CurPos<m_SelStart)
+					m_SelStart+=Length;
+			}
+
 			SetPrevCurPos(m_CurPos);
-			m_CurPos += static_cast<int>(Str.size());
+			m_CurPos += Length;
+
 
 			if (GetTabExpandMode() == EXPAND_ALLTABS)
 				ReplaceTabs();

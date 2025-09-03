@@ -1,4 +1,56 @@
 --------------------------------------------------------------------------------
+drkns 2025-08-31 18:02:48+01:00 - build 6542
+
+1. Fix editor.sel(...) in edit controls.
+
+2. Fix plugin panels refresh after cd in command line.
+
+3. Refactoring.
+
+4. Clang warnings.
+
+--------------------------------------------------------------------------------
+drkns 2025-08-31 13:14:02+01:00 - build 6541
+
+1. Fix editor.sel(1, ...) in edit controls.
+
+--------------------------------------------------------------------------------
+drkns 2025-08-29 21:16:05+01:00 - build 6540
+
+1. Refactoring.
+
+--------------------------------------------------------------------------------
+drkns 2025-08-26 22:32:24+01:00 - build 6539
+
+1. gh-993: Use DECSET 2026 to reduce flickering.
+
+--------------------------------------------------------------------------------
+shmuel 2025-08-26 20:48:18+03:00 - build 6538
+
+1. Refactoring.
+
+--------------------------------------------------------------------------------
+Yegor 2025-08-22 17:17:00-07:00 - build 6537
+
+1. Continue 6534: Add support for *. to match files without extensions.
+
+--------------------------------------------------------------------------------
+shmuel 2025-08-22 17:11:22+03:00 - build 6536
+
+1. Far API: extend struct FarMacroValue to return Lua tables.
+
+--------------------------------------------------------------------------------
+zg 2025-08-22 11:51:41+03:00 - build 6535
+
+1. pasting into the command line and edit controls with active persistent blocks
+   broke the selection.
+
+--------------------------------------------------------------------------------
+Yegor 2025-08-20 17:00:00-07:00 - build 6534
+
+1. Refactored wildcard processing to use backtracking instead of recursion.
+
+--------------------------------------------------------------------------------
 drkns 2025-08-19 17:30:40+01:00 - build 6533
 
 1. Take CodePages.NoAutoDetectCP into account when using IsTextUnicode API.

@@ -3039,17 +3039,20 @@ bool FileList::ChangeDir(string_view const NewDir, bool IsParent, bool ResolvePa
 		IsPopPlugin = !PrevDataList.empty();
 		PopPrevData(strFindDir, PluginClosed, !GoToPanelFile, IsParent, SetDirectorySuccess);
 
+		Parent()->Refresh();
+
 		return SetDirectorySuccess;
 	}
-	else
-	{
+
+		// BUGBUG indentation
+
 		if (!equal_icase(ConvertNameToFull(strSetDir), m_CurDir))
 			Global->CtrlObject->FolderHistory->AddToHistory(m_CurDir);
 
-		if (IsParent)
+		if (IsParent && RootPath)
 		{
-			if (RootPath)
-			{
+				// BUGBUG indentation
+
 				if (NetPath)
 				{
 					auto ShareName = m_CurDir; // strCurDir can be altered during next call
@@ -3072,9 +3075,7 @@ bool FileList::ChangeDir(string_view const NewDir, bool IsParent, bool ResolvePa
 				}
 				ChangeDisk(Parent()->ActivePanel());
 				return true;
-			}
 		}
-	}
 
 	strFindDir = PointToName(m_CurDir);
 	/*
@@ -3089,7 +3090,7 @@ bool FileList::ChangeDir(string_view const NewDir, bool IsParent, bool ResolvePa
 	*/
 	int UpdateFlags = 0;
 
-	if (m_PanelMode != panel_mode::PLUGIN_PANEL && IsRelativeRoot(strSetDir))
+	if (IsRelativeRoot(strSetDir))
 	{
 		strSetDir = extract_root_directory(m_CurDir);
 	}
@@ -3143,9 +3144,6 @@ bool FileList::ChangeDir(string_view const NewDir, bool IsParent, bool ResolvePa
 		AnotherPanel->SetCurDir(m_CurDir, false);
 		AnotherPanel->Redraw();
 	}
-
-	if (m_PanelMode == panel_mode::PLUGIN_PANEL)
-		Parent()->RedrawKeyBar();
 
 	return SetDirectorySuccess;
 }

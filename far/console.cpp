@@ -670,6 +670,55 @@ protected:
 		}
 	}
 
+	static std::optional<wchar_t> decrqm(string_view const Query)
+	{
+		// No need to make noise on legacy systems
+		if (!::console.IsVtSupported())
+			return {};
+
+		try
+		{
+			const auto ResponseData = query_vt(concat(CSI, L'?', Query, L"$p"sv));
+			if (ResponseData.empty())
+			{
+				LOGWARNING(L"DECRQM {} query is not supported"sv, Query);
+				return {};
+			}
+
+			const auto Prefix = concat(CSI, L'?', Query, L';');
+			const auto Suffix = L"$y"sv;
+
+			const auto make_exception = [&](source_location const& Location = source_location::current())
+			{
+				return far_exception(far::format(L"Incorrect response: {}"sv, ResponseData), false, Location);
+			};
+
+			if (ResponseData.size() != Prefix.size() + 1 + Suffix.size() || !ResponseData.starts_with(Prefix) || !ResponseData.ends_with(Suffix))
+				throw make_exception();
+
+			switch (const auto Char = ResponseData[Prefix.size()])
+			{
+			case L'0':
+				LOGWARNING(L"DECRQM {} query is not supported"sv, Query);
+				return {};
+
+			case L'1':
+			case L'2':
+			case L'3':
+			case L'4':
+				return Char;
+
+			default:
+				throw make_exception();
+			}
+		}
+		catch (std::exception const& e)
+		{
+			LOGERROR(L"{}"sv, e);
+			return {};
+		}
+	}
+
 	console::console():
 		m_OriginalInputHandle(GetStdHandle(STD_INPUT_HANDLE)),
 		m_StreamBuf(std::make_unique<consolebuf>(GetStdHandle(STD_OUTPUT_HANDLE))),
@@ -2095,14 +2144,14 @@ protected:
 					return false;
 				}
 
-				const auto give_up = [&]
+				const auto make_exception = [&](source_location const& Location = source_location::current())
 				{
-					throw far_exception(far::format(L"Incorrect response: {}"sv, ResponseData), false);
+					return far_exception(far::format(L"Incorrect response: {}"sv, ResponseData), false, Location);
 				};
 
 				string_view Response = ResponseData;
 				if (!Response.ends_with(L'\\'))
-					give_up();
+					throw make_exception();
 
 				Response.remove_suffix(1);
 
@@ -2116,7 +2165,7 @@ protected:
 				for (auto PaletteToken: enum_tokens(Response, L"\\"sv))
 				{
 					if (!PaletteToken.starts_with(Prefix) || !PaletteToken.ends_with(Suffix))
-						give_up();
+						throw make_exception();
 
 					PaletteToken.remove_prefix(Prefix.size());
 					PaletteToken.remove_suffix(Suffix.size());
@@ -2125,31 +2174,31 @@ protected:
 
 					auto SubIterator = Subtokens.cbegin();
 					if (SubIterator == Subtokens.cend())
-						give_up();
+						throw make_exception();
 
 					if (*SubIterator++ != L"4"sv)
-						give_up();
+						throw make_exception();
 
 					const auto VtIndex = from_string<unsigned>(*SubIterator++);
 					if (VtIndex >= Palette.size())
-						give_up();
+						throw make_exception();
 
 					auto& PaletteColor = Palette[vt_color_index(VtIndex)];
 
 					auto ColorStr = *SubIterator;
 					if (!ColorStr.starts_with(RGBPrefix))
-						give_up();
+						throw make_exception();
 
 					ColorStr.remove_prefix(RGBPrefix.size());
 
 					if (ColorStr.size() != L"0000"sv.size() * 3 + 2)
-						give_up();
+						throw make_exception();
 
 					const auto color = [&](size_t const Offset)
 					{
 						const auto Value = from_string<unsigned>(ColorStr.substr(Offset * L"0000/"sv.size(), 4), {}, 16);
 						if (Value > 0xffff)
-							give_up();
+							throw make_exception();
 
 						return Value / 0x0101;
 					};
@@ -2159,7 +2208,7 @@ protected:
 				}
 
 				if (ColorsSet != Palette.size())
-					give_up();
+					throw make_exception();
 
 				LOGDEBUG(L"VT palette read successfuly"sv);
 				return true;
@@ -2265,8 +2314,49 @@ protected:
 		return implementation::WriteOutputNT(Buffer, BufferCoord, WriteRegion);
 	}
 
+	static bool is_synchronized_output_supported()
+	{
+		static const auto Result = []
+		{
+			const auto Response = decrqm(L"2026"sv);
+			if (!Response)
+				return false;
+
+			switch (*Response)
+			{
+			case L'1':
+			case L'2':
+				return true;
+
+			case L'3':
+			case L'4':
+				return false;
+
+			default:
+				std::unreachable();
+			}
+		}();
+
+		return Result;
+	}
+
+	static void begin_synchronized_update()
+	{
+		if (is_synchronized_output_supported())
+			send_vt_command(CSI L"?2026h"sv);
+	}
+
+	static void end_synchronized_update()
+	{
+		if (is_synchronized_output_supported())
+			send_vt_command(CSI L"?2026l"sv);
+	}
+
 	bool console::WriteOutputGather(matrix<FAR_CHAR_INFO>& Buffer, std::span<rectangle const> WriteRegions) const
 	{
+		begin_synchronized_update();
+		SCOPE_EXIT{ end_synchronized_update(); };
+
 		// TODO: VT can handle this in one go
 		for (const auto& i: WriteRegions)
 		{
@@ -3100,56 +3190,22 @@ protected:
 
 	std::optional<bool> console::is_grapheme_clusters_on() const
 	{
-		// No need to make noise on legacy systems
-		if (!IsVtSupported())
+		const auto Response = decrqm(L"2027"sv);
+		if (!Response)
 			return {};
 
-		try
+		switch (*Response)
 		{
-#define DECRQM_REQUEST "?2027"
+		case L'1':
+		case L'3':
+			return true;
 
-			const auto ResponseData = query_vt(CSI DECRQM_REQUEST "$p"sv);
-			if (ResponseData.empty())
-			{
-				LOGWARNING(L"DECRQM 2027 query is not supported"sv);
-				return {};
-			}
+		case L'2':
+		case L'4':
+			return false;
 
-			const auto
-				Prefix = CSI DECRQM_REQUEST ";"sv,
-				Suffix = L"$y"sv;
-
-#undef DECRQM_REQUEST
-
-			const auto give_up = [&]
-			{
-				throw far_exception(far::format(L"Incorrect response: {}"sv, ResponseData), false);
-			};
-
-			if (ResponseData.size() != Prefix.size() + 1 + Suffix.size() || !ResponseData.starts_with(Prefix) || !ResponseData.ends_with(Suffix))
-				give_up();
-
-			switch (ResponseData[Prefix.size()])
-			{
-			case L'0':
-				LOGWARNING(L"DECRQM 2027 query is not supported"sv);
-				return {};
-
-			case L'1':
-			case L'3': return true;
-
-			case L'2':
-			case L'4': return false;
-
-			default:
-				give_up();
-				std::unreachable();
-			}
-		}
-		catch (std::exception const& e)
-		{
-			LOGERROR(L"{}"sv, e);
-			return {};
+		default:
+			std::unreachable();
 		}
 	}
 
