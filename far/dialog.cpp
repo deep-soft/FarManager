@@ -824,11 +824,11 @@ void Dialog::InitDialogObjects(size_t ID, bool ReInit)
 					ListPtr->ChangeFlags(VMENU_DISABLED, (Item.Flags& DIF_DISABLE) != 0);
 					ListPtr->ChangeFlags(VMENU_SHOWAMPERSAND, (Item.Flags& DIF_LISTNOAMPERSAND) == 0);
 					ListPtr->ChangeFlags(VMENU_AUTOHIGHLIGHT, (Item.Flags& DIF_LISTAUTOHIGHLIGHT) != 0);
+					ListPtr->SetMenuFlags(VMENU_COMBOBOX);
 
 					if (Item.ListItems && !DialogMode.Check(DMODE_OBJECTS_CREATED))
 						ListPtr->AddItem(Item.ListItems);
 
-					ListPtr->SetMenuFlags(VMENU_COMBOBOX);
 					ListPtr->SetDialogStyle(DialogMode.Check(DMODE_WARNINGSTYLE));
 				}
 			}
@@ -934,10 +934,10 @@ void Dialog::InitDialogObjects(size_t ID, bool ReInit)
 				const auto ItemIterator = std::ranges::find_if(ListItems, [](FarListItem const& i) { return (i.Flags & LIF_SELECTED) != 0; });
 				if (ItemIterator != ListItems.end())
 				{
-					const auto Text = NullToEmpty(ItemIterator->Text);
+					string_view const Text = NullToEmpty(ItemIterator->Text);
 
 					if (Item.Flags & DIF_LISTNOAMPERSAND)
-						Item.strData = HiText2Str(Text);
+						Item.strData = remove_highlight(Text);
 					else
 						Item.strData = Text;
 				}
@@ -2242,16 +2242,15 @@ long long Dialog::VMProcess(int OpCode,void *vParam,long long iParam)
 		case MCODE_F_MENU_FILTER:
 		case MCODE_F_MENU_FILTERSTR:
 		case MCODE_V_MENU_HORIZONTALALIGNMENT:
+		case MCODE_F_MENU_GETEXTENDEDDATA:
 		{
-			const auto str = static_cast<const wchar_t*>(vParam);
-
 			if (GetDropDownOpened() || Items[m_FocusPos].Type == DI_LISTBOX)
 			{
 				if (Items[m_FocusPos].ListPtr)
 					return Items[m_FocusPos].ListPtr->VMProcess(OpCode,vParam,iParam);
 			}
 			else if (OpCode == MCODE_F_MENU_CHECKHOTKEY)
-				return CheckHighlights(*str, static_cast<int>(iParam)) + 1;
+				return CheckHighlights(*static_cast<const wchar_t*>(vParam), static_cast<int>(iParam)) + 1;
 
 			return 0;
 		}
@@ -3861,7 +3860,7 @@ int Dialog::SelectFromComboBox(DialogItemEx& CurItem, DlgEdit& EditLine)
 		auto strStr = EditLine.GetString();
 
 		if (CurItem.Flags & DIF_LISTNOAMPERSAND)
-			strStr = HiText2Str(strStr);
+			strStr = remove_highlight(strStr);
 
 		ComboBox->SetSelectPos(ComboBox->FindItem(0,strStr,LIFIND_EXACTMATCH),1);
 
@@ -3892,7 +3891,7 @@ int Dialog::SelectFromComboBox(DialogItemEx& CurItem, DlgEdit& EditLine)
 
 		if (CurItem.Flags & DIF_LISTNOAMPERSAND)
 		{
-			strStr = HiText2Str(ItemPtr.Name);
+			strStr = remove_highlight(ItemPtr.Name);
 			EditLine.SetString(strStr);
 		}
 		else

@@ -1,4 +1,130 @@
 --------------------------------------------------------------------------------
+drkns 2025-09-21 18:06:25+01:00 - build 6563
+
+1. Exception handling improvements.
+
+--------------------------------------------------------------------------------
+drkns 2025-09-21 15:41:04+01:00 - build 6562
+
+1. gh-939: Set ECSTATE_SAVED only when the file was saved by the user.
+
+--------------------------------------------------------------------------------
+MZK 2025-09-20 15:47:03-04:00 - build 6561
+
+1. gh-1009: gh-1010: gh-1011: An item in Find All menu can be longer than max short.
+
+2. Refactoring.
+
+--------------------------------------------------------------------------------
+drkns 2025-09-20 19:08:13+01:00 - build 6560
+
+1. Correction of 5137.
+
+--------------------------------------------------------------------------------
+MZK 2025-09-19 20:55:44-04:00 - build 6559
+
+1. gh-1006: `VMenu`: Do not clear annotations if nobody asked for it.
+
+--------------------------------------------------------------------------------
+rohitab 2025-09-19 08:58:11+10:00 - build 6558
+
+1. gh-1005: DM_LISTFINDSTRING finds incorrect items if the text contains path separators.
+
+--------------------------------------------------------------------------------
+zg 2025-09-17 17:13:29+03:00 - build 6557
+
+1. correction 6548.1.
+
+--------------------------------------------------------------------------------
+zg 2025-09-17 13:42:01+03:00 - build 6556
+
+1. looping when searching forward with regular expressions and whole words.
+
+--------------------------------------------------------------------------------
+drkns 2025-09-16 22:50:24+01:00 - build 6555
+
+1. Refactoring & minor fixes.
+
+--------------------------------------------------------------------------------
+drkns 2025-09-15 17:23:53+01:00 - build 6554
+
+1. gh-1002: No Error Message.
+
+--------------------------------------------------------------------------------
+MZK 2025-09-14 19:42:09-04:00 - build 6553
+
+1. More robust overflow fix for `VMenu` fullwidth-aware rendering.
+
+--------------------------------------------------------------------------------
+drkns 2025-09-14 23:59:55+01:00 - build 6552
+
+1. Continue fullwidth-aware rendering.
+
+--------------------------------------------------------------------------------
+drkns 2025-09-14 21:24:45+01:00 - build 6551
+
+1. Continue fullwidth-aware rendering.
+
+2. Support negative values in far:error.
+
+3. Refactoring.
+
+--------------------------------------------------------------------------------
+shmuel 2025-09-13 00:33:32+03:00 - build 6550
+
+1. A small correction to 6548.
+
+--------------------------------------------------------------------------------
+drkns 2025-09-12 22:23:09+01:00 - build 6549
+
+1. 0004083: BSOD on NFS.
+
+   Apparently these days you can cast a BSOD on a Microsoft driver from unprivileged user code as simply as:
+
+     overlapped.hEvent = CreateEvent({}, true, false, {});
+     HANDLE handle = CreateFile(L"\\\\nfs_server\\share", FILE_LIST_DIRECTORY, 0, {}, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OVERLAPPED, {});
+     ReadDirectoryChangesW(handle, &buffer, sizeof(buffer), false, FILE_NOTIFY_CHANGE_FILE_NAME, {}, &overlapped, {});
+     CancelIoEx(handle, &overlapped);
+     CloseHandle(handle);
+
+   Do what you want with this knowledge.
+
+   Good job, Microsoft.
+
+--------------------------------------------------------------------------------
+MZK 2025-09-11 21:46:54-04:00 - build 6548
+
+1. gh-948: Macro API to retrieve menu item extended data.
+
+2. New macro Edit.SyncEditorAndFindAllMenu.lua demonstrating usage of this API.
+   Based on https://forum.farmanager.com/viewtopic.php?t=11977
+
+--------------------------------------------------------------------------------
+drkns 2025-09-09 17:17:39+01:00 - build 6547
+
+1. Continue 6546.
+
+--------------------------------------------------------------------------------
+drkns 2025-09-08 17:27:14+01:00 - build 6546
+
+1. Improve codepage detection.
+
+--------------------------------------------------------------------------------
+drkns 2025-09-07 21:46:00+01:00 - build 6545
+
+1. Continue fullwidth-aware rendering.
+
+--------------------------------------------------------------------------------
+drkns 2025-09-05 20:48:34+01:00 - build 6544
+
+1. gh-998: Fix a crash on plugin panels with funny names.
+
+--------------------------------------------------------------------------------
+mihnita 2025-08-31 19:43:00-07:00 - build 6543
+
+1. Optionally hide files and folders starting with dot.
+
+--------------------------------------------------------------------------------
 drkns 2025-08-31 18:02:48+01:00 - build 6542
 
 1. Fix editor.sel(...) in edit controls.

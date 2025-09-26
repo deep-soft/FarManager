@@ -325,7 +325,7 @@ static bool GetUnicodeCpUsingWindows(const void* Data, size_t Size, uintptr_t& C
 		return false;
 	}
 
-	int Test = IS_TEXT_UNICODE_NOT_UNICODE_MASK | IS_TEXT_UNICODE_UNICODE_MASK | IS_TEXT_UNICODE_REVERSE_MASK;
+	int Test = IS_TEXT_UNICODE_NOT_UNICODE_MASK | IS_TEXT_UNICODE_NOT_ASCII_MASK | IS_TEXT_UNICODE_UNICODE_MASK | IS_TEXT_UNICODE_REVERSE_MASK;
 
 	// return value is ignored - only some tests might pass
 	IsTextUnicode(Data, static_cast<int>(Size), &Test);
@@ -336,6 +336,16 @@ static bool GetUnicodeCpUsingWindows(const void* Data, size_t Size, uintptr_t& C
 		return false;
 	}
 
+	// As of 2025 it's the same as IS_TEXT_UNICODE_NULL_BYTES.
+	// In other words, we proceed only if there are some.
+	// This restriction is somewhat artificial: technically, you can have a valid UTF-16 piece with no null bytes at all,
+	// but in practice it's extremely rare, since the U+0000 - U+00FF range is Basic Latin and Latin-1 Supplement,
+	// and Basic Latin includes such fundamental characters as space, new line, digits, and common punctuation.
+	// You have to try really hard to avoid them.
+	// Not to mention that UTF-16 without BOM is rare per se these days.
+	if (!(Test & IS_TEXT_UNICODE_NOT_ASCII_MASK))
+		return false;
+
 	lazy<bool>
 		IsUTF16LEAcceptable([&]{ return IsCodepageAcceptable(CP_UTF16LE); }),
 		IsUTF16BEAcceptable([&]{ return IsCodepageAcceptable(CP_UTF16BE); });
@@ -343,6 +353,7 @@ static bool GetUnicodeCpUsingWindows(const void* Data, size_t Size, uintptr_t& C
 	// High confidence, non-ambiguous
 	if (Test & IS_TEXT_UNICODE_ASCII16 && *IsUTF16LEAcceptable)
 	{
+		LOGDEBUG(L"IsTextUnicode: UTF-16 LE (ASCII 16)"sv);
 		Codepage = CP_UTF16LE;
 		return true;
 	}
@@ -350,6 +361,7 @@ static bool GetUnicodeCpUsingWindows(const void* Data, size_t Size, uintptr_t& C
 	// High confidence, non-ambiguous
 	if (Test & IS_TEXT_UNICODE_REVERSE_ASCII16 && *IsUTF16BEAcceptable)
 	{
+		LOGDEBUG(L"IsTextUnicode: UTF-16 BE (ASCII 16)"sv);
 		Codepage = CP_UTF16BE;
 		return true;
 	}
@@ -362,6 +374,7 @@ static bool GetUnicodeCpUsingWindows(const void* Data, size_t Size, uintptr_t& C
 	// High confidence, non-ambiguous
 	if (Test & IS_TEXT_UNICODE_REVERSE_CONTROLS && *IsUTF16BEAcceptable)
 	{
+		LOGDEBUG(L"IsTextUnicode: UTF-16 BE (controls)"sv);
 		Codepage = CP_UTF16BE;
 		return true;
 	}
@@ -369,6 +382,7 @@ static bool GetUnicodeCpUsingWindows(const void* Data, size_t Size, uintptr_t& C
 	// Medium confidence, statistical analysis
 	if (Test & IS_TEXT_UNICODE_STATISTICS && *IsUTF16LEAcceptable)
 	{
+		LOGDEBUG(L"IsTextUnicode: UTF-16 LE (statistics)"sv);
 		Codepage = CP_UTF16LE;
 		return true;
 	}
@@ -376,6 +390,7 @@ static bool GetUnicodeCpUsingWindows(const void* Data, size_t Size, uintptr_t& C
 	// Medium confidence, statistical analysis
 	if (Test & IS_TEXT_UNICODE_REVERSE_STATISTICS && *IsUTF16BEAcceptable)
 	{
+		LOGDEBUG(L"IsTextUnicode: UTF-16 BE (statistics)"sv);
 		Codepage = CP_UTF16BE;
 		return true;
 	}
@@ -383,6 +398,7 @@ static bool GetUnicodeCpUsingWindows(const void* Data, size_t Size, uintptr_t& C
 	// Low confidence, false positives (see above)
 	if (Test & IS_TEXT_UNICODE_CONTROLS && *IsUTF16LEAcceptable)
 	{
+		LOGDEBUG(L"IsTextUnicode: UTF-16 LE (controls)"sv);
 		Codepage = CP_UTF16LE;
 		return true;
 	}
@@ -425,6 +441,7 @@ static bool GetCpUsingML(std::string_view Str, uintptr_t& Codepage, function_ref
 		return false;
 
 	Codepage = It->nCodePage;
+	LOGDEBUG(L"ML: codepage {}"sv, Codepage);
 	return true;
 }
 

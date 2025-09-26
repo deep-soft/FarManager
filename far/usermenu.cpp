@@ -66,6 +66,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "keyboard.hpp"
 #include "log.hpp"
 #include "codepage.hpp"
+#include "strmix.hpp"
 
 // Platform:
 #include "platform.hpp"
@@ -561,7 +562,8 @@ static void FillUserMenu(VMenu2& FarUserMenu, UserMenu::menu_container& Menu, in
 			FuncNum = PrepareHotKey(strHotKey);
 			const auto have_hotkey = !strHotKey.empty();
 			const auto Offset = have_hotkey && strHotKey.front() == L'&'? 5 : 4;
-			strHotKey.resize(Offset, L' ');
+			const auto VisualSize = visual_string_length(strHotKey);
+			strHotKey.append(Offset - VisualSize, L' ');
 			FarUserMenuItem.Name = concat(have_hotkey && !FuncNum? L"&"sv : L""sv, strHotKey, strLabel);
 
 			if (MenuItem->Submenu)

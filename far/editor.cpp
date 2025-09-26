@@ -3405,7 +3405,7 @@ int Editor::CalculateSearchNextPositionInTheLine(const bool Backward, const bool
 
 namespace
 {
-	[[nodiscard]] short radix10_formatted_width(const size_t num)
+	[[nodiscard]] short radix10_formatted_width(const unsigned long long num)
 	{
 		return static_cast<short>(std::log10(num)) + 1;
 	}
@@ -3459,18 +3459,28 @@ namespace
 			m_Menu->SetFixedColumns(
 				{
 					{
-						.TextSegment{ LineNumColumnStart, small_segment::length_tag{ LineNumColumnWidth } },
+						.TextSegment{ LineNumColumnStart, segment::length_tag{ LineNumColumnWidth } },
 						.CurrentWidth = LineNumColumnWidth,
 						.Separator = BoxSymbols[BS_V1]
 					},
 					{
-						.TextSegment{ FoundPosColumnStart, small_segment::length_tag{ FoundPosColumnWidth } },
+						.TextSegment{ FoundPosColumnStart, segment::length_tag{ FoundPosColumnWidth } },
 						.CurrentWidth = FoundPosColumnWidth,
 						.Separator = BoxSymbols[BS_V1]
 					},
 				},
-				small_segment::ray(ItemTextStart)
+				segment::ray(ItemTextStart)
 			);
+			m_Menu->ListBox().RegisterExtendedDataProvider([](const menu_item_ex& Item)
+				{
+					const auto Coord{ std::any_cast<FindCoord>(Item.ComplexUserData) };
+
+					return VMenu::extended_item_data{
+						{ L"Line", Coord.Line + 1 },
+						{ L"Position", Coord.Pos + 1 },
+						{ L"Length", Coord.SearchLen },
+					};
+				});
 		}
 
 		void toggle_zoom()
@@ -3491,7 +3501,7 @@ namespace
 
 	private:
 		const short m_LineNumColumnMaxWidth{};
-		static constexpr short m_FoundPosColumnMaxWidth{ 6 }; // Enough?
+		static constexpr short m_FoundPosColumnMaxWidth{ 10 }; // Enough?
 		int m_MaxLineNum{};
 		int m_MaxFoundPos{};
 		int m_LastSeenLine{ -1 };
@@ -5603,7 +5613,8 @@ int Editor::EditorControl(int Command, intptr_t Param1, void *Param2)
 			Info->BookmarkCount=BOOKMARK_COUNT;
 			Info->SessionBookmarkCount=GetSessionBookmarks(nullptr);
 			Info->CurState=m_Flags.Check(FEDITOR_LOCKMODE)?ECSTATE_LOCKED:0;
-			Info->CurState|=!m_Flags.Check(FEDITOR_MODIFIED)?ECSTATE_SAVED:0;
+			if (const auto HostFileEditor = GetHostFileEditor())
+				Info->CurState |= HostFileEditor->WasFileSaved()? ECSTATE_SAVED : 0;
 			Info->CurState|=m_Flags.Check(FEDITOR_MODIFIED)?ECSTATE_MODIFIED:0;
 			Info->CodePage = GetCodePage();
 
@@ -7109,6 +7120,22 @@ TEST_CASE("radix10_formatted_width")
 {
 	REQUIRE(std::ranges::all_of(
 		std::ranges::iota_view(0uLL, 1001uLL),
+		[](const auto Value) -> bool
+		{
+			return radix10_formatted_width(Value) == static_cast<short>(std::format("{}", Value).size());
+		}));
+	REQUIRE(std::ranges::all_of(
+		std::ranges::iota_view(
+			static_cast<unsigned long long>(std::numeric_limits<int>::max()) - 10,
+			static_cast<unsigned long long>(std::numeric_limits<int>::max()) + 10),
+		[](const auto Value) -> bool
+		{
+			return radix10_formatted_width(Value) == static_cast<short>(std::format("{}", Value).size());
+		}));
+	REQUIRE(std::ranges::all_of(
+		std::ranges::iota_view(
+		static_cast<unsigned long long>(std::numeric_limits<unsigned int>::max()) - 10,
+		static_cast<unsigned long long>(std::numeric_limits<unsigned int>::max()) + 10),
 		[](const auto Value) -> bool
 		{
 			return radix10_formatted_width(Value) == static_cast<short>(std::format("{}", Value).size());

@@ -85,7 +85,12 @@ public:
 	}
 
 	[[nodiscard]]
-	static constexpr segment_t ray(T InitialPoint = T{}) noexcept { return { InitialPoint, sentinel_tag{ domain_max() } }; }
+	static constexpr segment_t ray(T InitialPoint = T{}) noexcept
+	{
+		return InitialPoint >= 0
+			? segment_t{ InitialPoint, sentinel_tag{ domain_max() } }
+			: segment_t{ InitialPoint, length_tag{ domain_max() } };
+	}
 
 private:
 	constexpr segment_t(T const Start, T const End) noexcept

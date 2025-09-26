@@ -6882,6 +6882,20 @@ void FileList::UpdateIfRequired()
 	Update((m_KeepSelection? UPDATE_KEEP_SELECTION : 0) | UPDATE_IGNORE_VISIBLE);
 }
 
+static bool ShouldHideFilesFromView(DWORD const Attributes, string_view const FileName)
+{
+	if (Global->Opt->ShowHidden)
+		return false;
+
+	if (Attributes & (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM))
+		return true;
+
+	if (!Global->Opt->TreatDotFilesAsHidden)
+		return false;
+
+	return FileName.starts_with(L'.');
+}
+
 void FileList::ReadFileNames(bool const KeepSelection, bool const UpdateEvenIfPanelInvisible)
 {
 	const auto DataLock = lock_data();
@@ -7065,12 +7079,12 @@ void FileList::ReadFileNames(bool const KeepSelection, bool const UpdateEvenIfPa
 
 	for (const auto& fdata: Find)
 	{
+		if (ShouldHideFilesFromView(fdata.Attributes, fdata.FileName))
+			continue;
+
 		ErrorState = os::last_error();
 
 		const auto IsDirectory = os::fs::is_directory(fdata);
-
-		if (fdata.Attributes & (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM) && !Global->Opt->ShowHidden)
-			continue;
 
 		if (UseFilter && !m_Filter->FileInFilter(fdata, fdata.FileName))
 		{
@@ -7566,19 +7580,19 @@ void FileList::UpdatePlugin(bool const KeepSelection, bool const UpdateEvenIfPan
 
 	for (const auto& PanelItem: PanelData)
 	{
+		if (ShouldHideFilesFromView(PanelItem.FileAttributes, NullToEmpty(PanelItem.FileName)))
+			continue;
+
 		if (UseFilter && !(m_CachedOpenPanelInfo.Flags & OPIF_DISABLEFILTER))
 		{
 			if (!m_Filter->FileInFilter(PanelItem))
 			{
 				if (!(PanelItem.FileAttributes & FILE_ATTRIBUTE_DIRECTORY))
-					m_FilteredExtensions.emplace(name_ext(PanelItem.FileName).second);
+					m_FilteredExtensions.emplace(name_ext(NullToEmpty(PanelItem.FileName)).second);
 
 				continue;
 			}
 		}
-
-		if (!Global->Opt->ShowHidden && (PanelItem.FileAttributes & (FILE_ATTRIBUTE_HIDDEN|FILE_ATTRIBUTE_SYSTEM)))
-			continue;
 
 		FileListItem NewItem(PanelItem);
 
@@ -7980,7 +7994,7 @@ void FileList::ShowFileList(bool Fast)
 
 	strTitle = GetTitle();
 	int TitleX2 = m_Where.right;
-	if (Global->Opt->Clock && !Global->Opt->ShowMenuBar && m_Where.left + strTitle.size() + 2 >= ScrX - Global->CurrentTime.size())
+	if (Global->Opt->Clock && !Global->Opt->ShowMenuBar && m_Where.left + visual_string_length(strTitle) + 2 >= ScrX - Global->CurrentTime.size())
 		TitleX2 = std::min(static_cast<int>(ScrX - Global->CurrentTime.size()), static_cast<int>(m_Where.right));
 
 	int MaxSize = TitleX2 - m_Where.left - 1;
@@ -7999,7 +8013,7 @@ void FileList::ShowFileList(bool Fast)
 	strTitle.insert(0, 1, L' ');
 	strTitle.push_back(L' ');
 
-	const auto TitleSize = static_cast<int>(strTitle.size());
+	const auto TitleSize = static_cast<int>(visual_string_length(strTitle));
 	int TitleX = m_Where.left + 1 + XShift + (TitleX2 - m_Where.left - XShift - TitleSize) / 2;
 
 	if (Global->Opt->Clock && !Global->Opt->ShowMenuBar && TitleX + TitleSize > ScrX - static_cast<int>(Global->CurrentTime.size()))
@@ -8007,7 +8021,7 @@ void FileList::ShowFileList(bool Fast)
 
 	SetColor(IsFocused()? COL_PANELSELECTEDTITLE:COL_PANELTITLE);
 	GotoXY(TitleX, m_Where.top);
-	Text(strTitle);
+	Text(strTitle, MaxSize);
 
 	const auto DataLock = lock_data();
 	const auto& m_ListData = *DataLock;
