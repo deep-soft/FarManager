@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <windows.h>
 #include <shellapi.h>
+#include <winternl.h>
 
 WARNING_PUSH()
 WARNING_DISABLE_MSC(4255)
@@ -15,6 +16,14 @@ WARNING_POP()
 #include "lf_luafar.h"
 #include "lf_bit64.h"
 #include "lf_service.h"
+
+typedef NTSTATUS(NTAPI* tpNtQueryInformationFile)(HANDLE FileHandle, PIO_STATUS_BLOCK IoStatusBlock, PVOID FileInformation, ULONG Length, FILE_INFORMATION_CLASS FileInformationClass);
+typedef NTSTATUS(NTAPI* tpNtSetInformationFile)(HANDLE FileHandle, PIO_STATUS_BLOCK IoStatusBlock, PVOID FileInformation, ULONG Length, FILE_INFORMATION_CLASS FileInformationClass);
+typedef LSTATUS(* tpRegDeleteKeyExW)(HKEY hKey, LPCWSTR lpSubKey, REGSAM samDesired, DWORD Reserved);
+
+static tpNtQueryInformationFile pNtQueryInformationFile;
+static tpNtSetInformationFile pNtSetInformationFile;
+static tpRegDeleteKeyExW pRegDeleteKeyExW;
 
 static BOOL dir_exist(const wchar_t* path)
 {
@@ -212,22 +221,11 @@ static int win_GetRegKey(lua_State *L)
 //   Result:     TRUE if success, FALSE if failure, [boolean]
 static int win_DeleteRegKey(lua_State *L)
 {
-	long res;
 	HKEY hRoot = CheckHKey(L, 1);
 	const wchar_t* Key = check_utf8_string(L, 2, NULL);
 	REGSAM samDesired = (REGSAM) OptFlags(L, 3, 0);
 
-	FARPROC ProcAddr;
-	HMODULE module = GetModuleHandleW(L"Advapi32.dll");
-	if (module && (ProcAddr = GetProcAddress(module, "RegDeleteKeyExW")) != NULL)
-	{
-		typedef LONG (WINAPI *pRegDeleteKeyEx)(HKEY, LPCTSTR, REGSAM, DWORD);
-		res = ((pRegDeleteKeyEx)(intptr_t)ProcAddr)(hRoot, Key, samDesired, 0);
-	}
-	else
-	{
-		res = RegDeleteKeyW(hRoot, Key);
-	}
+	long res = pRegDeleteKeyExW ? pRegDeleteKeyExW(hRoot, Key, samDesired, 0) : RegDeleteKeyW(hRoot, Key);
 	return lua_pushboolean(L, res==ERROR_SUCCESS), 1;
 }
 
@@ -858,34 +856,55 @@ int win_IsWinVersion(lua_State *L)
 	return 1;
 }
 
-static void PutFileTimeToTableEx(lua_State *L, const FILETIME *FT, const char *key)
+static void PutFileTimeToTableEx(lua_State *L, const LARGE_INTEGER *FT, const char *key)
 {
-	INT64 FileTime = FT->dwLowDateTime + 0x100000000LL * FT->dwHighDateTime;
-	bit64_pushuserdata(L, FileTime);
+	bit64_pushuserdata(L, FT->QuadPart);
 	lua_setfield(L, -2, key);
+}
+
+static void SetFunctionPointers()
+{
+	HMODULE hNtDll = GetModuleHandleW(L"ntdll.dll");
+	if (hNtDll)
+	{
+		pNtQueryInformationFile = (tpNtQueryInformationFile)(INT_PTR)GetProcAddress(hNtDll, "NtQueryInformationFile");
+		pNtSetInformationFile = (tpNtSetInformationFile)(INT_PTR)GetProcAddress(hNtDll, "NtSetInformationFile");
+	}
+
+	HMODULE hAdvApi = GetModuleHandleW(L"Advapi32.dll");
+	if (hAdvApi)
+	{
+		pRegDeleteKeyExW = (tpRegDeleteKeyExW)(INT_PTR)GetProcAddress(hAdvApi, "RegDeleteKeyExW");
+	}
 }
 
 static int win_GetFileTimes(lua_State *L)
 {
 	int res = 0;
-	const wchar_t* FileName = check_utf8_string(L, 1, NULL);
-	DWORD attr = GetFileAttributesW(FileName);
-	if (attr != INVALID_FILE_ATTRIBUTES)
+	if (pNtQueryInformationFile)
 	{
-		DWORD flags = (attr & FILE_ATTRIBUTE_DIRECTORY) ? FILE_FLAG_BACKUP_SEMANTICS : 0;
-		HANDLE hFile = CreateFileW(FileName,GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,flags,NULL);
-		if (hFile != INVALID_HANDLE_VALUE)
+		const wchar_t* FileName = check_utf8_string(L, 1, NULL);
+		DWORD attr = GetFileAttributesW(FileName);
+		if (attr != INVALID_FILE_ATTRIBUTES)
 		{
-			FILETIME t_create, t_access, t_write;
-			if (GetFileTime(hFile, &t_create, &t_access, &t_write))
+			DWORD flags = (attr & FILE_ATTRIBUTE_DIRECTORY) ? FILE_FLAG_BACKUP_SEMANTICS : 0;
+			HANDLE hFile = CreateFileW(FileName,GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,flags,NULL);
+			if (hFile != INVALID_HANDLE_VALUE)
 			{
-				lua_createtable(L, 0, 3);
-				PutFileTimeToTableEx(L, &t_create, "CreationTime");
-				PutFileTimeToTableEx(L, &t_access, "LastAccessTime");
-				PutFileTimeToTableEx(L, &t_write,  "LastWriteTime");
-				res = 1;
+				IO_STATUS_BLOCK iob;
+				FILE_BASIC_INFO fbi;
+				const int FileBasicInformation = 4;
+				if (NT_SUCCESS(pNtQueryInformationFile(hFile, &iob, &fbi, sizeof(fbi), FileBasicInformation)))
+				{
+					lua_createtable(L, 0, 4);
+					PutFileTimeToTableEx(L, &fbi.CreationTime, "CreationTime");
+					PutFileTimeToTableEx(L, &fbi.LastAccessTime, "LastAccessTime");
+					PutFileTimeToTableEx(L, &fbi.LastWriteTime, "LastWriteTime");
+					PutFileTimeToTableEx(L, &fbi.ChangeTime, "ChangeTime");
+					res = 1;
+				}
+				CloseHandle(hFile);
 			}
-			CloseHandle(hFile);
 		}
 	}
 	if (res == 0)
@@ -893,7 +912,7 @@ static int win_GetFileTimes(lua_State *L)
 	return 1;
 }
 
-static int ExtractFileTime(lua_State *L, const char *key, FILETIME* target, HANDLE hFile)
+static int ExtractFileTime(lua_State *L, const char *key, LARGE_INTEGER* target, HANDLE hFile)
 {
 	int success = 0;
 	lua_getfield(L, -1, key);
@@ -902,8 +921,7 @@ static int ExtractFileTime(lua_State *L, const char *key, FILETIME* target, HAND
 		INT64 DateTime = check64(L, -1, &success);
 		if (success)
 		{
-			target->dwLowDateTime = DateTime & 0xFFFFFFFF;
-			target->dwHighDateTime = DateTime >> 32;
+			target->QuadPart = DateTime;
 		}
 		else
 		{
@@ -919,26 +937,34 @@ static int ExtractFileTime(lua_State *L, const char *key, FILETIME* target, HAND
 static int win_SetFileTimes(lua_State *L)
 {
 	int res = 0;
-	const wchar_t* FileName = check_utf8_string(L, 1, NULL);
-	DWORD attr = GetFileAttributesW(FileName);
-	luaL_checktype(L, 2, LUA_TTABLE);
-	if (attr != INVALID_FILE_ATTRIBUTES)
+	if (pNtSetInformationFile)
 	{
-		DWORD flags = (attr & FILE_ATTRIBUTE_DIRECTORY) ? FILE_FLAG_BACKUP_SEMANTICS : 0;
-		HANDLE hFile = CreateFileW(FileName,GENERIC_WRITE,FILE_SHARE_READ,NULL,OPEN_EXISTING,flags,NULL);
-		if (hFile != INVALID_HANDLE_VALUE)
+		const wchar_t* FileName = check_utf8_string(L, 1, NULL);
+		DWORD attr = GetFileAttributesW(FileName);
+		luaL_checktype(L, 2, LUA_TTABLE);
+		if (attr != INVALID_FILE_ATTRIBUTES && pNtSetInformationFile)
 		{
-			FILETIME t_create, t_access, t_write;
-			FILETIME *p_create=NULL, *p_access=NULL, *p_write=NULL;
-			lua_pushvalue(L, 2);
-			if (ExtractFileTime(L, "CreationTime", &t_create, hFile))
-				p_create = &t_create;
-			if (ExtractFileTime(L, "LastAccessTime", &t_access, hFile))
-				p_access = &t_access;
-			if (ExtractFileTime(L, "LastWriteTime", &t_write, hFile))
-				p_write = &t_write;
-			res = (p_create||p_access||p_write) && SetFileTime(hFile,p_create,p_access,p_write);
-			CloseHandle(hFile);
+			DWORD flags = (attr & FILE_ATTRIBUTE_DIRECTORY) ? FILE_FLAG_BACKUP_SEMANTICS : 0;
+			HANDLE hFile = CreateFileW(FileName,GENERIC_WRITE,FILE_SHARE_READ,NULL,OPEN_EXISTING,flags,NULL);
+			if (hFile != INVALID_HANDLE_VALUE)
+			{
+				IO_STATUS_BLOCK iob;
+				FILE_BASIC_INFO fbi;
+				memset(&fbi, 0, sizeof(fbi));
+				lua_pushvalue(L, 2);
+				if (ExtractFileTime(L, "CreationTime", &fbi.CreationTime, hFile)  // don't use || here
+					| ExtractFileTime(L, "LastAccessTime", &fbi.LastAccessTime, hFile)
+					| ExtractFileTime(L, "LastWriteTime", &fbi.LastWriteTime, hFile)
+					| ExtractFileTime(L, "ChangeTime", &fbi.ChangeTime, hFile))
+				{
+					const int FileBasicInformation = 4;
+					if (NT_SUCCESS(pNtSetInformationFile(hFile, &iob, &fbi, sizeof(fbi), FileBasicInformation)))
+					{
+						res = 1;
+					}
+				}
+				CloseHandle(hFile);
+			}
 		}
 	}
 	lua_pushboolean(L, res);
@@ -1039,6 +1065,8 @@ LUALIB_API int luaopen_win(lua_State *L)
 	lua_pushcfunction(L, luaopen_ustring);
 	lua_pushvalue(L, -2);
 	lua_call(L, 1, 0);
+
+	SetFunctionPointers();
 
 	return 1;
 }
