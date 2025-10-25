@@ -1268,7 +1268,7 @@ FAR_INLINE_CONSTANT EDITOR_FLAGS
 #ifdef FAR_USE_INTERNALS
 	EF_SERVICEREGION         = 0x0000000000001000ULL,
 #endif // END FAR_USE_INTERNALS
-	EN_NONE                  = 0;
+	EF_NONE                  = 0;
 
 enum EDITOR_EXITCODE
 {
@@ -1484,6 +1484,12 @@ enum FARMACROVARTYPE
 	FMVT_NEWTABLE               = 12,
 	FMVT_SETTABLE               = 13,
 	FMVT_DIALOG                 = 14,
+	FMVT_TABLE                  = 15,
+	FMVT_GETTABLE               = 16,
+	FMVT_STACKPOP               = 17,
+	FMVT_STACKGETTOP            = 18,
+	FMVT_STACKSETTOP            = 19,
+	FMVT_STACKPUSHVALUE         = 20,
 };
 
 struct FarMacroValue
