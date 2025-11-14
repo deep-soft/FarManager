@@ -456,27 +456,18 @@ void ConvertLuaValue (lua_State *L, int pos, struct FarMacroValue *target)
 	}
 	else if (type == LUA_TTABLE)
 	{
-		lua_rawgeti(L,pos,1);
-		if (lua_type(L,-1) == LUA_TSTRING)
+		lua_getfield(L, pos, TKEY_BINARY);
+		if (lua_type(L, -1) == LUA_TSTRING)
 		{
 			target->Type = FMVT_BINARY;
 			target->Value.Binary.Data = (void*)lua_tolstring(L, -1, &target->Value.Binary.Size);
 		}
-		lua_pop(L,1);
-//		lua_rawgeti(L,pos,0);
-//		if (lua_type(L,-1) == LUA_TSTRING && !strcmp("binary", lua_tostring(L,-1)))
-//		{
-//			lua_rawgeti(L,pos,1);
-//			target->Type = FMVT_BINARY;
-//			target->Value.Binary.Size = 0;
-//			target->Value.Binary.Data = (void*)lua_tolstring(L, -1, &target->Value.Binary.Size);
-//			lua_pop(L,1);
-//		}
-//		else
-//		{
-//			target->Type = FMVT_TABLE;
-//		}
-//		lua_pop(L,1);
+		else
+		{
+			target->Type = FMVT_TABLE;
+			target->Value.Integer = pos;
+		}
+		lua_pop(L, 1);
 	}
 	else if (type == LUA_TBOOLEAN)
 	{
@@ -4711,11 +4702,11 @@ static int far_MkTemp(lua_State *L)
 
 static int far_MkLink(lua_State *L)
 {
-	const wchar_t* src = check_utf8_string(L, 1, NULL);
-	const wchar_t* dst = check_utf8_string(L, 2, NULL);
-	UINT64 type = CheckFlags(L, 3);
+	const wchar_t* target = check_utf8_string(L, 1, NULL);
+	const wchar_t* linkname = check_utf8_string(L, 2, NULL);
+	UINT64 linktype = OptFlags(L, 3, LINK_SYMLINK);
 	UINT64 flags = OptFlags(L, 4, 0);
-	lua_pushboolean(L, GetPluginData(L)->FSF->MkLink(src, dst, type, flags));
+	lua_pushboolean(L, GetPluginData(L)->FSF->MkLink(target, linkname, linktype, flags));
 	return 1;
 }
 
@@ -5316,11 +5307,10 @@ static int far_MacroExecute(lua_State* L)
 
 	if (top > 2)
 	{
-		size_t i;
 		Data.InCount = top-2;
 		Data.InValues = (struct FarMacroValue*)lua_newuserdata(L, Data.InCount*sizeof(struct FarMacroValue));
 		memset(Data.InValues, 0, Data.InCount*sizeof(struct FarMacroValue));
-		for (i=0; i<Data.InCount; i++)
+		for (size_t i=0; i<Data.InCount; i++)
 			ConvertLuaValue(L, (int)i+3, Data.InValues+i);
 	}
 

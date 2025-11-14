@@ -25,30 +25,6 @@ install:
 
 environment:
   matrix:
-  - id: Release.x64
-    configuration: Release
-    arch: amd64
-    platform_name: x64
-    ADD_MAKE:
-    ADD_MAKE_MSI: RELEASE=1
-    NAME_ADD:
-
-  - id: Release.x86
-    configuration: Release
-    arch: amd64_x86
-    platform_name: x86
-    ADD_MAKE:
-    ADD_MAKE_MSI: RELEASE=1
-    NAME_ADD:
-
-  - id: Release.ARM64
-    configuration: Release
-    arch: amd64_arm64
-    platform_name: ARM64
-    ADD_MAKE:
-    ADD_MAKE_MSI: RELEASE=1
-    NAME_ADD:
-
   - id: Debug.x64
     configuration: Debug
     arch: amd64
@@ -64,6 +40,33 @@ environment:
     ADD_MAKE: DEBUG=1
     ADD_MAKE_MSI:
     NAME_ADD: .Debug
+
+  - id: Release.x64
+    configuration: Release
+    arch: amd64
+    platform_name: x64
+    ADD_MAKE: ENABLE_TESTS=0
+    ADD_MAKE_MSI: RELEASE=1
+    NAME_ADD:
+
+  - id: Release.x86
+    configuration: Release
+    arch: amd64_x86
+    platform_name: x86
+    ADD_MAKE: ENABLE_TESTS=0
+    ADD_MAKE_MSI: RELEASE=1
+    NAME_ADD:
+
+  - id: Release.ARM64
+    configuration: Release
+    arch: amd64_arm64
+    platform_name: ARM64
+    ADD_MAKE: ENABLE_TESTS=0
+    ADD_MAKE_MSI: RELEASE=1
+    NAME_ADD:
+
+matrix:
+  fast_finish: true
 
 build_script:
   #build Plugin SDK Encyclopedia

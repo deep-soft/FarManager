@@ -756,7 +756,8 @@ local function LoadMacros (unload, paths)
       local f, msg = (isMoonScript and moonscript.loadfile or loadfile)(FullPath)
       if not f then
         numerrors=numerrors+1
-        msg = ('Error in MoonScript file: %s\n%s'):format(FullPath, string.gsub(msg, "\n\t", "\n   "))
+        msg = ('Error in %s file: %s\n%s'):format(isMoonScript and "MoonScript" or "Lua",
+              FullPath, string.gsub(msg, "\n\t", "\n   "))
         ErrMsgLoad(msg,FullPath,isMoonScript,"compile")
         return
       end
@@ -1165,7 +1166,7 @@ local function DelMacro (guid, callbackId) -- MCTL_DELMACRO
   for _,areatable in pairs(Areas) do
     for _,macroarray in pairs(areatable) do
       for _,m in ipairs(macroarray) do
-        if m.guid and m.guid[1]==guid[1] and m.callbackId==callbackId and not m.disabled then
+        if m.guid and m.guid.__binary==guid.__binary and m.callbackId==callbackId and not m.disabled then
           m.disabled = true
           return true
         end

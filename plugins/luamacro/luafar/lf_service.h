@@ -1,6 +1,8 @@
 #ifndef LUAFAR_SERVICE_H
 #define LUAFAR_SERVICE_H
 
+#define TKEY_BINARY "__binary"
+
 UINT64   OptFlags(lua_State* L, int pos, UINT64 dflt);
 UINT64   GetFlagCombination(lua_State *L, int pos, int *success);
 UINT64   GetFlagsFromTable(lua_State *L, int pos, const char* key);
@@ -16,7 +18,7 @@ void     PushInputRecord(lua_State *L, const INPUT_RECORD* ir);
 void     DeleteLuaStateTimerQueue(lua_State *L);
 HANDLE   GetLuaStateTimerQueue(lua_State *L);
 
-int      IsLuaJIT();
+int      IsLuaJIT(void);
 void     LF_Error(lua_State *L, const wchar_t* aMsg);
 void     NewVirtualKeyTable(lua_State* L, BOOL twoways);
 void     pushFileTime(lua_State *L, const FILETIME *ft);

@@ -1,4 +1,123 @@
 --------------------------------------------------------------------------------
+w17 2025-11-11 15:52:31+03:00 - build 6597
+
+1. Minor cleanup.
+
+--------------------------------------------------------------------------------
+drkns 2025-11-10 21:12:28+00:00 - build 6596
+
+1. Compiler warnings & minor cleanup.
+
+--------------------------------------------------------------------------------
+w17 2025-11-10 23:52:10+03:00 - build 6595
+
+1. again Correction of 6592 \-n \{n} \{-n} \{name} backreference's is not valid
+
+--------------------------------------------------------------------------------
+w17 2025-11-10 22:37:26+03:00 - build 6594
+
+1. Correction of 6592
+
+--------------------------------------------------------------------------------
+drkns 2025-11-10 18:14:47+00:00 - build 6593
+
+1. Port a few regex tests from macrotest.lua.
+
+2. Correction of 6588.
+
+--------------------------------------------------------------------------------
+w17 2025-11-10 05:04:24+03:00 - build 6592
+
+1. ReRevert 6590 (fixed)
+
+--------------------------------------------------------------------------------
+w17 2025-11-10 02:31:43+03:00 - build 6591
+
+1. Revert 6590 (not ready)
+
+--------------------------------------------------------------------------------
+w17 2025-11-10 00:59:47+03:00 - build 6590
+
+1. RegExp: (?<name>... added, (?{name}... still works. Name starts with LETTER.
+
+2. RegExp: relative backrefs -- \p-1 \p{-2}  -1 === upper known group when parsing.
+
+3. RegExp: \g{name/num} added, \p{name/num} still works.
+
+4. RegExp: Any \g... modifications allowed: \gnum \g{num} \g-num \g{-num} \g{name}
+
+5. RegExp: $+{name/num} added, ${name/num) still works.
+
+6. RegExp: \x{h} .. \x{hhhh} added, \xh .. \xhhhh still works.
+
+7. RegExp: A bit code simplification.
+
+--------------------------------------------------------------------------------
+drkns 2025-11-08 19:25:50+00:00 - build 6589
+
+1. gh-1042: Show file name in local user menu title.
+
+--------------------------------------------------------------------------------
+yulian5 2025-11-07 23:50:00-00:00 - build 6588
+
+1. Fixed copy counter for skipped folders
+
+--------------------------------------------------------------------------------
+drkns 2025-11-07 20:23:20+00:00 - build 6587
+
+1. gh-1040: Add support for zstd archives.
+
+--------------------------------------------------------------------------------
+yjh 2025-11-06 00:27:37+03:00 - build 6586
+
+1. SQLite: v3.51.0
+
+--------------------------------------------------------------------------------
+drkns 2025-11-04 17:37:42+00:00 - build 6585
+
+1. Add RegExpStatus::StructSize.
+   Just in case if we ever decide to extend it, e.g. with localized diagnostics.
+
+--------------------------------------------------------------------------------
+w17 2025-11-04 18:20:17+03:00 - build 6584
+
+1. RegExpControl: + RECTL_GETSTATUS
+
+--------------------------------------------------------------------------------
+drkns 2025-11-03 21:13:53+00:00 - build 6583
+
+1. Fix debug build.
+
+2. Fix substitution in far:regex.
+
+--------------------------------------------------------------------------------
+w17 2025-11-03 23:54:45+03:00 - build 6582
+
+1. Recover $$ -> $ rule in regex substutution
+
+--------------------------------------------------------------------------------
+w17 2025-11-03 20:52:30+03:00 - build 6581
+
+1. Allow \{group_number} backreference in regex pattern.
+
+2. Allow ${group_number} in regex replace (if named group was not found).
+
+--------------------------------------------------------------------------------
+drkns 2025-11-02 22:05:07+00:00 - build 6580
+
+1. Correction of 6421.3.
+
+--------------------------------------------------------------------------------
+drkns 2025-11-01 19:50:42+00:00 - build 6579
+
+1. gh-1036: Suppress elevation requests when scanning %path% for executables.
+
+--------------------------------------------------------------------------------
+shmuel 2025-10-25 17:09:40+03:00 - build 6578
+
+1. Add more stack operations to Macro-API engine.
+
+--------------------------------------------------------------------------------
 ssvine 2025-10-25 10:12:06+03:00 - build 6577
 
 1. gh-1034: Refresh plugin panel after uploading a changed file in ProcessEnter.

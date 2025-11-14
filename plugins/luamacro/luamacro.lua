@@ -383,6 +383,7 @@ local function Open_CommandLine (strCmdLine)
       About()
     elseif cmd == "test" then
       far.MacroPost( [[
+        local function errorhandler(err) win.OutputDebugString(debug.traceback(err)) end
         local function Quit(n) actl.Quit(n) Keys("Esc") end
         local OK, R
         R = win.JoinPath(far.PluginStartupInfo().ModuleDir, "macrotest.lua")
@@ -390,7 +391,7 @@ local function Open_CommandLine (strCmdLine)
         OK, R = pcall(R)
         OK = OK or Quit(2)
         R.test_all = R.test_all or Quit(3)
-        OK = pcall(R.test_all)
+        OK = xpcall(R.test_all, errorhandler)
         Quit(OK and 0 or 4)
       ]], 0, "CtrlShiftF12")
     elseif cmd == "browser" then
@@ -522,6 +523,8 @@ function export.Open (OpenFrom, guid, ...)
       return unpack(argtable, 2, argtable.n)
     elseif argtable[1]=="macropost" then -- test Mantis # 2222
       return far.MacroPost([[far.Message"macropost"]])
+    elseif argtable[1]=="browser" then
+      macrobrowser()
     end
 
   else -- OPEN_DIALOG, OPEN_EDITOR, OPEN_FILEPANEL, OPEN_LEFTDISKMENU,

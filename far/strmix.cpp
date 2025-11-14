@@ -1006,7 +1006,7 @@ string ReplaceBrackets(
 	{
 		const auto CurrentChar = Str[i];
 
-		if (CurrentChar != L'$' || i + 1 == length)
+		if (CurrentChar != L'$' || i + 1 >= length)
 		{
 			result.push_back(CurrentChar);
 			continue;
@@ -1015,7 +1015,7 @@ string ReplaceBrackets(
 		auto NextPos = i;
 		string_view Replacement;
 
-		if (const auto NextChar = Str[i + 1]; std::iswdigit(NextChar))
+		if (const auto NextChar = Str[i+1], NextNextChar = i+2 >= length ? L'\0' : Str[i+2]; std::iswdigit(NextChar)) // $<digit>
 		{
 			// 0, 1, 2, ...
 			size_t NumberEnd;
@@ -1026,22 +1026,48 @@ string ReplaceBrackets(
 			Replacement = get_match(MatchData, Match[GroupNumber]);
 			NextPos += NumberEnd;
 		}
-		else if (NextChar == L'{')
+		else if (NextChar == L'{' || (NextChar == L'+' && NextNextChar == L'{')) // ${... or $+{...
 		{
 			// {some text}
-			if (const auto NameEnd = Str.find(L'}', i + 2); NameEnd != Str.npos)
+			const auto off = i + (NextChar == L'+' ? 3 : 2);
+			if (const auto NameEnd = Str.find(L'}', off); NameEnd != Str.npos)
 			{
-				const auto Name = Str.substr(i + 2, NameEnd - i - 2);
+				const auto Name = Str.substr(off, NameEnd - off);
 
+				auto GroupNumber = MAXSIZE_T;
 				const auto GroupIterator = NamedGroups.find(Name);
-				if (GroupIterator == NamedGroups.cend())
+				if (GroupIterator != NamedGroups.cend())
+				{
+					if (GroupIterator->second < Match.size())
+					{
+						GroupNumber = GroupIterator->second; // group name found
+					}
+				}
+				else if (iswdigit(Str[i+2])) // ${<digit>...
+				{
+					size_t NumberEnd;
+					const auto group_number = from_string<size_t>(Str.substr(i + 2), &NumberEnd);
+					if (i + 2 + NumberEnd == NameEnd)
+					{
+						if (group_number >= Match.size())
+							throw far_known_exception(far::format(L"Invalid group number: {}"sv, group_number));
+						else
+							GroupNumber = group_number;
+					}
+				}
+
+				if (GroupNumber == MAXSIZE_T)
+				{
 					throw far_known_exception(far::format(L"Invalid group name: {}"sv, Name));
+				}
 
-				if (const auto GroupNumber = GroupIterator->second; GroupNumber < Match.size())
-					Replacement = get_match(MatchData, Match[GroupNumber]);
-
+				Replacement = get_match(MatchData, Match[GroupNumber]);
 				NextPos = NameEnd;
 			}
+		}
+		else if (NextChar == L'$') // $$
+		{
+			NextPos = ++i;
 		}
 
 		if (NextPos != i)
@@ -1495,7 +1521,7 @@ TEST_CASE("ReplaceBrackets")
 		{ L"meow"sv, L"${a }$cat$"sv, {}, {}, {}, L"Invalid group name"sv },
 		{ L"Ni!"sv, L"$0$0$0"sv, L"Ni!Ni!Ni!"sv, { { 0, 3 } } },
 		{ L"Fus Ro Dah"sv, L"$3-${first}-$2-$1-${oops$"sv, L"Dah-Fus-Ro-Fus-${oops$"sv, { { 0, 10 }, { 0, 3 }, { 4, 6 }, { 7, 10 } }, { { L"first"sv, 1 } } },
-		{ L"foobar"sv, L"${name2}-${name1}"sv, L"-foo"sv, { { 0, 3 }, { 0, 3 } }, { { L"name1"sv, 1 }, { L"name2"sv, 2 } } },
+		{ L"foobar"sv, L"${name2}-${name1}"sv, L"-foo"sv, { { 0, 3 }, { 0, 3 }, { 3, 3 } }, { { L"name1"sv, 1 }, { L"name2"sv, 2 } } },
 	};
 
 	const auto Matcher = [](string_view const Message)
