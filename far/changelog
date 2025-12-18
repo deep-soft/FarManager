@@ -1,4 +1,104 @@
 --------------------------------------------------------------------------------
+drkns 2025-12-14 20:12:20+00:00 - build 6616
+
+1. Extract more infomation from exceptions in corner cases like gh-1057.
+
+--------------------------------------------------------------------------------
+drkns 2025-12-14 00:12:57+00:00 - build 6615
+
+1. Improve integer editing in far:config.
+   Remove all the nonsense with separate dialogs for hex and binary,
+   make all the forms available in a single dialog.
+
+--------------------------------------------------------------------------------
+drkns 2025-12-08 08:26:49+00:00 - build 6614
+
+1. Correction of 6614.
+
+--------------------------------------------------------------------------------
+drkns 2025-12-07 11:20:04+00:00 - build 6613
+
+1. Refactoring.
+
+--------------------------------------------------------------------------------
+drkns 2025-12-05 19:23:22+00:00 - build 6612
+
+1. Fix another corner case with editor line numbers.
+
+--------------------------------------------------------------------------------
+drkns 2025-12-04 21:58:24+00:00 - build 6611
+
+1. Reduce the number of pointless messages when deleting in "Skip all" mode.
+
+--------------------------------------------------------------------------------
+drkns 2025-12-03 22:18:07+00:00 - build 6610
+
+1. Continue 6609.
+
+2. Fix a corner case in line endings parsing.
+
+--------------------------------------------------------------------------------
+drkns 2025-12-02 23:51:44+00:00 - build 6609
+
+1. Fix composite line endings handling in multiline regexes.
+
+--------------------------------------------------------------------------------
+drkns 2025-12-02 21:38:32+00:00 - build 6608
+
+1. gh-1053: Flush cursor info before screen text.
+   For some unholy reason the order is now important.
+
+2. Fix editor line numbers background.
+
+3. Catch2 3.11.0.
+
+--------------------------------------------------------------------------------
+drkns 2025-12-01 20:53:32+00:00 - build 6607
+
+1. Fix separator text in Message function.
+
+2. Fix time parsing in filters.
+
+3. Improve error handling in Help.
+
+4. Refactoring.
+
+5. Warning.
+
+--------------------------------------------------------------------------------
+zg 2025-12-01 22:05:24+02:00 - build 6606
+
+1. EOPT_SHOWLINENUMBERS and ESPT_SHOWLINENUMBERS are added to API.
+
+--------------------------------------------------------------------------------
+yulian5 2025-11-29 19:29:09-09:00 - build 6605
+
+1. Editor: add line numbers
+
+--------------------------------------------------------------------------------
+drkns 2025-11-29 13:18:21+00:00 - build 6604
+
+1. More logging.
+
+2. fmt 12.1.0.
+
+3. tinyxml2 11.0.
+
+--------------------------------------------------------------------------------
+yjh 2025-11-29 11:05:02+03:00 - build 6603
+
+1. SQLite: v3.51.1
+
+--------------------------------------------------------------------------------
+drkns 2025-11-27 20:02:04+00:00 - build 6602
+
+1. gh-1049: Crash on window resize when help opened.
+
+2. Remove restoring console size on exit.
+
+3. Refactoring.
+
+--------------------------------------------------------------------------------
 drkns 2025-11-26 22:05:45+00:00 - build 6601
 
 1. Improve deletion confirmation.

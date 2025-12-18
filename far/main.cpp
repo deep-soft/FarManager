@@ -413,10 +413,8 @@ static void InitProfile(string &strProfilePath, string &strLocalProfilePath)
 		if (!SingleProfile)
 			CreatePath(path::join(Global->Opt->LocalProfilePath, L"PluginsData"sv), false);
 
-		const auto RandomName = uuid::str(os::uuid::generate());
-
-		if (!os::fs::can_create_file(path::join(Global->Opt->ProfilePath, RandomName)) ||
-			(!SingleProfile && !os::fs::can_create_file(path::join(Global->Opt->LocalProfilePath, RandomName))))
+		if (!os::fs::can_create_file_in(Global->Opt->ProfilePath) ||
+			(!SingleProfile && !os::fs::can_create_file_in(Global->Opt->LocalProfilePath)))
 		{
 			Global->Opt->ReadOnlyConfig = true;
 		}
@@ -995,7 +993,7 @@ static void premain();
 
 static int wmain_seh()
 {
-	os::set_error_mode(SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX | SEM_NOALIGNMENTFAULTEXCEPT | SEM_NOGPFAULTERRORBOX);
+	os::set_preferred_error_mode();
 
 	// wmain is a non-standard extension and not available in gcc.
 	int Argc = 0;

@@ -195,8 +195,7 @@ private:
 	std::optional<bool>
 		m_DeleteReadOnly,
 		m_SkipWipe;
-	bool m_SkipFileErrors{};
-	bool m_SkipFolderErrors{};
+	bool m_SkipErrors{};
 	bool m_DeleteFolders{};
 	unsigned ProcessedItems{};
 	bool m_UpdateDiz{};
@@ -267,37 +266,28 @@ static bool EraseFileData(string_view const Name, progress Files, delete_progres
 	return true;
 }
 
-static bool EraseFile(string_view const Name, progress Files, delete_progress const& Progress)
+static bool EraseFile(string_view const FullName, progress Files, delete_progress const& Progress)
 {
-	if (!os::fs::set_file_attributes(Name, FILE_ATTRIBUTE_NORMAL))
+	if (!os::fs::set_file_attributes(FullName, FILE_ATTRIBUTE_NORMAL))
 		return false;
 
-	if (!EraseFileData(Name, Files, Progress))
+	if (!EraseFileData(FullName, Files, Progress))
 		return false;
 
-	const auto strTempName = MakeTemp({}, false);
+	const auto strTempName = MakeTemp({}, false, path::parent_path(FullName));
 
-	if (!os::fs::move_file(Name, strTempName))
+	if (!os::fs::move_file(FullName, strTempName))
 		return false;
 
 	return os::fs::delete_file(strTempName);
 }
 
-static bool EraseDirectory(string_view const Name)
+static bool EraseDirectory(string_view const FullName)
 {
-	auto Path = Name;
+	const auto strTempName = MakeTemp({}, false, path::parent_path(FullName));
 
-	if (!CutToParent(Path))
-	{
-		Path = {};
-	}
-
-	const auto strTempName = MakeTemp({}, false, Path);
-
-	if (!os::fs::move_file(Name, strTempName))
-	{
+	if (!os::fs::move_file(FullName, strTempName))
 		return false;
-	}
 
 	return os::fs::remove_directory(strTempName);
 }
@@ -572,13 +562,13 @@ void ShellDelete::process_item(
 		}
 	}
 
+	const auto strSelFullName = IsAbsolutePath(strSelName)?
+		strSelName :
+		path::join(SrcPanel->GetCurDir(), strSelName);
+
 	if (!DirSymLink && m_DeleteType != delete_type::recycle)
 	{
 		ScanTree ScTree(true, true, FALSE);
-
-		const auto strSelFullName = IsAbsolutePath(strSelName)?
-			strSelName :
-			path::join(SrcPanel->GetCurDir(), strSelName);
 
 		ScTree.SetFindPath(strSelFullName, L"*"sv);
 
@@ -686,7 +676,7 @@ void ShellDelete::process_item(
 	bool RetryRecycleAsRemove = false;
 
 	if (ERemoveDirectory(
-		strSelName,
+		strSelFullName,
 		m_DeleteType == delete_type::recycle && DirSymLink && !IsWindowsVistaOrGreater()?
 		delete_type::remove :
 		m_DeleteType,
@@ -883,21 +873,21 @@ bool ShellDelete::ShellRemoveFile(string_view const Name, progress Files, delete
 	switch (m_DeleteType)
 	{
 	case delete_type::erase:
-		return erase_file_with_retry(strFullName, m_SkipWipe, Files, Progress, m_SkipFileErrors);
+		return erase_file_with_retry(strFullName, m_SkipWipe, Files, Progress, m_SkipErrors);
 
 	case delete_type::remove:
-		return delete_file_with_retry(strFullName, m_SkipFileErrors);
+		return delete_file_with_retry(strFullName, m_SkipErrors);
 
 	case delete_type::recycle:
 		{
 			auto RetryRecycleAsRemove = false, Skip = false;
 
-			const auto Result = retryable_ui_operation([&]{ return RemoveToRecycleBin(strFullName, false, RetryRecycleAsRemove, Skip) || RetryRecycleAsRemove || Skip; }, strFullName, lng::MCannotRecycleFile, m_SkipFileErrors);
+			const auto Result = retryable_ui_operation([&]{ return RemoveToRecycleBin(strFullName, false, RetryRecycleAsRemove, Skip) || RetryRecycleAsRemove || Skip; }, strFullName, lng::MCannotRecycleFile, m_SkipErrors);
 			if (Result && !RetryRecycleAsRemove && !Skip)
 				return true;
 
 			if (RetryRecycleAsRemove)
-				return delete_file_with_retry(strFullName, m_SkipFileErrors);
+				return delete_file_with_retry(strFullName, m_SkipErrors);
 
 			return false;
 		}
@@ -915,13 +905,13 @@ bool ShellDelete::ERemoveDirectory(string_view const Name, delete_type const Typ
 	{
 	case delete_type::remove:
 	case delete_type::erase:
-		return retryable_ui_operation([&]{ return (Type == delete_type::erase? EraseDirectory : os::fs::remove_directory)(Name); }, Name, lng::MCannotDeleteFolder, m_SkipFolderErrors);
+		return retryable_ui_operation([&]{ return (Type == delete_type::erase? EraseDirectory : os::fs::remove_directory)(Name); }, Name, lng::MCannotDeleteFolder, m_SkipErrors);
 
 	case delete_type::recycle:
 		{
 			auto Skip = false;
 			return
-				retryable_ui_operation([&]{ return RemoveToRecycleBin(Name, true, RetryRecycleAsRemove, Skip) || RetryRecycleAsRemove || Skip; }, Name, lng::MCannotRecycleFolder, m_SkipFolderErrors) &&
+				retryable_ui_operation([&]{ return RemoveToRecycleBin(Name, true, RetryRecycleAsRemove, Skip) || RetryRecycleAsRemove || Skip; }, Name, lng::MCannotRecycleFolder, m_SkipErrors) &&
 				!Skip &&
 				!RetryRecycleAsRemove;
 		}
@@ -982,7 +972,7 @@ bool ShellDelete::RemoveToRecycleBin(string_view const Name, bool dir, bool& Ret
 	if (os::fs::move_to_recycle_bin(strFullName))
 		return true;
 
-	if (dir? m_SkipFolderErrors : m_SkipFileErrors)
+	if (m_SkipErrors)
 		return false;
 
 	const auto ErrorState = os::last_error();
@@ -1002,7 +992,7 @@ bool ShellDelete::RemoveToRecycleBin(string_view const Name, bool dir, bool& Ret
 		return false;
 
 	case message_result::third_button:     // [Skip All]
-		(dir? m_SkipFolderErrors : m_SkipFileErrors) = true;
+		m_SkipErrors = true;
 		[[fallthrough]];
 	case message_result::second_button:    // [Skip]
 		Skip = true;

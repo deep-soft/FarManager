@@ -108,8 +108,6 @@ namespace far
 	}
 }
 
-#define FSTR(str) FMT_STRING(str)
-
 auto str(const auto& Value)
 {
 	return fmt::to_wstring(Value);

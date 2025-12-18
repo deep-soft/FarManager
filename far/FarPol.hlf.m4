@@ -4008,6 +4008,10 @@ Wcześniej wprowadzone tabulacji nie zostaną przekonwertowane.
  #Pokaż pasek przewijania#
  Pokazuje pasek przewijania okna.
 
+ #Pokaż numery wierszy#
+ Pokazuje numery wierszy z lewej strony tekstu edytora. Opcja ta może być przełączana
+poprzez naciśnięcie #Ctrl+F3# podczas edycji.
+
 @=
  #Zapamiętaj pozycję kursora w pliku#
  Zapisuje i przywraca pozycję w ostatnio edytowanych plikach. Opcja wymusza także przywrócenie strony kodowej,
@@ -5173,13 +5177,13 @@ dużej ilości danych.
         ^<wrap>Łańcuchy zawierające "nazwa=", ale nie zawierające "wartosc", są przetwarzane
 (w rzeczywistości - omijane) szybciej.
 
- #\NN#  - ^<wrap>odniesienie do wcześniej dopasowanych nawiasów. NN jest liczbą całkowitą dodatnią.
+ #\N#   - ^<wrap>odniesienie do wcześniej dopasowanych nawiasów. N jest numer.
 Wszystkie nawiasy oprócz (?:wzorzec), (?=wzorzec), (?!wzorzec), (?<=wzorzec) i (?<!wzorzec)
 posiadają numer (w kolejności występowania).
         Przykład:
         "(['"])witaj\1" pasuje do "witaj" lub 'witaj'.
 
- #\p{nazwa}# - ^<wrap>wewnętrzne odwołanie regexp do jego sparsowanego nawiasu o podanej #nazwie#.
+ #\p{nazwa}# - ^<wrap>odniesienie do wcześniej dopasowanych nawiasów o podanej #nazwie#.
 
  #Przykłady:#
 
@@ -5741,12 +5745,6 @@ Jeżeli bieżąca wartość opcji jest inna niż domyślna, opcja jest oznaczona
 
  #Enter# lub #F4#
  Przełącza lub edytuje wartość.
-
- #Shift+F4#
- Edytuje wartość całkowitą jako wartość szesnastkową. Dla innych typów działa jak #F4#.
-
- #Alt+F4#
- Edytuje wartość całkowitą jak liczbę binarną. Dla innych typów działa jak #F4#.
 
  #Del#
  Przywraca domyślną wartość opcji.

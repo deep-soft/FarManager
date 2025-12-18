@@ -40,6 +40,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // Internal:
 #include "keyboard.hpp"
 #include "encoding.hpp"
+#include "exception.hpp"
 #include "macroopcode.hpp"
 #include "keys.hpp"
 #include "ctrlobj.hpp"
@@ -833,6 +834,9 @@ void FileEditor::InitKeyBar()
 		Keybar[KBL_MAIN][F6].clear();
 
 	Keybar[KBL_MAIN][F8] = f8cps.NextCPname(m_codepage);
+
+	// Update Ctrl+F3 label based on line numbers state
+	Keybar[KBL_CTRL][F3] = msg(m_editor->GetShowLineNumbers() ? lng::MEditCtrlF3Hide : lng::MEditCtrlF3);
 
 	Keybar.SetCustomLabels(KBA_EDITOR);
 }
@@ -1640,23 +1644,28 @@ bool FileEditor::LoadFile(const string_view Name, int& UserBreak, error_state_ex
 	return true;
 
 	}
-	catch (std::bad_alloc const&)
+	catch (std::bad_alloc const& e)
 	{
+		LOGERROR(L"{}"sv, e);
+
 		// TODO: better diagnostics
 		m_editor->FreeAllocatedData();
 		m_Flags.Set(FFILEEDIT_OPENFAILED);
 		SetLastError(ERROR_NOT_ENOUGH_MEMORY);
 		ErrorState = os::last_error();
+		LOGERROR(L"{}"sv, ErrorState);
 		return false;
 	}
-	catch (std::exception const&)
+	catch (std::exception const& e)
 	{
+		LOGERROR(L"{}"sv, e);
 		// A portion of file can be locked
 
 		// TODO: better diagnostics
 		m_editor->FreeAllocatedData();
 		m_Flags.Set(FFILEEDIT_OPENFAILED);
 		ErrorState = os::last_error();
+		LOGERROR(L"{}"sv, ErrorState);
 		return false;
 	}
 }
@@ -1941,16 +1950,9 @@ int FileEditor::SaveFile(const string_view Name, bool bSaveAs, error_state_ex& E
 	}
 }
 
-static auto parent_directory(string_view const FileName)
-{
-	auto Path = FileName;
-	CutToParent(Path);
-	return Path;
-}
-
 bool FileEditor::SaveAction(bool const SaveAsIntention)
 {
-	const auto ParentDirectory = parent_directory(strFullFileName);
+	const auto ParentDirectory = path::parent_path(strFullFileName);
 
 	const auto SaveAs =
 		SaveAsIntention ||
@@ -2160,7 +2162,9 @@ string FileEditor::GetTitle() const
 
 static std::pair<string, size_t> char_code(std::optional<char32_t> const& Char, int const Codebase)
 {
-	const auto process = [&](const auto Format, string_view const Max)
+	using char_format_string = far::format_string<uint32_t>;
+
+	const auto process = [&](char_format_string const& Format, string_view const Max)
 	{
 		auto Result = std::pair{ Char.has_value()? far::format(Format, static_cast<uint32_t>(*Char)) : L""s, Max.size()};
 		Result.second = std::max(Result.first.size(), Result.second);
@@ -2170,22 +2174,24 @@ static std::pair<string, size_t> char_code(std::optional<char32_t> const& Char, 
 	switch (Codebase)
 	{
 	case 0:
-		return process(FSTR(L"0{:o}"sv), L"0177777"sv);
+		return process(L"0{:o}"sv, L"0177777"sv);
 
 	case 2:
-		return process(FSTR(L"{:X}h"sv), L"FFFFh"sv);
+		return process(L"{:X}h"sv, L"FFFFh"sv);
 
 	case 1:
 	default:
-		return process(FSTR(L"{}"sv), L"65535"sv);
+		return process(L"{}"sv, L"65535"sv);
 	}
 }
 
 static std::pair<string, size_t> ansi_char_code(std::optional<char32_t> const& Char, int const Codebase, uintptr_t const Codepage)
 {
-	const auto process = [&](const auto Format, string_view const Max)
+	using char_format_string = far::format_string<uint8_t>;
+
+	const auto process = [&](char_format_string const& Format, string_view const Max)
 	{
-		std::optional<unsigned> CharCode;
+		std::optional<uint8_t> CharCode;
 
 		char Buffer;
 		encoding::diagnostics Diagnostics;
@@ -2194,10 +2200,9 @@ static std::pair<string, size_t> ansi_char_code(std::optional<char32_t> const& C
 			const auto Ch = static_cast<wchar_t>(*Char);
 			if (encoding::get_bytes(Codepage, { &Ch, 1 }, { &Buffer, 1 }, &Diagnostics) == 1 && !Diagnostics.ErrorPosition)
 			{
-				const unsigned AnsiCode = Buffer;
-				if (AnsiCode != *Char)
+				if (static_cast<char32_t>(Buffer) != *Char)
 				{
-					CharCode = AnsiCode;
+					CharCode = Buffer;
 				}
 			}
 		}
@@ -2208,14 +2213,14 @@ static std::pair<string, size_t> ansi_char_code(std::optional<char32_t> const& C
 	switch (Codebase)
 	{
 	case 0:
-		return process(FSTR(L"0{:<3o}"sv), L"0377"sv);
+		return process(L"0{:<3o}"sv, L"0377"sv);
 
 	case 2:
-		return process(FSTR(L"{:02X}h"sv), L"FFh"sv);
+		return process(L"{:02X}h"sv, L"FFh"sv);
 
 	case 1:
 	default:
-		return process(FSTR(L"{:<3}"sv), L"255"sv);
+		return process(L"{:<3}"sv, L"255"sv);
 	}
 }
 
@@ -2262,11 +2267,10 @@ void FileEditor::ShowStatus() const
 	}
 
 	//предварительный расчет
-	const auto LinesFormat = FSTR(L"{}/{}"sv);
-	const auto SizeLineStr = far::format(LinesFormat, m_editor->Lines.size(), m_editor->Lines.size()).size();
-	const auto strLineStr = far::format(LinesFormat, m_editor->m_it_CurLine.Number() + 1, m_editor->Lines.size());
+	const auto SizeLineStr = far::format(L"{}/{}"sv, m_editor->Lines.size(), m_editor->Lines.size()).size();
+	const auto strLineStr = far::format(L"{}/{}"sv, m_editor->m_it_CurLine.Number() + 1, m_editor->Lines.size());
 	const auto strAttr = *AttrStr? L"│"s + AttrStr : L""s;
-	auto StatusLine = far::format(FSTR(L"│{}{}│{:5.5}│{:.3} {:>{}}│{:.3} {:<3}│{:.3} {:<3}{}│{}"sv),
+	auto StatusLine = far::format(L"│{}{}│{:5.5}│{:.3} {:>{}}│{:.3} {:<3}│{:.3} {:<3}{}│{}"sv,
 		m_editor->m_Flags.Check(Editor::FEDITOR_MODIFIED)?L'*':L' ',
 		m_editor->m_Flags.Check(Editor::FEDITOR_LOCKMODE)? L'-' : m_editor->m_Flags.Check(Editor::FEDITOR_PROCESSCTRLQ)? L'"' : L' ',
 		ShortReadableCodepageName(m_codepage),

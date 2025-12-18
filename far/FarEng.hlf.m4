@@ -4002,6 +4002,10 @@ Other tabs won't be converted.
  #Show a scrollbar#
  Show a scrollbar.
 
+ #Show line numbers#
+ Show line numbers to the left of editor text. This option can be toggled
+by pressing #Ctrl+F3# during editing.
+
 @=
  #Save file position#
  Save and restore positions in the recently edited files. This option also forces
@@ -5125,7 +5129,7 @@ further match fails it captures more.
 
  #Special characters#
 
- Non-letter and non-digit character can be prepended by ‘#\#’ in most cases,
+ Non-letter and non-digit characters can be prepended by ‘#\#’ in most cases,
 but in case of letters and digits this must be done with care because this is
 the way the special characters are written:
 
@@ -5166,13 +5170,13 @@ big amounts of data are processed.
         /.*?name\O=(['"])(.*?)\1\O.*?value\O=(['"])(.*?)\3/
         ^<wrap>Strings containing "name=", but not containing "value=", are processed (in fact, skipped) faster.
 
- #\NN#  - ^<wrap>reference to earlier matched parentheses. NN is a positive integer.
+ #\N#   - ^<wrap>reference to earlier matched parentheses. N is a number.
 Each parentheses except (?:pattern), (?=pattern), (?!pattern), (?<=pattern) and (?<!pattern)
 have a number (in the order of appearance).
         Example:
         "(['"])hello\1" matches to "hello" or 'hello'.
 
- #\p{name}# - ^<wrap>inner regexp reference to it's parsed bracket with specified #name#.
+ #\p{name}# - ^<wrap>reference to earlier matched parentheses with the specified #name#.
 
  #Examples:#
 
@@ -5730,12 +5734,6 @@ If current value of an option is other than the default, the option is marked wi
 
  #Enter# or #F4#
  Toggle or edit the value.
-
- #Shift+F4#
- Edit the integer value as a hexadecimal number. For other types works as #F4#.
-
- #Alt+F4#
- Edit the integer value as a binary number. For other types works as #F4#.
 
  #Del#
  Reset the option to its default value.
