@@ -1437,8 +1437,8 @@ bool Editor::ProcessKeyInternal(unsigned const KeyCode, bool& Refresh, Manager::
 
 				Pasting++;
 
-				// TODO: using an internal clipboard to copy/move block is a not a best design choice.
-				// Currently we substitute a new local instance of internal_clipboard for this purpose.
+				// TODO: using an internal clipboard to copy/move block is not the best design choice.
+				// Currently, we substitute a new local instance of internal_clipboard for this purpose.
 				// Consider implementing it without using the clipboard.
 
 				const auto OverriddenClipboard = OverrideClipboard();
@@ -3402,7 +3402,7 @@ int Editor::CalculateSearchStartPosition(const bool Continue, const bool Backwar
 
 	assert(Regex ? m_FoundSize >= 0 : m_FoundSize > 0);
 
-	// Anchor is the begin or the end of the last found match (depending on cursor-at-the-end mode)
+	// Anchor is the beginning or the end of the last found match (depending on cursor-at-the-end mode)
 	// where we expect to find cursor if this is Search-Next.
 	const auto Anchor{ m_FoundPos + EdOpt.SearchCursorAtEnd * m_FoundSize };
 
@@ -3443,7 +3443,7 @@ namespace
 	class find_all_list
 	{
 	public:
-		find_all_list(const size_t MaxLinesCount)
+		explicit find_all_list(const size_t MaxLinesCount)
 			: m_LineNumColumnMaxWidth{ radix10_formatted_width(MaxLinesCount) }
 		{}
 
@@ -3679,7 +3679,7 @@ void Editor::DoSearchReplace(const SearchReplaceDisposition Disposition)
 						Pasting--;
 					}
 
-					bool Skip=false, ZeroLength=false;
+					bool Skip=false;
 
 					// Отступим на четверть и проверим на перекрытие диалогом замены
 					int FromTop=(ScrY-2)/4;
@@ -3710,9 +3710,6 @@ void Editor::DoSearchReplace(const SearchReplaceDisposition Disposition)
 					}
 					else
 					{
-						if (!SearchLength && strReplaceStrCurrent.empty())
-							ZeroLength = true;
-
 						auto MsgCode = message_result::first_button;
 
 						if (!IsReplaceAll)
@@ -3755,7 +3752,7 @@ void Editor::DoSearchReplace(const SearchReplaceDisposition Disposition)
 							}
 						}
 
-						if (IsReplaceAll)
+						if (IsReplaceAll && !UndoBlock)
 							UndoBlock.emplace(this);
 
 						if (MsgCode == message_result::first_button || MsgCode == message_result::second_button)
@@ -3867,13 +3864,15 @@ void Editor::DoSearchReplace(const SearchReplaceDisposition Disposition)
 					}
 
 					CurPos = m_it_CurLine->GetCurPos();
-					if ((Skip || ZeroLength) && !Backward)
+					if (!Backward)
 					{
-						CurPos++;
+						if (Skip || !SearchLength)
+							CurPos++;
 					}
-					if (!(Skip || ZeroLength) && Backward)
+					else
 					{
-						(m_it_CurLine = CurPtr = m_FoundLine)->SetCurPos(CurPos = m_FoundPos);
+						if (!Skip || !SearchLength)
+							(m_it_CurLine = CurPtr = m_FoundLine)->SetCurPos(CurPos = m_FoundPos);
 					}
 				}
 			}
@@ -3926,7 +3925,7 @@ void Editor::DoSearchReplace(const SearchReplaceDisposition Disposition)
 				// TODO: Need to handle mouse events with ProcessMouse(). This implementation is acceptable,
 				// but a click on the border jumps to the currently selected item without changing the item.
 				// Normally, mouse click on the border frame does nothing. Mouse click on the border
-				// outside of the frame starts dragging the dialog.
+				// outside the frame starts dragging the dialog.
 				case KEY_CTRL|KEY_MSLCLICK:
 				case KEY_RCTRL|KEY_MSLCLICK:
 					{

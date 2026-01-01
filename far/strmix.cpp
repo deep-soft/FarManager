@@ -1240,7 +1240,7 @@ bool SearchAndReplaceString(
 	if (options.Regex)
 	{
 		// Empty Haystack is ok for regex search, e.g. ^$
-		if ((Position || HaystackSize) && Position >= HaystackSize)
+		if (Position > HaystackSize)
 			return false;
 
 		return SearchStringRegex(Haystack, re, Match, Position, options, ReplaceStr, CurPos, SearchLength, WordDiv);
@@ -1375,7 +1375,7 @@ string ExtractHexString(string_view const HexString)
 	if (Result.size() & 1)
 	{
 		// Odd length - hex string is not valid.
-		// This is an UI helper, so we don't want to throw.
+		// This is a UI helper, so we don't want to throw.
 		// Fixing it gracefully and in 1.7x compatible way:
 		// "12 34 5" -> "12 34 05"
 		Result.insert(Result.end() - 1, L'0');

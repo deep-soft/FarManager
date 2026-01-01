@@ -3125,6 +3125,18 @@ int PushDMParams (lua_State *L, intptr_t Msg, intptr_t Param1)
 	return 1;
 }
 
+static intptr_t GetEnableFromLua (lua_State *L, int pos)
+{
+	intptr_t ret;
+	if (lua_isnoneornil(L,pos)) //get state
+		ret = -1;
+	else if (lua_isnumber(L,pos))
+		ret = lua_tointeger(L, pos);
+	else
+		ret = lua_toboolean(L, pos);
+	return ret;
+}
+
 static int DoSendDlgMessage (lua_State *L, intptr_t Msg, int delta)
 {
 	typedef struct { void *Id; int Ref; } listdata_t;
@@ -3151,11 +3163,14 @@ static int DoSendDlgMessage (lua_State *L, intptr_t Msg, int delta)
 			if (Param1>0) --Param1;
 			break;
 
+		case DM_ENABLEREDRAW:
+			Param1 = GetEnableFromLua(L,pos3);
+			break;
+
 		case DM_GETDLGDATA:
 		case DM_SETDLGDATA:
 			break;
 
-		case DM_ENABLEREDRAW:
 		case DM_GETDIALOGINFO:
 		case DM_GETDIALOGTITLE:
 		case DM_GETDLGRECT:
@@ -3193,6 +3208,7 @@ static int DoSendDlgMessage (lua_State *L, intptr_t Msg, int delta)
 			break;
 	}
 
+	// Param2 and the rest
 	switch(Msg)
 	{
 		default:
@@ -3201,8 +3217,6 @@ static int DoSendDlgMessage (lua_State *L, intptr_t Msg, int delta)
 
 		case DM_CLOSE:
 		case DM_EDITUNCHANGEDFLAG:
-		case DM_ENABLE:
-		case DM_ENABLEREDRAW:
 		case DM_GETCHECK:
 		case DM_GETCOMBOBOXEVENT:
 		case DM_GETCURSORSIZE:
@@ -3228,6 +3242,13 @@ static int DoSendDlgMessage (lua_State *L, intptr_t Msg, int delta)
 		case DN_DRAWDIALOGDONE:
 		case DN_DROPDOWNOPENED:
 			Param2 = (void*)(intptr_t)luaL_optint(L,pos4,0);
+			break;
+
+		case DM_ENABLEREDRAW:
+			break;
+
+		case DM_ENABLE:
+			Param2 = (void*)GetEnableFromLua(L, pos4);
 			break;
 
 		case DM_LISTGETDATASIZE:
@@ -5399,10 +5420,13 @@ static int far_MakeMenuItems(lua_State *L)
 static int far_Show(lua_State *L)
 {
 	const char* f =
-	    "local items,n=...\n"
-	    "local bottom=n==0 and 'No arguments' or n==1 and '1 argument' or n..' arguments'\n"
-	    "return far.Menu({Title='',Bottom=bottom,Flags='FMENU_SHOWAMPERSAND FMENU_WRAPMODE'},items,"
-	    "{{BreakKey='SPACE'}})";
+		"local items, n = ...\n"
+		"local bot = n==0 and 'No arguments' or n==1 and '1 argument' or n..' arguments'\n"
+		"local it, pos = far.Menu({Title=''; Bottom=bot; Flags='FMENU_SHOWAMPERSAND FMENU_WRAPMODE'},\n"
+		"  items, 'Space CtrlC CtrlIns')\n"
+		"if items[pos] and (it.BreakKey=='CtrlC' or it.BreakKey=='CtrlIns') then\n"
+		"  far.CopyToClipboard(tostring(items[pos].arg)) end\n"
+		"return it, pos";
 	int argn = lua_gettop(L);
 	far_MakeMenuItems(L);
 
