@@ -330,6 +330,7 @@ jobs:
 #            ${{ env.LIST_File }}
           files: |
             ${{ env.ZIP_RELEASE_ARCHIVE }}
+            ${{ env.ASSET_SRC }}
 
       - name: Prepare latest Release
         if: matrix.build_config  == 'Release'
