@@ -1,5 +1,5 @@
-# 2025-07-02 07:30 # 2024-09-02 00:40
-# copy files from extra folder, soft_fast_search patch
+# 2026-02-01 # 2025-07-02 07:30 # 2024-09-02 00:40
+# source archive # copy files from extra folder, soft_fast_search patch
 name: Build release VC
 
 on:
@@ -115,6 +115,25 @@ jobs:
           if [[ -f patch/filelist.diff ]]; then
             git apply --verbose patch/filelist.diff
           fi
+
+      - name: create source archive
+        if: always() && inputs.extra_plugins_profile && matrix.platform_sln == 'x64'
+        run: |
+          echo "create source archive";
+
+      - name: Create source archive
+        if: always() && inputs.extra_plugins_profile && matrix.platform_sln == 'x64'
+        continue-on-error: true
+        uses: deep-soft/zip-release@v3
+        with:
+          type: 'tar.xz'
+          filename: "${{ env.PROG_NAME }}-latest-src"
+          directory: '.'
+          exclusions: '.git/objects'
+          recursive_exclusions: '.git/objects'
+          path: '.'
+          env_variable: ASSET_SRC
+        # archive name is ${{ env.ZIP_RELEASE_ARCHIVE }}
 
       - name: Get program version
         continue-on-error: false
@@ -331,6 +350,7 @@ jobs:
           files: |
             ${{ env.PROG_NAME }}.${{ matrix.platform_name }}.zip
             ${{ env.PROG_NAME }}-latest.txt
+            ${{ env.ASSET_SRC }}
 
 # add extra plugins and Profile - begin
 #        if: ${{ matrix.platform_sln == 'x64' && inputs.extra_plugins_profile == 'true' }}
