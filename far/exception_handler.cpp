@@ -76,7 +76,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // External:
 #include "format.hpp"
 
-#if !IS_MICROSOFT_SDK()
+#include <crtdbg.h>
+
+#if !LIBRARY(MSVC)
 #include <cxxabi.h>
 #endif
 
@@ -1376,7 +1378,7 @@ static std::pair<string, string> extract_object_type_and_value(EXCEPTION_RECORD 
 		return { TypeName, extract_object_value(TypeName, Iterator->object_ptr, Iterator->object_size) };
 	}
 
-#if !IS_MICROSOFT_SDK()
+#if !LIBRARY(MSVC)
 	if (const auto TypeInfo = abi::__cxa_current_exception_type(); TypeInfo)
 	{
 		const auto ExceptionPtr = std::current_exception();
@@ -1540,6 +1542,7 @@ static string exception_details(string_view const Module, EXCEPTION_RECORD const
 		return string(Message);
 
 	case STATUS_INVALID_CRUNTIME_PARAMETER:
+	case STATUS_ASSERTION_FAILURE:
 		return Message.empty()?
 			default_details() :
 			far::format(L"{} Expression: {}"sv, default_details(), Message);
@@ -1916,20 +1919,16 @@ static handler_result handle_generic_exception(
 	if (AnythingOnDisk && os::is_interactive_user_session())
 		OpenFolderInShell(ReportLocation);
 
-	const auto UseDialog = !ForceStderrExceptionUI && Global && Global->WindowManager && !Global->WindowManager->ManagerIsDown();
+	const auto UseDialog = !s_ReportToStdErr && !ForceStderrExceptionUI && Global && Global->WindowManager && !Global->WindowManager->ManagerIsDown();
 	const auto CanContinue = !(Context.exception_record().ExceptionFlags & EXCEPTION_NONCONTINUABLE);
 
-	const auto Result = AnythingOnDisk || ReportInClipboard?
+	const auto Result =
 		(UseDialog? ExcDialog : ExcConsole)(
 			Context.code(),
 			CanContinue,
-			AnythingOnDisk?
-				ReportLocation :
-				msg(lng::MExceptionDialogClipboard),
+			AnythingOnDisk? ReportLocation : ReportInClipboard? msg(lng::MExceptionDialogClipboard) : BugReport,
 			PluginInfo
-		) :
-		// Should never happen - neither the filesystem nor clipboard are writable, so just dump it to the screen:
-		ExcConsole(Context.code(), CanContinue, BugReport, PluginInfo);
+		);
 
 	switch (Result)
 	{
@@ -2163,20 +2162,14 @@ void handle_unknown_exception(source_location const& Location)
 	std::unreachable();
 }
 
-static void abort_handler_impl()
+static handler_result abort_handler_impl()
 {
 	if (!HandleCppExceptions)
-	{
-		restore_system_exception_handler();
-		return;
-	}
+		return handler_result::continue_search;
 
 	static auto InsideHandler = false;
 	if (InsideHandler)
-	{
-		restore_system_exception_handler();
 		os::process::terminate(STATUS_FATAL_APP_EXIT);
-	}
 
 	InsideHandler = true;
 	SCOPE_EXIT{ InsideHandler = false; };
@@ -2187,10 +2180,7 @@ static void abort_handler_impl()
 	if (const auto Info = os::debug::exception_information(); Info.ContextRecord && Info.ExceptionRecord && !is_fake_cpp_exception(*Info.ExceptionRecord))
 	{
 		if (handle_seh_exception(exception_context(Info), {}, Location) == handler_result::continue_search)
-		{
-			restore_system_exception_handler();
-			return;
-		}
+			return handler_result::continue_search;
 	}
 
 	// It's a C++ exception, implemented in some other way (GCC)
@@ -2214,11 +2204,7 @@ static void abort_handler_impl()
 	exception_context const Context{ os::debug::fake_exception_information(STATUS_FAR_ABORT) };
 	error_state_ex const LastError{ os::last_error(), {}, errno };
 
-	if (handle_generic_exception(Context, Location, {}, {}, L"Abnormal termination"sv, LastError) == handler_result::continue_search)
-	{
-		restore_system_exception_handler();
-		return;
-	}
+	return handle_generic_exception(Context, Location, {}, {}, L"Abnormal termination"sv, LastError);
 }
 
 static LONG WINAPI unhandled_exception_filter_impl(EXCEPTION_POINTERS* const Pointers)
@@ -2237,7 +2223,7 @@ unhandled_exception_filter::~unhandled_exception_filter()
 }
 
 
-#if !IS_MICROSOFT_SDK()
+#if !LIBRARY(MSVC)
 // For GCC. For some reason the default one works in Debug, but not in Release.
 #ifndef _DEBUG
 extern "C"
@@ -2258,10 +2244,12 @@ static void signal_handler_impl(int const Signal)
 	{
 	case SIGABRT:
 		// terminate() defaults to abort(), so this also covers various C++ runtime failures.
-		return abort_handler_impl();
+		if (abort_handler_impl() == handler_result::continue_search)
+			restore_system_exception_handler();
+		break;
 
 	default:
-		return;
+		break;
 	}
 }
 
@@ -2276,33 +2264,14 @@ signal_handler::~signal_handler()
 		std::signal(SIGABRT, m_PreviousHandler);
 }
 
-#if IS_MICROSOFT_SDK() && !defined _DEBUG // 🤦
-extern "C" void _invalid_parameter(wchar_t const*, wchar_t const*, wchar_t const*, unsigned int, uintptr_t);
-#endif
-
-[[noreturn]]
-static void default_invalid_parameter_handler(const wchar_t* const Expression, const wchar_t* const Function, const wchar_t* const File, unsigned int const Line, uintptr_t const Reserved)
-{
-#if IS_MICROSOFT_SDK()
-	_invalid_parameter(Expression, Function, File, Line, Reserved);
-#endif
-	os::process::terminate(STATUS_INVALID_CRUNTIME_PARAMETER);
-}
-
-static void invalid_parameter_handler_impl(const wchar_t* const Expression, const wchar_t* const Function, const wchar_t* const File, unsigned int const Line, uintptr_t const Reserved)
+static handler_result invalid_parameter_handler_impl(const wchar_t* const Expression, const wchar_t* const Function, const wchar_t* const File, unsigned int const Line)
 {
 	if (!HandleCppExceptions)
-	{
-		restore_system_exception_handler();
-		std::abort();
-	}
+		return handler_result::continue_search;
 
 	static auto InsideHandler = false;
 	if (InsideHandler)
-	{
-		restore_system_exception_handler();
 		os::process::terminate(STATUS_INVALID_CRUNTIME_PARAMETER);
-	}
 
 	InsideHandler = true;
 	SCOPE_EXIT{ InsideHandler = false; };
@@ -2311,27 +2280,33 @@ static void invalid_parameter_handler_impl(const wchar_t* const Expression, cons
 	error_state_ex const LastError{ os::last_error(), {}, errno };
 	constexpr auto Location = source_location::current();
 
-	switch (handle_generic_exception(
+	return handle_generic_exception(
 		Context,
 		Function && File?
-			source_location(encoding::utf8::get_bytes(Function).c_str(), encoding::utf8::get_bytes(File).c_str(), Line) :
-			Location,
+		source_location(encoding::utf8::get_bytes(Function).c_str(), encoding::utf8::get_bytes(File).c_str(), Line) :
+		Location,
 		{},
 		{},
 		NullToEmpty(Expression),
 		LastError
-	))
+	);
+}
+
+static void invalid_parameter_handler_impl(const wchar_t* const Expression, const wchar_t* const Function, const wchar_t* const File, unsigned int const Line, uintptr_t const Reserved)
+{
+	if (invalid_parameter_handler_impl(Expression, Function, File, Line) == handler_result::continue_search)
 	{
-	case handler_result::execute_handler:
-		break;
-
-	case handler_result::continue_execution:
-		return;
-
-	case handler_result::continue_search:
 		restore_system_exception_handler();
 		_set_invalid_parameter_handler({});
-		default_invalid_parameter_handler(Expression, Function, File, Line, Reserved);
+#ifdef _UCRT
+#ifdef _DEBUG
+		_invalid_parameter(Expression, Function, File, Line, Reserved);
+#else
+		_invalid_parameter_noinfo();
+#endif
+#else
+		os::process::terminate(STATUS_INVALID_CRUNTIME_PARAMETER);
+#endif
 	}
 }
 
@@ -2344,6 +2319,106 @@ invalid_parameter_handler::~invalid_parameter_handler()
 {
 	_set_invalid_parameter_handler(m_PreviousHandler);
 }
+
+static handler_result assert_handler_impl(string_view const Message, source_location const& Location = source_location::current())
+{
+	// We only want to intercept asserts on CI (where s_ReportToStdErr is set).
+	// For normal interactive debugging the standard CRT dialog is more convenient.
+	if (!HandleCppExceptions || !s_ReportToStdErr)
+		return handler_result::continue_search;
+
+	static auto InsideHandler = false;
+	if (InsideHandler)
+		os::process::terminate(STATUS_ASSERTION_FAILURE);
+
+	InsideHandler = true;
+	SCOPE_EXIT{ InsideHandler = false; };
+
+	exception_context const Context{ os::debug::fake_exception_information(STATUS_ASSERTION_FAILURE, true) };
+	error_state_ex const LastError{ os::last_error(), {}, errno };
+
+	return handle_generic_exception(Context, Location, {}, {}, Message, LastError);
+}
+
+#ifdef _DEBUG
+#ifdef _UCRT
+static int crt_report_hook_impl(int const ReportType, wchar_t* const Message, int*)
+{
+	const auto MessageStr = trim_right(string_view{ Message });
+
+	switch (ReportType)
+	{
+	case _CRT_WARN:
+		LOGWARNING(L"{}"sv, MessageStr);
+		return FALSE;
+
+	case _CRT_ERROR:
+		LOGERROR(L"{}"sv, MessageStr);
+		return FALSE;
+
+	case _CRT_ASSERT:
+		LOGERROR(L"{}"sv, MessageStr);
+
+		switch (assert_handler_impl(MessageStr))
+		{
+		case handler_result::execute_handler:
+			return FALSE;
+
+		case handler_result::continue_execution:
+			return TRUE;
+
+		case handler_result::continue_search:
+			return FALSE;
+		}
+	}
+
+	return FALSE;
+}
+#endif
+#endif
+
+crt_report_hook::crt_report_hook()
+{
+#ifdef _DEBUG
+#ifdef _UCRT
+	_CrtSetReportHookW2(_CRT_RPTHOOK_INSTALL, crt_report_hook_impl);
+#endif
+#endif
+}
+
+crt_report_hook::~crt_report_hook()
+{
+#ifdef _DEBUG
+#ifdef _UCRT
+	_CrtSetReportHookW2(_CRT_RPTHOOK_REMOVE, crt_report_hook_impl);
+#endif
+#endif
+}
+
+#pragma push_macro("_wassert")
+#undef _wassert
+extern "C" void _wassert(wchar_t const* Message, wchar_t const* File, unsigned Line);
+constexpr auto real_wassert = _wassert;
+#pragma pop_macro("_wassert")
+
+WARNING_PUSH()
+WARNING_DISABLE_MSC(4273) // 'function': inconsistent dll linkage
+void far_assert(wchar_t const* const Message, wchar_t const* const File, unsigned const Line)
+{
+	switch (assert_handler_impl(Message, { encoding::utf8::get_bytes(File).c_str(), "assert", Line }))
+	{
+	case handler_result::execute_handler:
+		std::abort();
+
+	case handler_result::continue_execution:
+		return;
+
+	case handler_result::continue_search:
+		real_wassert(Message, File, Line);
+		break;
+	}
+}
+WARNING_POP()
 
 static LONG NTAPI vectored_exception_handler_impl(EXCEPTION_POINTERS* const Pointers)
 {

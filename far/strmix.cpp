@@ -221,7 +221,7 @@ void inplace::pad_right(std::wstring& Str, size_t const CellsAvailable, wchar_t 
 
 void inplace::fit_to_left(std::wstring& Str, size_t const CellsAvailable)
 {
-	cut_right(Str, CellsAvailable);
+	truncate_right(Str, CellsAvailable);
 	pad_right(Str, CellsAvailable);
 }
 
@@ -238,13 +238,13 @@ void inplace::fit_to_center(std::wstring& Str, size_t const CellsAvailable)
 	}
 	else
 	{
-		cut_right(Str, CellsAvailable);
+		truncate_right(Str, CellsAvailable);
 	}
 }
 
 void inplace::fit_to_right(std::wstring& Str, size_t const CellsAvailable)
 {
-	cut_right(Str, CellsAvailable);
+	truncate_right(Str, CellsAvailable);
 	pad_left(Str, CellsAvailable);
 }
 
@@ -853,52 +853,51 @@ bool wrapped_text::get(bool Reset, string_view& Value) const
 
 	const auto advance = [&](size_t TokenEnd, size_t SeparatorSize)
 	{
+		if (TokenEnd == string::npos)
+			TokenEnd = visual_pos_to_string_pos(m_Tail, m_Width, 1);
+
 		Value = m_Tail.substr(0, TokenEnd);
 		m_Tail.remove_prefix(TokenEnd + SeparatorSize);
 		return true;
 	};
 
 	// Try to take a line, drop line breaks
-	auto ChopSize = m_Tail.find_first_of(LineBreaks);
+	auto Piece = m_Tail.substr(0, m_Tail.find_first_of(LineBreaks));
 	auto BreaksSize = 1;
 
-	if (ChopSize == m_Tail.npos)
-	{
-		ChopSize = m_Tail.size();
+	if (Piece.size() == m_Tail.size())
 		BreaksSize = 0;
-	}
 
-	if (ChopSize <= m_Width)
-		return advance(ChopSize, BreaksSize);
+	if (visual_string_length(Piece) <= m_Width)
+		return advance(Piece.size(), BreaksSize);
 
 	// Try to take some words, drop spaces
-	ChopSize = m_Tail.find_last_of(WordSpaceBreaks, m_Width);
+	Piece = m_Tail.substr(0 ,m_Tail.find_last_of(WordSpaceBreaks, m_Width));
 	BreaksSize = 1;
 
-	if (ChopSize == m_Tail.npos)
-	{
-		ChopSize = m_Tail.size();
+	if (Piece.size() == m_Tail.size())
 		BreaksSize = 0;
-	}
 
-	if (ChopSize <= m_Width)
-		return advance(ChopSize, BreaksSize);
+	if (visual_string_length(Piece) <= m_Width)
+		return advance(Piece.size(), BreaksSize);
 
 	// Try to take some words, keep separators
-	ChopSize = m_Tail.find_last_of(WordOtherBreaks, m_Width);
+	Piece = m_Tail.substr(0, m_Tail.find_last_of(WordOtherBreaks, m_Width));
 	BreaksSize = 1;
 
-	if (ChopSize == m_Tail.npos)
-	{
-		ChopSize = m_Tail.size();
+	if (Piece.size() == m_Tail.size())
 		BreaksSize = 0;
-	}
 
-	if (ChopSize + BreaksSize <= m_Width)
-		return advance(ChopSize + BreaksSize, 0);
+	if (visual_string_length(Piece) + BreaksSize <= m_Width)
+		return advance(Piece.size() + BreaksSize, 0);
 
 	// Take a part of the word
-	return advance(m_Width, 0);
+	return advance(string::npos, 0);
+}
+
+size_t wrapped_text::width() const
+{
+	return visual_string_length(m_Tail);
 }
 
 bool FindWordInString(string_view const Str, size_t CurPos, size_t& Begin, size_t& End, string_view const WordDiv0)
@@ -2040,8 +2039,8 @@ TEST_CASE("strmix.fit")
 		{ L"1"sv,      2,   L"1 "sv,        L"1 "sv,        L" 1"sv,      },
 
 		{ L"12345"sv,  0,   {},             {},             {},           },
-		{ L"12345"sv,  1,   L"1"sv,         L"1"sv,         L"1"sv,       },
-		{ L"12345"sv,  3,   L"123"sv,       L"123"sv,       L"123"sv,     },
+		{ L"12345"sv,  1,   L"…"sv,         L"…"sv,         L"…"sv,       },
+		{ L"12345"sv,  3,   L"12…"sv,       L"12…"sv,       L"12…"sv,     },
 		{ L"12345"sv,  5,   L"12345"sv,     L"12345"sv,     L"12345"sv,   },
 		{ L"12345"sv,  7,   L"12345  "sv,   L" 12345 "sv,   L"  12345"sv, },
 	};

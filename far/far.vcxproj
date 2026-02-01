@@ -33,7 +33,7 @@ if not exist $(BootstrapDir) mkdir $(BootstrapDir)</Command>
       <PrecompiledHeaderFile>headers.hpp</PrecompiledHeaderFile>
       <PrecompiledHeaderOutputFile>$(IntDir)headers.pch</PrecompiledHeaderOutputFile>
       <ForcedIncludeFiles>%(ForcedIncludeFiles);headers.hpp;memcheck.hpp</ForcedIncludeFiles>
-      <PreprocessorDefinitions>FAR_USE_INTERNALS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>FAR_USE_INTERNALS;_wassert=far_assert;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
   </ItemDefinitionGroup>
 
@@ -46,6 +46,12 @@ if not exist $(BootstrapDir) mkdir $(BootstrapDir)</Command>
       <Command>$(OutDir)$(TargetName)$(TargetExt) /service:test</Command>
       <Message>Running unit tests</Message>
     </PostBuildEvent>
+  </ItemDefinitionGroup>
+
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug' or '$(Configuration)'=='Debug_ASAN'">
+    <Link>
+      <AdditionalOptions>/ignore:4286</AdditionalOptions>
+    </Link>
   </ItemDefinitionGroup>
 
   <ItemGroup>

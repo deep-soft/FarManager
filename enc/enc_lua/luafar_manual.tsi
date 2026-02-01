@@ -4263,7 +4263,7 @@ id=29
 lv=2
 dt=Text
 nm=editor.GetInfo
-mtime=3602447116
+mtime=3977814290
 <article>
 #_Info = editor.GetInfo (EditorId)
 #_
@@ -4292,6 +4292,8 @@ mtime=3602447116
 #_      SessionBookmarkCount:  integer
 #_      CurState:              integer
 #_      CodePage:              integer
+#_      WindowArea:            table (fields: left, top, right, bottom)
+#_      ClientArea:            table (fields: left, top, right, bottom)
 #_
 #_**Far API used:**
 #_  EditorControl, ECTL_GETINFO
@@ -4376,7 +4378,7 @@ id=31
 lv=2
 dt=Text
 nm=editor.GetString
-mtime=3921827714
+mtime=3978958646
 <article>
 #_**Note:**
 #_  This function is an extension over its prototype in Far API.
@@ -4388,10 +4390,10 @@ mtime=3921827714
 #_**Parameters:**
 #_  EditorId:     integer (default=CURRENT_EDITOR)
 #_  StringNumber: integer, 1-based (default=0)
-#_  Mode:         integer (0,1,2,3; default=0)
+#_  Mode:         integer (0,1,2,3,4; default=0)
 #_
 #_**Returns:**
-#_  LineInfo: table (Mode<2), or 2 strings (Mode>=2), or nil
+#_  LineInfo: table (Mode<2), or multiple values (Mode>=2), or nil
 #_    fields of LineInfo:
 #_      StringNumber: integer, 1-based
 #_      StringText:   string

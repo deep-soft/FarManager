@@ -1976,7 +1976,6 @@ enum EDITOR_CURRENTSTATE
 	ECSTATE_LOCKED         = 0x00000004,
 };
 
-
 struct EditorInfo
 {
 	size_t StructSize;
@@ -1998,6 +1997,8 @@ struct EditorInfo
 	size_t SessionBookmarkCount;
 	uintptr_t CurState;
 	uintptr_t CodePage;
+	RECT WindowArea;
+	RECT ClientArea;
 };
 
 struct EditorBookmarks

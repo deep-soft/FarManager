@@ -139,6 +139,8 @@ public:
 	bool IsLastLine(const Edit* Line) const;
 	void AutoDeleteColors();
 	int GetId() const { return EditorID; }
+	int LineNumbersWidth() const;
+	int ScrollbalWidth() const;
 
 	static eol GetDefaultEOL();
 
@@ -349,6 +351,7 @@ private:
 	std::list<EditorUndoData> UndoData;
 	std::list<EditorUndoData>::iterator UndoPos{ UndoData.end() };
 	std::list<EditorUndoData>::iterator UndoSavePos{ UndoData.end() };
+	size_t m_WithinUndoBlock{};
 	int UndoSkipLevel{};
 	int LastChangeStrPos{};
 	eol GlobalEOL;

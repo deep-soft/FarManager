@@ -243,11 +243,15 @@ TEST_OBJS = "$(INTDIR)\api_test_c.testobj" "$(INTDIR)\api_test_c++.testobj"
 
 ADDINCLUDE=/I $(BOOTSTRAPDIR)..
 
-CPPFLAGS = $(CPPFLAGS) $(ADDINCLUDE) /D "FAR_USE_INTERNALS"
+CPPFLAGS = $(CPPFLAGS) $(ADDINCLUDE) /D "FAR_USE_INTERNALS" /D "_wassert=far_assert"
 RFLAGS = $(RFLAGS) $(ADDINCLUDE)
 
 !if ("$(ENABLE_TESTS)" == "1")
 CPPFLAGS = $(CPPFLAGS) /D "ENABLE_TESTS"
+!endif
+
+!ifdef DEBUG
+LNKFLAGS=$(LNKFLAGS) /ignore:4286
 !endif
 
 ALL: AllDirs lng depfile include docs $(TEST_OBJS)

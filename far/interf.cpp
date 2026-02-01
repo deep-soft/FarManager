@@ -868,35 +868,17 @@ static void string_to_cells_full_width_aware(string_view Str, size_t& CharsConsu
 			if (Char[1])
 			{
 				// It's a surrogate pair that occupies one cell only. Here be dragons.
-				if (console.IsVtActive())
+				std::visit(overload
 				{
-					std::visit(overload
+					[&](size_t&){},
+					[&](std::vector<FAR_CHAR_INFO>& Buffer)
 					{
-						[&](size_t&){},
-						[&](std::vector<FAR_CHAR_INFO>& Buffer)
-						{
-							// Put *one* fake character:
-							Buffer.back().Char = encoding::replace_char;
-							// Stash the actual codepoint. The drawing code will restore it from here:
-							Buffer.back().Reserved1 = Codepoint;
-						}
-					}, Cells);
-				}
-				else
-				{
-					// Classic grid mode, nothing we can do :(
-					// Expect the broken UI
-
-					if (get_cells_count() == CellsAvailable)
-					{
-						// No space left for the trailing char
-						CharsConsumedNow = 0;
-						pop_back();
-						break;
+						// Put *one* fake character:
+						Buffer.back().Char = encoding::replace_char;
+						// Stash the actual codepoint. The drawing code will restore it from here:
+						Buffer.back().Reserved1 = Codepoint;
 					}
-
-					push_back(Char[1]);
-				}
+				}, Cells);
 			}
 			else
 			{
@@ -924,21 +906,24 @@ void chars_to_cells(string_view Str, size_t& CharsConsumed, size_t const CellsAv
 #endif
 }
 
-size_t Text(string_view Str, size_t const CellsAvailable)
+std::vector<FAR_CHAR_INFO> text_to_char_info(string_view Str, size_t CellsAvailable)
 {
-	if (Str.empty())
-		return 0;
-
 	cells Cells;
-	const auto& Buffer = Cells.emplace<1>();
+	auto& Buffer = Cells.emplace<1>();
+
+	if (Str.empty())
+		return Buffer;
 
 	size_t CharsConsumed = 0;
-
 	string_to_cells(Str, CharsConsumed, Cells, CellsAvailable);
+	return Buffer;
+}
 
+size_t Text(string_view Str, size_t const CellsAvailable)
+{
+	auto Buffer = text_to_char_info(Str, CellsAvailable);
 	Global->ScrBuf->Write(CurX, CurY, Buffer);
 	CurX += static_cast<int>(Buffer.size());
-
 	return Buffer.size();
 }
 
@@ -1692,24 +1677,27 @@ size_t HiStrlen(string_view const Str)
 	{
 		if (encoding::utf16::is_high_surrogate(Char))
 		{
+			if (First)
+				++Result;
+
 			First = Char;
 			return true;
 		}
 
 		const auto IsLow = encoding::utf16::is_low_surrogate(Char);
-		if (!IsLow)
-			First.reset();
+		if (First && !IsLow)
+			++Result;
 
 		const auto Codepoint = First && IsLow? encoding::utf16::extract_codepoint(*First, Char) : Char;
-
 		Result += char_width::get(Codepoint);
+
+		First.reset();
+
 		return true;
 	});
 
 	if (First)
-	{
 		++Result;
-	}
 
 	return Result;
 }
@@ -1916,6 +1904,7 @@ TEST_CASE("wide_chars")
 		std::initializer_list<std::pair<size_t, int>>
 			StringToVisual,
 			VisualToString;
+		bool VtRequired;
 	}
 	Tests[]
 	{
@@ -1943,11 +1932,13 @@ TEST_CASE("wide_chars")
 			L"𐀀"sv, // Surrogate, half width
 			{ { 0, +0 }, { 1, -1 }, { 2, -1 }, { 3, -1 }, { 4, -1 }, },
 			{ { 0, +0 }, { 1, +1 }, { 2, +1 }, { 3, +1 }, { 4, +1 }, },
+			true,
 		},
 		{
 			L"𐀀𐀀"sv, // Surrogate, half width
 			{ { 0, +0 }, { 1, -1 }, { 2, -1 }, { 3, -2 }, { 4, -2 }, },
 			{ { 0, +0 }, { 1, +1 }, { 2, +2 }, { 3, +2 }, { 4, +2 }, },
+			true,
 		},
 		{
 			L"𠲖"sv, // Surrogate, full width
@@ -1962,14 +1953,20 @@ TEST_CASE("wide_chars")
 		{
 			L"残酷な天使のように少年よ神話になれ"sv,
 			{ {17, +17}, },
-			{ {34, -17} } },
+			{ {34, -17} },
+		},
 
 	};
+
+	const auto IsVtActive = console.IsVtActive();
 
 	char_width::enable(1);
 
 	for (const auto& i: Tests)
 	{
+		if (i.VtRequired && !IsVtActive)
+			continue;
+
 		position_parser_state State[2];
 
 		for (const auto& [StringPos, VisualShift]: i.StringToVisual)
