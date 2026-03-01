@@ -9,6 +9,9 @@ on:
 #    branches: [ master ]
   workflow_dispatch:
     inputs:
+      build-msbuild-debug-codeql:
+        default: false
+        type: boolean
       extra_plugins_profile:
         default: true
         type: boolean
@@ -30,7 +33,6 @@ on:
       soft_fast_search_patch:
         default: true
         type: boolean
-
 
 env:
   PROG_NAME: "Far3"
@@ -55,7 +57,7 @@ jobs:
 
 #------------------------------------------------------------------------------
   hlf-checks:
-    runs-on: windows-2022
+    runs-on: windows-latest
     if: ${{ inputs.hlf-checks }}
     steps:
       - name: Checkout source
@@ -77,8 +79,93 @@ jobs:
         run: dotnet run --project ./HlfChecker.csproj --configuration Release --property UseSharedCompilation=false -- Verbose
 
 #------------------------------------------------------------------------------
+  build-msbuild-debug-codeql:
+    runs-on: windows-latest
+    if: ${{ inputs.build-msbuild-debug-codeql }}
+    strategy:
+      fail-fast: false
+      matrix:
+        build: [
+#          msbuild_cl_x64_release,
+#          msbuild_cl_x86_release,
+#          msbuild_cl_ARM64_release,
+         msbuild_cl_x64_debug,
+#         msbuild_cl_x86_debug,
+        ]
+        include:
+#          - { build: msbuild_cl_x64_release,   compiler: msbuild_cl, arch: amd64,       platform_sln: x64,   platform_name: x64,   build_config: Release }
+#          - { build: msbuild_cl_x86_release,   compiler: msbuild_cl, arch: amd64_x86,   platform_sln: Win32, platform_name: x86,   build_config: Release }
+#          - { build: msbuild_cl_ARM64_release, compiler: msbuild_cl, arch: amd64_arm64, platform_sln: ARM64, platform_name: ARM64, build_config: Release }
+          - { build: msbuild_cl_x64_debug,     compiler: msbuild_cl, arch: amd64,       platform_sln: x64,   platform_name: x64,   build_config: Debug   }
+#          - { build: msbuild_cl_x86_debug,     compiler: msbuild_cl, arch: amd64_x86,   platform_sln: Win32, platform_name: x86,   build_config: Debug   }
+#        exclude:
+#          - { build: msbuild_cl_x64_release   }: ${{ inputs.msbuild_cl_x64_release_input   != true }}
+#          - { build: msbuild_cl_x86_release   }: ${{ inputs.msbuild_cl_x86_release_input   != true }}
+#          - { build: msbuild_cl_ARM64_release }: ${{ inputs.msbuild_cl_ARM64_release_input != true }}
+
+    steps:
+      - name: test var
+        if: always() && inputs.extra_plugins_profile && matrix.platform_sln == 'x64'
+        run: |
+          echo " if: always() && inputs.extra_plugins_profile && matrix.platform_sln == 'x64'"
+
+      - name: Checkout source
+        uses: deep-soft/checkout@v4
+
+      - name: soft_fast_search_patch
+        if: ${{ inputs.soft_fast_search_patch }}
+        continue-on-error: true
+        shell: bash
+        run: |
+          ls -la patch/filelist.diff || true;
+          if [[ -f patch/filelist.diff ]]; then
+            git apply --verbose patch/filelist.diff
+          fi
+
+      - name: Get program version
+        continue-on-error: false
+        shell: bash
+        run: |
+          Far_version=${{ env.Far_Version}}
+          Far_build=$(cat "far/vbuild.m4")
+          echo $Far_version$Far_build
+          echo "VERSION=$Far_version$Far_build.0" >> $GITHUB_ENV
+
+      - name: Print program version
+        continue-on-error: false
+        shell: bash
+        run: |
+          echo "Print program version"
+          echo ${{ env.VERSION }}
+
+      - name: Initialize CodeQL
+#        if: matrix.build == 'msbuild_cl_x64_debug'
+        uses: github/codeql-action/init@v3
+        with:
+          languages: cpp
+
+      - name: Set MSVC environment
+        uses: deep-soft/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.arch }}
+
+      - name: Set environment for debug build
+#        if: matrix.build_config  == 'Debug'
+        run: |
+          Add-Content -Path $env:GITHUB_ENV -Value "DEBUG=1"
+
+      - name: Build (cl)
+        working-directory: _build/vc
+        run: |
+          msbuild -m /property:Configuration=${{ matrix.build_config }} /property:Platform=${{ matrix.platform_sln }} far`.sln
+
+      - name: Perform CodeQL Analysis
+#        if: matrix.build == 'msbuild_cl_x64_debug'
+        uses: github/codeql-action/analyze@v3
+
+#------------------------------------------------------------------------------
   build-msbuild:
-    runs-on: windows-2022
+    runs-on: windows-latest
     strategy:
       fail-fast: false
       matrix:
@@ -156,7 +243,7 @@ jobs:
 
       - name: Initialize CodeQL
         if: matrix.build == 'msbuild_cl_x64_debug'
-        uses: github/codeql-action/init@v2
+        uses: github/codeql-action/init@v3
         with:
           languages: cpp
 
@@ -173,11 +260,11 @@ jobs:
       - name: Build (cl)
         working-directory: _build/vc
         run: |
-          msbuild -m /property:Configuration=${{ matrix.build_config }} /property:Platform=${{ matrix.platform_sln }} all.sln
+          msbuild -m /property:Configuration=${{ matrix.build_config }} /property:Platform=${{ matrix.platform_sln }} far`.sln
 
       - name: Perform CodeQL Analysis
         if: matrix.build == 'msbuild_cl_x64_debug'
-        uses: github/codeql-action/analyze@v2
+        uses: github/codeql-action/analyze@v3
 
 #       - name: Create zip
 #         continue-on-error: true
