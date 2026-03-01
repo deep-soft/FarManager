@@ -9,7 +9,7 @@ on:
 #    branches: [ master ]
   workflow_dispatch:
     inputs:
-      build-msbuild-debug-codeql:
+      msbuild-debug-codeql:
         default: false
         type: boolean
       extra_plugins_profile:
@@ -79,9 +79,9 @@ jobs:
         run: dotnet run --project ./HlfChecker.csproj --configuration Release --property UseSharedCompilation=false -- Verbose
 
 #------------------------------------------------------------------------------
-  build-msbuild-debug-codeql:
+  msbuild-debug-codeql:
     runs-on: windows-latest
-    if: ${{ inputs.build-msbuild-debug-codeql }}
+    if: ${{ inputs.msbuild-debug-codeql }}
     strategy:
       fail-fast: false
       matrix:
@@ -164,7 +164,7 @@ jobs:
         uses: github/codeql-action/analyze@v3
 
 #------------------------------------------------------------------------------
-  build-msbuild:
+  msbuild:
     runs-on: windows-latest
     strategy:
       fail-fast: false
