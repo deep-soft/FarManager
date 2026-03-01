@@ -129,7 +129,7 @@ enum color_rgb_dialog_items
 	cd_cube_last = cd_cube_first + 255,
 
 	cd_custom_first,
-	cd_custom_last = cd_custom_first + 16 - 1,
+	cd_custom_last = cd_custom_first + cube_size - 1,
 
 	cd_button_up,
 	cd_button_left,
@@ -176,6 +176,9 @@ struct color_rgb_state
 
 	COLORREF CurColor{};
 
+	uint8_t rgb::* ZAxis{ &rgb::r };
+	uint8_t rgb::* OuterZAxis{ &rgb::r };
+
 	cube_data<cube> Cube, OuterCube;
 
 	bool IsZoomed{};
@@ -207,7 +210,7 @@ struct color_rgb_state
 static rgb cube_rgb(cube const& Cube, uint8_t const x, uint8_t const y, uint8_t const z, bool const IsZoomed)
 {
 	const auto CellIndex = Cube[z][y][x];
-	const auto Multiplier = IsZoomed? 1 : 16;
+	const auto Multiplier = IsZoomed? 1 : cube_size;
 
 	return
 	{
@@ -296,6 +299,18 @@ static void init_cube(color_rgb_state& ColorState)
 	}
 }
 
+static auto get_z_axis(cube_data<cube> const& Data, bool const IsZoomed)
+{
+	const auto
+		CubeA = cube_rgb(Data.Cube, 0, 0, 0, IsZoomed),
+		CubeB = cube_rgb(Data.Cube, 0, 0, 1, IsZoomed);
+
+	const auto ZAxis = CubeA.r != CubeB.r? &rgb::r : CubeA.g != CubeB.g? &rgb::g : &rgb::b;
+	const auto IsInverted = std::invoke(ZAxis, CubeA) > std::invoke(ZAxis, CubeB);
+
+	return std::pair{ ZAxis, IsInverted };
+}
+
 static void zoom(Dialog* const Dlg, color_rgb_state& ColorState)
 {
 	const auto ZoomingIn = !ColorState.IsZoomed;
@@ -304,7 +319,9 @@ static void zoom(Dialog* const Dlg, color_rgb_state& ColorState)
 	{
 		ColorState.OuterCube = ColorState.Cube;
 
-		ColorState.Cube.Slice = 0;
+		const auto [ZAxis, IsInverted] = get_z_axis(ColorState.OuterCube, false);
+
+		ColorState.Cube.Slice = IsInverted? cube_size - 1 : 0;
 		ColorState.Cube.Index = 0;
 
 		ColorState.Overlay.set();
@@ -432,6 +449,14 @@ intptr_t color_rgb_state::GetColorDlgProc(Dialog* Dlg, intptr_t Msg, intptr_t Pa
 					return true;
 				}
 
+			case cd_text_slice:
+				{
+					rgb RGB = {};
+					std::invoke(ZAxis, RGB) = 0xFF;
+					Colors.Colors[0] = TrueColorToFarColor(colors::to_color(RGB));
+					return true;
+				}
+
 			case cd_text_r:
 			case cd_text_g:
 			case cd_text_b:
@@ -478,6 +503,7 @@ intptr_t color_rgb_state::GetColorDlgProc(Dialog* Dlg, intptr_t Msg, intptr_t Pa
 			switch (Button)
 			{
 			case cd_button_home:
+				IsZoomed = false;
 				init_cube(*this);
 				Cube.Slice = 0;
 				Dlg->SendMessage(DM_ONCUBECHANGE, 0, {});
@@ -551,7 +577,22 @@ intptr_t color_rgb_state::GetColorDlgProc(Dialog* Dlg, intptr_t Msg, intptr_t Pa
 				}
 			}
 
-			Dlg->SendMessage(DM_SETTEXTPTR, cd_text_slice, UNSAFE_CSTR(Cube.slice_str()));
+			SCOPED_ACTION(Dialog::suppress_redraw)(Dlg);
+
+			bool IsOuterInverted, IsInverted;
+			std::tie(OuterZAxis, IsOuterInverted) = get_z_axis(Cube, false);
+			std::tie(ZAxis, IsInverted) = get_z_axis(Cube, IsZoomed);
+
+			const auto OuterMultiplier = cube_size;
+			const auto OuterValue = IsZoomed? (IsOuterInverted? cube_size - 1 - OuterCube.Slice : OuterCube.Slice) * OuterMultiplier : 0;
+			const auto Multiplier = IsZoomed? 1 : OuterMultiplier;
+			const auto Slice = IsInverted? cube_size - 1 - Cube.Slice : Cube.Slice;
+			const auto Value = Slice * Multiplier;
+
+			Dlg->SendMessage(DM_SETTEXTPTR, cd_text_slice, UNSAFE_CSTR(channel_value(OuterValue + Value)));
+
+			Dlg->SendMessage(DM_ENABLE, cd_button_minus, ToPtr(Slice != (IsInverted? cube_size - 1 : 0)));
+			Dlg->SendMessage(DM_ENABLE, cd_button_plus, ToPtr(Slice != (IsInverted? 0 : cube_size - 1)));
 
 			Dlg->SendMessage(DM_REDRAW, 0, {});
 		}
@@ -648,7 +689,7 @@ static bool pick_color_rgb_tui(COLORREF& Color, [[maybe_unused]] std::array<COLO
 
 		PAD_CONTROL(PadX, PadY),
 
-		{ DI_BUTTON,      {{PadX+3, PadY+6}, {0, PadY+6}}, DIF_NOBRACKETS, L"[]"sv, },
+		{ DI_BUTTON,      {{PadX+3, PadY+6}, {0, PadY+6}}, DIF_NOBRACKETS, L"[↔]"sv, },
 
 		RGB_CONTROL(RGBX, RGBY),
 
@@ -687,7 +728,12 @@ static bool pick_color_rgb_tui(COLORREF& Color, [[maybe_unused]] std::array<COLO
 		if (ColorState.CurColor == colors::to_color(cube_rgb(ColorState, ColorState.Cube.Index)))
 			ColorDlg[ControlId].Selected = BSTATE_CHECKED;
 
-		ColorDlg[cd_text_slice].strData = ColorState.Cube.slice_str();
+		ColorDlg[cd_text_slice].strData = ColorState.channel_value(ColorState.Cube.Slice * cube_size);
+
+		if (!ColorState.Cube.Slice)
+			ColorDlg[cd_button_minus].Flags |= DIF_DISABLE;
+		else if (ColorState.Cube.Slice == cube_size - 1)
+			ColorDlg[cd_button_plus].Flags |= DIF_DISABLE;
 	}
 
 	const auto Dlg = Dialog::create(ColorDlg, std::bind_front(&color_rgb_state::GetColorDlgProc, &ColorState));

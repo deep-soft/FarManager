@@ -1566,7 +1566,7 @@ bool Help::JumpTopic()
 		!StackData.strHelpPath.empty() &&
 		StackData.strSelTopic.front() != HelpBeginLink &&
 		StackData.strSelTopic != HelpOnHelpTopic &&
-		!is_generated_topic(StackData.strSelTopic)
+		StackData.strSelTopic != PluginContents
 	)
 	{
 		if (StackData.strSelTopic.starts_with(L':'))

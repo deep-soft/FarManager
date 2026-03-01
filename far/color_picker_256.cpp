@@ -234,6 +234,8 @@ struct color_256_state
 
 	uint8_t CurColor{};
 
+	uint8_t rgb::* ZAxis{ &rgb::r };
+
 	cube_data<cube> Cube;
 
 	static auto channel_value(uint8_t const Channel)
@@ -316,6 +318,14 @@ intptr_t color_256_state::GetColorDlgProc(Dialog* Dlg, intptr_t Msg, intptr_t Pa
 					return true;
 				}
 
+			case cd_text_slice:
+				{
+					rgb RGB = {};
+					std::invoke(ZAxis, RGB) = cube_size - 1;
+					Colors.Colors[0] = Console256ColorToFarColor({ static_cast<uint8_t>(colors::invert(RGB, true)), RGB });
+					return true;
+				}
+
 			case cd_text_r:
 			case cd_text_g:
 			case cd_text_b:
@@ -390,7 +400,18 @@ intptr_t color_256_state::GetColorDlgProc(Dialog* Dlg, intptr_t Msg, intptr_t Pa
 				}
 			}
 
-			Dlg->SendMessage(DM_SETTEXTPTR, cd_text_slice, UNSAFE_CSTR(Cube.slice_str()));
+			SCOPED_ACTION(Dialog::suppress_redraw)(Dlg);
+
+			rgb const CubeA = cube_color(Cube.Cube[0][0][0]), CubeB = cube_color(Cube.Cube[1][0][0]);
+			ZAxis = CubeA.r != CubeB.r? &rgb::r : CubeA.g != CubeB.g? &rgb::g : &rgb::b;
+
+			const auto IsInverted = std::invoke(ZAxis, CubeA) > std::invoke(ZAxis, CubeB);
+			const auto Slice = IsInverted? cube_size - 1 - Cube.Slice : Cube.Slice;
+
+			Dlg->SendMessage(DM_SETTEXTPTR, cd_text_slice, UNSAFE_CSTR(channel_value(Slice)));
+
+			Dlg->SendMessage(DM_ENABLE, cd_button_minus, ToPtr(Slice != (IsInverted? cube_size - 1 : 0)));
+			Dlg->SendMessage(DM_ENABLE, cd_button_plus, ToPtr(Slice != (IsInverted? 0 : cube_size - 1)));
 
 			Dlg->SendMessage(DM_REDRAW, 0, {});
 		}
@@ -491,7 +512,12 @@ bool pick_color_256(uint8_t& Color)
 		ColorDlg[ControlId].Flags |= DIF_FOCUS;
 	}
 
-	ColorDlg[cd_text_slice].strData = ColorState.Cube.slice_str();
+	ColorDlg[cd_text_slice].strData = ColorState.channel_value(ColorState.Cube.Slice);
+
+	if (!ColorState.Cube.Slice)
+		ColorDlg[cd_button_minus].Flags |= DIF_DISABLE;
+	else if (ColorState.Cube.Slice == cube_size - 1)
+		ColorDlg[cd_button_plus].Flags |= DIF_DISABLE;
 
 	const auto Dlg = Dialog::create(ColorDlg, std::bind_front(&color_256_state::GetColorDlgProc, &ColorState));
 

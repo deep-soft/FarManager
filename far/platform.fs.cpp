@@ -58,6 +58,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "common.hpp"
 #include "common/algorithm.hpp"
 #include "common/scope_exit.hpp"
+#include "common/uuid.hpp"
 
 // External:
 
@@ -1869,6 +1870,11 @@ WARNING_POP()
 			SetLastError(Result);
 			return Result == ERROR_SUCCESS && !fop.fAnyOperationsAborted;
 		}
+
+		bool set_volume_label(const wchar_t* Object, const wchar_t* Label)
+		{
+			return SetVolumeLabel(Object, Label) != FALSE;
+		}
 	}
 
 	//-------------------------------------------------------------------------
@@ -2427,6 +2433,19 @@ WARNING_POP()
 		return false;
 	}
 
+	bool set_volume_label(string_view const Object, string const& Label)
+	{
+		const auto NtObject = nt_path(Object);
+
+		if (low::set_volume_label(NtObject.c_str(), Label.c_str()))
+			return true;
+
+		if (ElevationRequired(ELEVATION_MODIFY_REQUEST))
+			return elevation::instance().set_volume_label(NtObject, Label);
+
+		return false;
+	}
+
 	bool get_disk_size(const string_view Path, unsigned long long* const UserTotal, unsigned long long* const TotalFree, unsigned long long* const UserFree)
 	{
 		auto strPath = nt_path(Path);
@@ -2572,7 +2591,11 @@ WARNING_POP()
 
 	bool can_create_file_in(string_view const DirectoryName)
 	{
-		return create_file(DirectoryName, FILE_ADD_FILE, file_share_all, nullptr, OPEN_EXISTING)? true : false;
+		return
+			// without a temporary file, see https://devblogs.microsoft.com/oldnewthing/20251203-00/?p=111836
+			create_file(DirectoryName, FILE_ADD_FILE, file_share_all, nullptr, OPEN_EXISTING) ||
+			// just in case, with a temporary file, for non-trivial setups like gh-1070
+			create_file(path::join(DirectoryName, ::uuid::str(uuid::generate())), GENERIC_WRITE, file_share_all, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE);
 	}
 
 	bool CreateSymbolicLinkInternal(string_view const Object, string_view const Target, DWORD Flags)

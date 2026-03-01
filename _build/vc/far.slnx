@@ -1,0 +1,62 @@
+<Solution>
+  <Configurations>
+    <BuildType Name="Debug" />
+    <BuildType Name="Debug_ASAN" />
+    <BuildType Name="Release" />
+    <BuildType Name="Release_no_LTCG" />
+    <Platform Name="ARM64" />
+    <Platform Name="Win32" />
+    <Platform Name="x64" />
+  </Configurations>
+  <Folder Name="/Far/">
+    <Project Path="../../far/common_test.vcxproj" Id="459c0a10-7d18-4623-9fa9-1d5b6a587d40" />
+    <Project Path="../../far/far.vcxproj" Id="62f794c9-5f4c-40f6-b358-5dc1a9d6d2cb" />
+    <Project Path="../../far/sqlite.vcxproj" Id="7ffc46f3-7c9f-4849-aa03-44f47f616212" />
+  </Folder>
+  <Folder Name="/Plugins/">
+    <Project Path="../../plugins/align/align.vcxproj" Id="d9387b45-34a6-4cb6-a1b0-563e3480cff8" />
+    <Project Path="../../plugins/autowrap/AutoWrap.vcxproj" Id="370ce5bd-b4c8-4817-b3a1-5b461b4a408d" />
+    <Project Path="../../plugins/brackets/Brackets.vcxproj" Id="a0cb9f6a-2e43-45e0-b57f-0bf483a14160" />
+    <Project Path="../../plugins/compare/compare.vcxproj" Id="c4064d6c-aa3f-4c71-b78d-f406929ee036" />
+    <Project Path="../../plugins/drawline/DrawLine.vcxproj" Id="412f0b80-ab59-4d2a-90c8-16c06ee1b77c" />
+    <Project Path="../../plugins/editcase/EditCase.vcxproj" Id="56007c20-add8-4e2a-ab8f-beb832f94802" />
+    <Project Path="../../plugins/emenu/EMenu.vcxproj" Id="f49b5724-0420-46a9-a3f4-647c5722031c" />
+    <Project Path="../../plugins/farcmds/FARCmds.vcxproj" Id="c87bbc63-9ca9-4421-8589-5ffdeb000361" />
+    <Project Path="../../plugins/filecase/FileCase.vcxproj" Id="cc7215cc-15e2-48cf-abab-294e9600b22e" />
+    <Project Path="../../plugins/helloworld/HelloWorld.vcxproj" Id="a0eedb6f-87f0-459a-94ff-c683ce2ce8c1" />
+    <Project Path="../../plugins/hlfviewer/HlfViewer.vcxproj" Id="5e4e3ee1-7d35-4bae-bf4a-a68abffcf876" />
+    <Project Path="../../plugins/network/Network.vcxproj" Id="731a85e7-6d1f-48bd-a520-4c8dfec2f6f3" />
+    <Project Path="../../plugins/proclist/ProcList.vcxproj" Id="1f12132b-4424-48c4-8b9c-b10e8aede9c7" />
+    <Project Path="../../plugins/samefolder/SameFolder.vcxproj" Id="090e1bf4-bf2a-42f6-9dcf-64603f62a1d3" />
+    <Project Path="../../plugins/tmppanel/TmpPanel.vcxproj" Id="b40a055f-5616-4001-b4c0-3daf156b168c" />
+  </Folder>
+  <Folder Name="/Plugins/ArcLite/">
+    <Project Path="../../plugins/arclite/arclite.vcxproj" Id="38cf1530-243c-4c81-9b0e-dca51551ac81" />
+    <Project Path="../../plugins/arclite/example/example.vcxproj" Id="a39c2d17-4730-4c13-a2be-8c012616e771" />
+  </Folder>
+  <Folder Name="/Plugins/common/">
+    <Project Path="../../plugins/common/vc_crt_fix.vcxproj" Id="a5d12a94-6fa0-43b4-b790-987da09a735a" />
+  </Folder>
+  <Folder Name="/Plugins/LuaMacro/">
+    <Project Path="../../plugins/luamacro/luafar3.vcxproj" Id="9ff87075-f1e1-410b-818c-2823396fe24f" />
+    <Project Path="../../plugins/luamacro/luamacro.vcxproj" Id="06be01e6-7dc0-4d83-877c-b7ade32175f8" />
+  </Folder>
+  <Folder Name="/Plugins/MultiArc/">
+    <Project Path="../../plugins/multiarc/MultiArc.vcxproj" Id="7ef4d5dd-4136-42ab-893b-be75b63a2217" />
+  </Folder>
+  <Folder Name="/Plugins/MultiArc/Formats/">
+    <Project Path="../../plugins/multiarc/ace.vcxproj" Id="a0c8ba6c-c2b8-4af0-a4cf-aabfe0f2df97" />
+    <Project Path="../../plugins/multiarc/arc.vcxproj" Id="ed958d37-dae2-4ca1-98ae-7c310db3bc72" />
+    <Project Path="../../plugins/multiarc/arj.vcxproj" Id="ca4796b8-ee04-40c9-a1de-4a6645856e6f" />
+    <Project Path="../../plugins/multiarc/cab.vcxproj" Id="797917b6-c8c8-4d0a-a417-407894fecc97" />
+    <Project Path="../../plugins/multiarc/ha.vcxproj" Id="f208d520-150c-4e92-8dfe-80d44e04162a" />
+    <Project Path="../../plugins/multiarc/lzh.vcxproj" Id="fde27834-8cd2-45a3-8a7c-95f0525e3bf9" />
+    <Project Path="../../plugins/multiarc/rar.vcxproj" Id="c8dc84fc-a2d1-4d0e-9150-bf62c87bc603" />
+    <Project Path="../../plugins/multiarc/targz.vcxproj" Id="940e6b05-35e5-4ff2-bfb1-238fe6056069" />
+    <Project Path="../../plugins/multiarc/zip.vcxproj" Id="8e23ed24-ecd7-4950-8230-9ff7c6c684c4" />
+  </Folder>
+  <Folder Name="/Plugins/MultiArc/Formats/Custom/">
+    <Project Path="../../plugins/multiarc/custom.vcxproj" Id="9cf69dbb-650d-4423-8fd2-d291a71b6cc9" />
+    <Project Path="../../plugins/multiarc/libpcre/pcre.vcxproj" Id="50fce411-da6e-432a-8224-265d52d09058" />
+  </Folder>
+</Solution>

@@ -58,7 +58,6 @@ namespace color_picker_common
 		using row = std::array<cell, Size>;
 		using plane = std::array<row, Size>;
 		using cube = std::array<plane, Size>;
-
 	};
 
 	enum class axis
@@ -191,11 +190,6 @@ namespace color_picker_common
 	{
 		cube Cube;
 		uint8_t Slice{}, Index{};
-
-		auto slice_str() const
-		{
-			return far::format(L"{:X}"sv, Slice);
-		}
 	};
 
 	template<typename cube_data, typename dialog_items>
@@ -380,12 +374,12 @@ namespace color_picker_common
 		{ DI_BUTTON,      {{x+3, y+2}, {0, y+2}}, DIF_NOBRACKETS, L"[▼]"sv, }, \
 		{ DI_BUTTON,      {{x+3, y+1}, {0, y+1}}, DIF_NOBRACKETS, L"[⌂]"sv, }, \
 		{ DI_BUTTON,      {{x+0, y+4}, {0, y+4}}, DIF_NOBRACKETS, L"[-]"sv, }, \
-		{ DI_TEXT,        {{x+4, y+4}, {0, y+4}},                           }, \
+		{ DI_TEXT,        {{x+3, y+4}, {0, y+4}},                           }, \
 		{ DI_BUTTON,      {{x+6, y+4}, {0, y+4}}, DIF_NOBRACKETS, L"[+]"sv, }
 
 
 #define SCROLL_CONTROL(x, y) \
-		{ DI_TEXT,        {{x, y+0}, {0, y+0}}, DIF_NONE,       L"  0"sv, }, \
+		{ DI_TEXT,        {{x, y+0}, {0, y+0}},                           }, \
 		{ DI_BUTTON,      {{x, y+1}, {0, y+1}}, DIF_NOBRACKETS, L"[▲]"sv, }, \
 		{ DI_BUTTON,      {{x, y+2}, {0, y+2}}, DIF_NOBRACKETS, L"[▼]"sv, }
 
