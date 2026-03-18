@@ -57,7 +57,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "platform.fs.hpp"
 
 // Common:
-#include "common.hpp"
 #include "common/base64.hpp"
 #include "common/bytes_view.hpp"
 #include "common/function_ref.hpp"
@@ -124,7 +123,7 @@ static void SetAttribute(tinyxml::XMLElement& Element, const char* Name, T const
 	{
 		std::string_view const StrValue = Value;
 
-		if (std::ranges::find_first_of(StrValue, "\r\n"sv) != StrValue.end())
+		if (std::ranges::any_of(StrValue, [](const unsigned char Char) { return Char < 0x20; }))
 		{
 			Element.SetAttribute(Name, base64::encode(view_bytes(StrValue)).c_str());
 			Element.SetAttribute(base64_tag(Name).c_str(), 1);
@@ -136,16 +135,51 @@ static void SetAttribute(tinyxml::XMLElement& Element, const char* Name, T const
 		Element.SetAttribute(Name, Value);
 }
 
-static std::optional<std::string> GetAttribute(tinyxml::XMLElement const& Element, const char* Name)
+class attribute_value
+{
+public:
+	explicit(false) attribute_value(const char* Value):
+		m_Value(Value)
+	{
+	}
+
+	explicit(false) attribute_value(bytes const& Value):
+		m_Value(std::string{ to_string_view(Value) })
+	{
+	}
+
+	explicit operator bool() const
+	{
+		return std::visit(overload{
+			[&](const char* const Value){ return Value != nullptr; },
+			[&](std::string const&){ return true; }
+		}, m_Value);
+	}
+
+	std::string_view get() const
+	{
+		return std::visit(overload{
+			[&](const char* const Value){ return Value? std::string_view{ Value } : std::string_view{}; },
+			[&](std::string const& Value){ return std::string_view{ Value }; }
+		}, m_Value);
+	}
+
+	explicit(false) operator std::string_view() const
+	{
+		return get();
+	}
+
+private:
+	std::variant<const char*, std::string> m_Value;
+};
+
+static attribute_value GetAttribute(tinyxml::XMLElement const& Element, const char* Name)
 {
 	const auto Value = Element.Attribute(Name);
-	if (!Value)
-		return {};
-
-	if (!Element.IntAttribute(base64_tag(Name).c_str()))
+	if (!Value || !Element.IntAttribute(base64_tag(Name).c_str()))
 		return Value;
 
-	return std::string{ to_string_view(base64::decode(Value)) };
+	return base64::decode(Value);
 }
 
 class representation_destination
@@ -233,12 +267,16 @@ void serialise_blob(tinyxml::XMLElement& e, bytes_view const Value)
 	SetAttribute(e, "value", base64::encode(Value));
 }
 
-bool deserialise_value(std::string_view const Type, char const* Value, auto const& Setter)
+bool deserialise_value(std::string_view const Type, attribute_value const& Value, auto const& Setter)
 {
 	if (Type == "qword"sv)
 	{
 		if (Value)
-			Setter(strtoull(Value, nullptr, 16));
+		{
+			const auto StrValue = Value.get();
+			if (unsigned long long Result; std::from_chars(StrValue.data(), StrValue.data() + StrValue.size(), Result, 16).ec == std::errc())
+				Setter(Result);
+		}
 		return true;
 	}
 
@@ -420,19 +458,19 @@ private:
 		SCOPED_ACTION(auto)(ScopedTransaction());
 		for(const auto& e: xml_enum(Representation.Root().FirstChildElement(GetKeyName()), "setting"))
 		{
-			const auto key = e.Attribute("key");
+			const auto key = GetAttribute(e, "key");
 			if (!key)
 				continue;
 
-			const auto name = e.Attribute("name");
+			const auto name = GetAttribute(e, "name");
 			if (!name)
 				continue;
 
-			const auto type = e.Attribute("type");
+			const auto type = GetAttribute(e, "type");
 			if (!type)
 				continue;
 
-			const auto value = e.Attribute("value");
+			const auto value = GetAttribute(e, "value");
 			if (!value)
 				continue;
 
@@ -526,9 +564,9 @@ protected:
 		serialise_blob(e, Blob);
 	}
 
-	virtual bytes DeserializeBlob(const char* Type, const char* Value, const tinyxml::XMLElement& e) const
+	virtual bytes DeserializeBlob(std::string_view const Type, const std::optional<std::string_view> Value, const tinyxml::XMLElement& e) const
 	{
-		return Value? HexStringToBlob(encoding::utf8::get_chars(Value)) : bytes{};
+		return Value? HexStringToBlob(encoding::utf8::get_chars(*Value)) : bytes{};
 	}
 
 private:
@@ -772,26 +810,26 @@ private:
 
 	void Import(const key& root, const tinyxml::XMLElement& key)
 	{
-		const auto KeyName = key.Attribute("name");
+		const auto KeyName = GetAttribute(key, "name");
 		if (!KeyName)
 			return;
 
 		const auto Key = CreateKey(root, encoding::utf8::get_chars(KeyName));
 
-		if (const auto KeyDescription = key.Attribute("description"))
+		if (const auto KeyDescription = GetAttribute(key, "description"))
 			SetKeyDescription(Key, encoding::utf8::get_chars(KeyDescription));
 
 		for (const auto& e: xml_enum(key, "value"))
 		{
-			const auto name = e.Attribute("name");
+			const auto name = GetAttribute(e, "name");
 			if (!name)
 				continue;
 
-			const auto type = e.Attribute("type");
+			const auto type = GetAttribute(e, "type");
 			if (!type)
 				continue;
 
-			const auto value = e.Attribute("value");
+			const auto value = GetAttribute(e, "value");
 
 			const auto Name = encoding::utf8::get_chars(name);
 
@@ -879,8 +917,7 @@ FarColor deserialize_color(function_ref<char const* (char const* Name)> const Ge
 	{
 		if (const auto Value = Getter(Name))
 		{
-			char* EndPtr;
-			if (const auto Result = std::strtoul(Value, &EndPtr, 16); EndPtr != Value)
+			if (unsigned long Result; std::from_chars(Value, Value + std::strlen(Value), Result, 16).ec == std::errc())
 				Color = Result;
 		}
 	};
@@ -905,7 +942,13 @@ namespace
 
 FarColor color_from_xml(tinyxml::XMLElement const& e)
 {
-	return deserialize_color([&](char const* const AttributeName){ return e.Attribute(AttributeName); }, {});
+	std::optional<attribute_value> Value;
+
+	return deserialize_color([&](char const* const AttributeName)
+	{
+		Value = GetAttribute(e, AttributeName);
+		return Value->get().data();
+	}, {});
 }
 
 class HighlightHierarchicalConfigDb final: public HierarchicalConfigDb
@@ -938,7 +981,7 @@ private:
 		return HierarchicalConfigDb::SerializeBlob(Name, Blob, e);
 	}
 
-	bytes DeserializeBlob(const char* Type, const char* Value, const tinyxml::XMLElement& e) const override
+	bytes DeserializeBlob(std::string_view const Type, const std::optional<std::string_view> Value, const tinyxml::XMLElement& e) const override
 	{
 		if(Type == "color"sv)
 			return bytes(view_bytes(color_from_xml(e)));
@@ -1010,7 +1053,7 @@ private:
 		SCOPED_ACTION(auto)(ScopedTransaction());
 		for (const auto& e: xml_enum(Representation.Root().FirstChildElement("colors"), "object"))
 		{
-			const auto name = e.Attribute("name");
+			const auto name = GetAttribute(e, "name");
 
 			if (!name)
 				continue;
@@ -1241,20 +1284,15 @@ private:
 		primary_key id{};
 		for (const auto& e: xml_enum(base, "filetype"))
 		{
-			const auto mask = e.Attribute("mask");
-			const auto description = e.Attribute("description");
-
+			const auto mask = GetAttribute(e, "mask");
 			if (!mask)
 				continue;
 
-			const auto Mask = encoding::utf8::get_chars(mask);
-			const auto Description = encoding::utf8::get_chars(NullToEmpty(description));
-
-			id = AddType(id, Mask, Description);
+			id = AddType(id, encoding::utf8::get_chars(mask), encoding::utf8::get_chars(GetAttribute(e, "description")));
 
 			for (const auto& se: xml_enum(e, "command"))
 			{
-				const auto command = se.Attribute("command");
+				const auto command = GetAttribute(se, "command");
 				if (!command)
 					continue;
 
@@ -1727,7 +1765,7 @@ private:
 		SCOPED_ACTION(auto)(ScopedTransaction());
 		for (const auto& e: xml_enum(Representation.Root().FirstChildElement("pluginhotkeys"), "plugin"))
 		{
-			const auto key = e.Attribute("key");
+			const auto key = GetAttribute(e, "key");
 
 			if (!key)
 				continue;
@@ -1736,11 +1774,11 @@ private:
 
 			for (const auto& se: xml_enum(e, "hotkey"))
 			{
-				const auto stype = se.Attribute("menu");
+				const auto stype = GetAttribute(se, "menu");
 				if (!stype)
 					continue;
 
-				const auto UuidStr = se.Attribute("guid");
+				const auto UuidStr = GetAttribute(se, "guid");
 				if (!UuidStr)
 					continue;
 
@@ -1748,11 +1786,11 @@ private:
 				if (!Uuid)
 					continue;
 
-				const auto hotkey = se.Attribute("hotkey");
+				const auto hotkey = GetAttribute(se, "hotkey");
 
 				const auto ProcessHotkey = [&](hotkey_type const Type)
 				{
-					if (hotkey && *hotkey)
+					if (hotkey && !hotkey.get().empty())
 						SetHotkey(Key, *Uuid, Type, encoding::utf8::get_chars(hotkey));
 					else
 						DelHotkey(Key, *Uuid, Type);
@@ -2326,7 +2364,7 @@ private:
 			if (e.QueryIntAttribute("kind", &kind) != tinyxml::XML_SUCCESS)
 				continue;
 
-			const auto key = e.Attribute("key");
+			const auto key = GetAttribute(e, "key");
 			if (!key)
 				continue;
 
@@ -2340,8 +2378,8 @@ private:
 
 			const auto lock = e.IntAttribute("lock");
 			const auto time = e.Unsigned64Attribute("time");
-			const auto guid = e.Attribute("guid");
-			const auto file = e.Attribute("file");
+			const auto guid = GetAttribute(e, "guid");
+			const auto file = GetAttribute(e, "file");
 			const auto data = GetAttribute(e, "data");
 
 			AddInternal(
@@ -2349,17 +2387,17 @@ private:
 				encoding::utf8::get_chars(key),
 				type,
 				lock != 0,
-				encoding::utf8::get_chars(*name),
+				encoding::utf8::get_chars(name),
 				os::chrono::nt_clock::from_hectonanoseconds(time),
-				encoding::utf8::get_chars(NullToEmpty(guid)),
-				encoding::utf8::get_chars(NullToEmpty(file)),
-				data? encoding::utf8::get_chars(*data) : L""sv
+				guid? encoding::utf8::get_chars(guid) : L""sv,
+				file? encoding::utf8::get_chars(file) : L""sv,
+				data? encoding::utf8::get_chars(data) : L""sv
 			);
 		}
 
 		for (const auto& e: xml_enum(historyRoot.FirstChildElement("editorpositions"), "position"))
 		{
-			const auto name = e.Attribute("name");
+			const auto name = GetAttribute(e, "name");
 			if (!name)
 				continue;
 
@@ -2377,7 +2415,7 @@ private:
 
 		for (const auto& e: xml_enum(historyRoot.FirstChildElement("editorbookmarks"), "bookmark"))
 		{
-			const auto name = e.Attribute("name");
+			const auto name = GetAttribute(e, "name");
 			if (!name)
 				continue;
 
@@ -2407,7 +2445,7 @@ private:
 
 		for (const auto& e: xml_enum(historyRoot.FirstChildElement("viewerpositions"), "position"))
 		{
-			const auto name = e.Attribute("name");
+			const auto name = GetAttribute(e, "name");
 			if (!name)
 				continue;
 
@@ -2424,7 +2462,7 @@ private:
 
 		for (const auto& e: xml_enum(historyRoot.FirstChildElement("viewerbookmarks"), "bookmark"))
 		{
-			const auto name = e.Attribute("name");
+			const auto name = GetAttribute(e, "name");
 			if (!name)
 				continue;
 
@@ -2608,8 +2646,8 @@ void config_provider::TryImportDatabase(representable& p, const char* NodeName, 
 		{
 			for (const auto& i: xml_enum(root.FirstChildElement("pluginsconfig"), "plugin"))
 			{
-				const auto Uuid = i.Attribute("guid");
-				if (Uuid && !std::strcmp(Uuid, NodeName))
+				const auto Uuid = GetAttribute(i, "guid");
+				if (Uuid && Uuid.get() == NodeName)
 				{
 					m_TemplateSource->SetRoot(&const_cast<tinyxml::XMLElement&>(i));
 					p.Import(*m_TemplateSource);
@@ -2904,7 +2942,7 @@ void config_provider::Import(string_view const File)
 	{
 		for (const auto& plugin: xml_enum(root.FirstChildElement(Config.Name), "plugin"))
 		{
-			const auto UuidStr = plugin.Attribute("guid");
+			const auto UuidStr = GetAttribute(plugin, "guid");
 			if (!UuidStr)
 				continue;
 
@@ -2957,3 +2995,33 @@ int HierarchicalConfig::ToSettingsType(int Type)
 		return FST_UNKNOWN;
 	}
 }
+
+#ifdef ENABLE_TESTS
+
+#include "testing.hpp"
+
+TEST_CASE("configdb.attribute_value")
+{
+	{
+		attribute_value Value(nullptr);
+		REQUIRE(!Value);
+		REQUIRE(Value.get() == ""sv);
+		REQUIRE(!Value.get().data());
+	}
+
+	{
+		const auto Data = "banana";
+		attribute_value Value(Data);
+		REQUIRE(Value);
+		REQUIRE(Value.get().data() == Data);
+	}
+
+	{
+		const auto Data = "blob"_b;
+		attribute_value Value(Data);
+		REQUIRE(Value);
+		REQUIRE(Value.get() == "blob"sv);
+		REQUIRE(Value.get().data() != to_string_view(Data).data());
+	}
+}
+#endif

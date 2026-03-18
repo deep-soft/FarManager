@@ -92,8 +92,8 @@ static HKEY CheckHKey(lua_State *L, int pos)
 static int win_SetRegKey(lua_State *L)
 {
 	HKEY hRoot           = CheckHKey(L, 1);
-	wchar_t* Key         = (wchar_t*)check_utf8_string(L, 2, NULL);
-	wchar_t* ValueName   = (wchar_t*)check_utf8_string(L, 3, NULL);
+	wchar_t* Key         = check_utf8_string(L, 2, NULL);
+	wchar_t* ValueName   = check_utf8_string(L, 3, NULL);
 	const char* DataType = luaL_checkstring(L, 4);
 	REGSAM samDesired    = (REGSAM) OptFlags(L, 6, 0);
 	size_t len;
@@ -101,7 +101,7 @@ static int win_SetRegKey(lua_State *L)
 
 	if (!strcmp("string", DataType))
 	{
-		result=SetRegKeyStr(hRoot, Key, ValueName, (wchar_t*)check_utf8_string(L, 5, NULL), samDesired);
+		result=SetRegKeyStr(hRoot, Key, ValueName, check_utf8_string(L, 5, NULL), samDesired);
 	}
 	else if (!strcmp("dword", DataType))
 	{
@@ -153,10 +153,10 @@ static int win_GetRegKey(lua_State *L)
 {
 	HKEY hKey;
 	DWORD datatype, datasize;
-	char *data;
+	void *data;
 	LONG ret;
 	HKEY hRoot = CheckHKey(L, 1);
-	wchar_t* Key = (wchar_t*)check_utf8_string(L, 2, NULL);
+	wchar_t* Key = check_utf8_string(L, 2, NULL);
 	const wchar_t* ValueName = check_utf8_string(L, 3, NULL);
 	REGSAM samDesired = (REGSAM) OptFlags(L, 4, 0);
 	hKey = OpenRegKey(hRoot, Key, samDesired);
@@ -169,7 +169,7 @@ static int win_GetRegKey(lua_State *L)
 	}
 
 	RegQueryValueExW(hKey, ValueName, NULL, &datatype, NULL, &datasize);
-	data = (char*) malloc(datasize);
+	data = malloc(datasize);
 	ret = RegQueryValueExW(hKey, ValueName, NULL, &datatype, (BYTE*)data, &datasize);
 	RegCloseKey(hKey);
 
@@ -183,7 +183,7 @@ static int win_GetRegKey(lua_State *L)
 		switch(datatype)
 		{
 			case REG_BINARY:
-				lua_pushlstring(L, data, datasize);
+				lua_pushlstring(L, (char*)data, datasize);
 				lua_pushstring(L, "binary");
 				break;
 			case REG_DWORD:
@@ -265,7 +265,7 @@ static int win_EnumRegKey(lua_State *L)
 	HKEY hKey;
 	LONG ret;
 	HKEY hRoot = CheckHKey(L, 1);
-	wchar_t* Key = (wchar_t*)check_utf8_string(L, 2, NULL);
+	wchar_t* Key = check_utf8_string(L, 2, NULL);
 	DWORD dwIndex = (DWORD)luaL_checkinteger(L, 3);
 	REGSAM samDesired = (REGSAM) OptFlags(L, 4, 0) | KEY_ENUMERATE_SUB_KEYS;
 	wchar_t Name[512];
@@ -311,7 +311,7 @@ static int win_EnumRegValue(lua_State *L)
 	HKEY hKey;
 	LONG ret;
 	HKEY hRoot = CheckHKey(L, 1);
-	wchar_t* Key = (wchar_t*)check_utf8_string(L, 2, NULL);
+	wchar_t* Key = check_utf8_string(L, 2, NULL);
 	DWORD dwIndex = (DWORD)luaL_checkinteger(L, 3);
 	REGSAM samDesired = (REGSAM) OptFlags(L, 4, 0) | KEY_QUERY_VALUE;
 	wchar_t Name[512];
@@ -1014,6 +1014,27 @@ static int win_JoinPath(lua_State *L)
 	return 1;
 }
 
+static int win_GetEnvironmentStrings(lua_State *L)
+{
+	wchar_t *buf = GetEnvironmentStringsW();
+	lua_newtable(L);
+	for (wchar_t *ptr=buf; ;) {
+		size_t len = wcslen(ptr);
+		if (len) {
+			wchar_t *eq = wcschr(ptr, L'=');
+			if (eq && eq != ptr) {
+				push_utf8_string(L, ptr, eq - ptr);
+				push_utf8_string(L, eq + 1, -1);
+				lua_rawset(L, -3);
+			}
+			ptr += len + 1;
+		}
+		else break;
+	}
+	FreeEnvironmentStringsW(buf);
+	return 1;
+}
+
 #define PAIR(prefix,txt) {#txt, prefix ## _ ## txt}
 
 const luaL_Reg win_funcs[] =
@@ -1032,6 +1053,7 @@ const luaL_Reg win_funcs[] =
 	PAIR( win, FileTimeToSystemTime),
 	PAIR( win, GetConsoleScreenBufferInfo),
 	PAIR( win, GetEnv),
+	PAIR( win, GetEnvironmentStrings),
 	PAIR( win, GetFileInfo),
 	PAIR( win, GetFileTimes),
 	PAIR( win, GetLocalTime),
