@@ -52,6 +52,7 @@ void report_to_stderr();
 void set_report_location(string_view Directory);
 
 void disable_exception_handling();
+bool is_exception_handling_enabled();
 
 bool exception_handling_in_progress();
 

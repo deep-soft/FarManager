@@ -51,39 +51,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "common.hpp"
 
-TEST_CASE("common.CheckStructSize")
-{
-	struct s
-	{
-		size_t StructSize;
-
-		int OldField;
-		int NewField1;
-		int NewField2;
-	}
-	const
-		S1{ 1 },
-		S2{ sizeof(s) },
-		S3{ sizeof(s) + 1 },
-		SLegacy1{ offsetof(s, NewField1) },
-		SLegacy2{ offsetof(s, NewField2) };
-
-	REQUIRE(!CheckStructSize(static_cast<s const*>(nullptr)));
-	REQUIRE(!CheckStructSize(&S1));
-	REQUIRE(CheckStructSize(&S2));
-	REQUIRE(CheckStructSize(&S3));
-	REQUIRE(!CheckStructSize(&SLegacy1));
-	REQUIRE(!CheckStructSize(&SLegacy2));
-
-	REQUIRE(!CheckStructSize(&S1, &s::OldField));
-	REQUIRE(CheckStructSize(&S2, &s::NewField2));
-	REQUIRE(CheckStructSize(&S3, &s::NewField2));
-	REQUIRE(!CheckStructSize(&SLegacy1, &s::NewField1));
-	REQUIRE(!CheckStructSize(&SLegacy1, &s::NewField2));
-	REQUIRE(CheckStructSize(&SLegacy2, &s::NewField1));
-	REQUIRE(!CheckStructSize(&SLegacy2, &s::NewField2));
-}
-
 TEST_CASE("common.NullToEmpty")
 {
 	const char* Null{}, *Empty = "", *NonEmpty = "banana";
@@ -520,18 +487,27 @@ TEST_CASE("enum_substrings")
 
 #include "common/enum_tokens.hpp"
 
-template<typename T>
-void test_enum_tokens(const auto& Expected, string_view const Input, string_view const Separators)
+struct enum_tokens_test_helper
 {
-	auto Iterator = Expected.begin();
-
-	for (const auto& t: T(Input, Separators))
+	template<typename T>
+	static void test(const auto& Expected, string_view const Input, string_view const Separators)
 	{
-		REQUIRE(t == *Iterator++);
+		auto Iterator = Expected.begin();
+
+		for (const auto& t: T(Input, Separators))
+		{
+			REQUIRE(t == *Iterator++);
+		}
+
+		REQUIRE(Iterator == Expected.end());
 	}
 
-	REQUIRE(Iterator == Expected.end());
-}
+	template<typename T>
+	static void run(auto& Test)
+	{
+		Test.template operator()<T>();
+	}
+};
 
 TEST_CASE("enum_tokens")
 {
@@ -539,6 +515,7 @@ TEST_CASE("enum_tokens")
 	{
 		simple,
 		quotes,
+		q_keep,
 		trim
 	};
 
@@ -554,16 +531,25 @@ TEST_CASE("enum_tokens")
 		{ test_type::simple, { {}, {} }, L",", L","sv },
 		{ test_type::simple, { L"abc"sv, {}, L"def"sv, L" q "sv, L"123"sv, {} }, L"abc;,def; q ,123;"sv, L",;"sv },
 		{ test_type::quotes, { L"abc;"sv, L"de;,f"sv, L"123"sv, {}, {} }, L"\"abc;\",\"de;,f\";123;;"sv, L",;"sv },
+		{ test_type::q_keep, { L"\"abc;\""sv, L"\"de;,f\""sv, L"123"sv, {}, {} }, L"\"abc;\",\"de;,f\";123;;"sv, L",;"sv },
 		{ test_type::trim,   { L"abc"sv, L"def"sv, {}, {} }, L"  abc|   def  |  |"sv, L"|"sv },
 	};
 
+	using helper = enum_tokens_test_helper;
+
 	for (const auto& i: Tests)
 	{
+		const auto test = [&]<typename T>()
+		{
+			helper::test<T>(i.Expected, i.Input, i.Separators);
+		};
+
 		switch(i.TestType)
 		{
-		case test_type::simple: test_enum_tokens<enum_tokens>(i.Expected, i.Input, i.Separators); break;
-		case test_type::quotes: test_enum_tokens<enum_tokens_with_quotes>(i.Expected, i.Input, i.Separators); break;
-		case test_type::trim:   test_enum_tokens<enum_tokens_custom_t<with_trim>>(i.Expected, i.Input, i.Separators); break;
+		case test_type::simple: helper::run<enum_tokens>(test); break;
+		case test_type::quotes: helper::run<enum_tokens_with_quotes>(test); break;
+		case test_type::q_keep: helper::run<enum_tokens_custom_t<with_quotes_keep>>(test); break;
+		case test_type::trim:   helper::run<enum_tokens_custom_t<with_trim>>(test); break;
 		default:
 			std::unreachable();
 		}
@@ -854,12 +840,30 @@ TEST_CASE("function_traits")
 TEST_CASE("io")
 {
 	std::stringstream Stream;
+	Stream.exceptions(Stream.badbit | Stream.failbit);
+
 	constexpr auto Str = "12345"sv;
 	REQUIRE_NOTHROW(io::write(Stream, Str));
 
 	std::byte Buffer[Str.size()];
 	REQUIRE(io::read(Stream, Buffer) == Str.size());
 	REQUIRE(!io::read(Stream, Buffer));
+
+
+	Stream.clear();
+
+	struct object
+	{
+		unsigned Foo, Bar;
+		bool operator==(object const&) const = default;
+	};
+
+	object Object{ 0xCAFEBABE, 0xFEEDFACE }, ObjectCopy{};
+	REQUIRE_NOTHROW(io::write(Stream, view_bytes(Object)));
+
+	REQUIRE(Object != ObjectCopy);
+	REQUIRE(io::read_object(Stream, ObjectCopy));
+	REQUIRE(Object == ObjectCopy);
 }
 
 //----------------------------------------------------------------------------
@@ -1261,23 +1265,32 @@ TEST_CASE("segment.constexpr")
 
 TEST_CASE("segment.iota")
 {
-	struct test_data
+	const auto segment_length = [](int const Start, int const Length)
+	{
+		return segment(Start, segment::length_tag{ Length });
+	};
+
+	const auto segment_sentinel = [](int const Start, int const End)
+	{
+		return segment(Start, segment::sentinel_tag{ End });
+	};
+
+	static const struct
 	{
 		segment Segment;
 		std::ptrdiff_t Take;
 		std::initializer_list<int> Expected;
-	};
-
-	static const test_data TestDataPoints[] =
+	}
+	TestDataPoints[]
 	{
-		{ {}, 100, {} },
-		{ { 0, segment::length_tag{ 0 } }, 100, {} },
-		{ { 42, segment::sentinel_tag{ 42 } }, 100, {} },
-		{ { 0, segment::length_tag{ 3 } }, 100, { 0, 1, 2 } },
-		{ { 42, segment::length_tag{ 3 } }, 100, { 42, 43, 44 } },
-		{ { -1, segment::length_tag{ 3 } }, 100, { -1, 0, 1 } },
-		{ segment::ray(), 3, { 0, 1, 2 } },
-		{ segment::ray(42), 3, { 42, 43, 44 }},
+		{ {},                         100, {} },
+		{ segment_length(0, 0),       100, {} },
+		{ segment_sentinel(42, 42),   100, {} },
+		{ segment_length(0, 3),       100, {  0,  1,  2 } },
+		{ segment_length(42, 3),      100, { 42, 43, 44 } },
+		{ segment_length(-1, 3),      100, { -1,  0,  1 } },
+		{ segment::ray(),               3, {  0,  1,  2 } },
+		{ segment::ray(42),             3, { 42, 43, 44 } },
 	};
 
 	for (const auto& TestDataPoint : TestDataPoints)
@@ -1290,7 +1303,7 @@ TEST_CASE("segment.iota")
 
 TEST_CASE("algorithm.intersect.segments")
 {
-	struct test_data
+	static const struct
 	{
 		struct test_segment: public segment
 		{
@@ -1299,13 +1312,13 @@ TEST_CASE("algorithm.intersect.segments")
 			{
 			}
 		};
-		test_segment A, B, Intersection;
-	};
 
-	static const test_data TestDataPoints[] =
+		test_segment A, B, Intersection;
+	}
+	TestDataPoints[]
 	{
-		{ { 10, 20 }, { -1, 5 }, { 0, 0 } },
-		{ { 10, 20 }, { -1, 10 }, { 0, 0 } },
+		{ { 10, 20 }, { -1,  5 }, {  0,  0 } },
+		{ { 10, 20 }, { -1, 10 }, {  0,  0 } },
 		{ { 10, 20 }, { -1, 15 }, { 10, 15 } },
 		{ { 10, 20 }, { -1, 20 }, { 10, 20 } },
 		{ { 10, 20 }, { -1, 25 }, { 10, 20 } },
@@ -1314,12 +1327,12 @@ TEST_CASE("algorithm.intersect.segments")
 		{ { 10, 20 }, { 10, 25 }, { 10, 20 } },
 		{ { 10, 20 }, { 15, 20 }, { 15, 20 } },
 		{ { 10, 20 }, { 15, 25 }, { 15, 20 } },
-		{ { 10, 20 }, { 20, 25 }, { 0, 0 } },
-		{ { 10, 20 }, { 25, 30 }, { 0, 0 } },
-		{ { 10, 20 }, { 0, 0 }, { 0, 0 } },
-		{ { 10, 20 }, { 15, 15 }, { 0, 0 } },
+		{ { 10, 20 }, { 20, 25 }, {  0,  0 } },
+		{ { 10, 20 }, { 25, 30 }, {  0,  0 } },
+		{ { 10, 20 }, {  0,  0 }, {  0,  0 } },
+		{ { 10, 20 }, { 15, 15 }, {  0,  0 } },
 		{ { 10, 20 }, { 20, 20 }, { 42, 42 } },
-		{ { 10, 20 }, { 30, 30 }, { 0, 0 } },
+		{ { 10, 20 }, { 30, 30 }, {  0,  0 } },
 	};
 
 	for (const auto& TestDataPoint : TestDataPoints)

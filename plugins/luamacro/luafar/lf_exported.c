@@ -201,8 +201,7 @@ void* AddBufToCollector(lua_State *L, int pos, size_t size)
 // -- a table is on stack top
 // -- its field 'field' is an array of strings
 // -- 'cpos' - collector stack position
-const wchar_t** CreateStringsArray(lua_State* L, int cpos, const char* field,
-                                   size_t *numstrings)
+const wchar_t** CreateStringsArray(lua_State* L, int cpos, const char* field, size_t *numstrings)
 {
 	const wchar_t **buf = NULL;
 	if (numstrings) *numstrings = 0;
@@ -217,10 +216,9 @@ const wchar_t** CreateStringsArray(lua_State* L, int cpos, const char* field,
 
 		if (n > 0)
 		{
-			size_t i;
 			buf = (const wchar_t**)AddBufToCollector(L, cpos, (n+1) * sizeof(wchar_t*));
 
-			for(i=0; i < n; i++)
+			for(size_t i=0; i < n; i++)
 				buf[i] = AddStringToCollectorSlot(L, cpos, (int)i+1);
 
 			buf[n] = NULL;
@@ -381,12 +379,9 @@ void LF_FreeFindData(lua_State* L, const struct FreeFindDataInfo *Info)
 //---------------------------------------------------------------------------
 
 // PanelItem table should be on Lua stack top
-void UpdateFileSelection(lua_State* L, struct PluginPanelItem *PanelItem,
-                         size_t ItemsNumber)
+void UpdateFileSelection(lua_State* L, struct PluginPanelItem *PanelItem, size_t ItemsNumber)
 {
-	int i;
-
-	for(i=0; i<(int)ItemsNumber; i++)
+	for (int i=0; i < (int)ItemsNumber; i++)
 	{
 		lua_rawgeti(L, -1, i+1);           //+1
 
@@ -448,12 +443,9 @@ intptr_t LF_GetFiles(lua_State* L, struct GetFilesInfo *Info)
 BOOL RunDefaultScript(lua_State* L, int ForFirstTime)
 {
 	int pos = lua_gettop(L);
-	int status = 1, i;
-	wchar_t *defscript;
-	FILE *fp = NULL;
+	int status = 1;
 	const char *name = "<boot";
 	const wchar_t *ModuleName = GetPluginData(L)->Info->ModuleName;
-	const wchar_t delims[] = L".-";
 
 	// First: try to load the default script embedded into the plugin.
 	lua_getglobal(L, "package");
@@ -474,10 +466,12 @@ BOOL RunDefaultScript(lua_State* L, int ForFirstTime)
 
 	lua_pop(L, 3);
 	// Second: try to load the default script from a disk file
-	defscript = (wchar_t*)lua_newuserdata(L, sizeof(wchar_t)*(wcslen(ModuleName)+5));
+	wchar_t *defscript = (wchar_t*)lua_newuserdata(L, sizeof(wchar_t)*(wcslen(ModuleName)+5));
 	wcscpy(defscript, ModuleName);
 
-	for(i=0; delims[i]; i++)
+	FILE *fp = NULL;
+	const wchar_t delims[] = L".-";
+	for (int i=0; delims[i]; i++)
 	{
 		wchar_t *end = wcsrchr(defscript, delims[i]);
 
@@ -579,7 +573,7 @@ HANDLE LF_Analyse(lua_State* L, const struct AnalyseInfo *Info)
 					luaL_unref(L, LUA_REGISTRYINDEX, 0);
 				}
 
-				result = CAST(HANDLE, ref);
+				result = (HANDLE)ref;
 			}
 			else
 				lua_pop(L, 1);                   //+0
@@ -595,11 +589,124 @@ void LF_CloseAnalyse(lua_State* L, const struct CloseAnalyseInfo *Info)
 }
 //---------------------------------------------------------------------------
 
+// the KeyBar table is on stack top
+static void OPI_FillInfoLines(lua_State *L, struct OpenPanelInfo *Info, int cpos)
+{
+	lua_getfield(L, -1, "InfoLines");
+	lua_getfield(L, -2, "InfoLinesNumber");
+
+	if (lua_istable(L,-2) && lua_isnumber(L,-1))
+	{
+		intptr_t InfoLinesNumber = lua_tointeger(L, -1);
+		lua_pop(L,1);                         //+5: Info,Tbl,Coll,Info,Lines
+
+		if (InfoLinesNumber > 0)
+		{
+			struct InfoPanelLine *pl = (struct InfoPanelLine*)
+				AddBufToCollector(L, cpos, InfoLinesNumber * sizeof(struct InfoPanelLine));
+			Info->InfoLines = pl;
+			Info->InfoLinesNumber = InfoLinesNumber;
+
+			for(int i=0; i<InfoLinesNumber; ++i,++pl,lua_pop(L,1))
+			{
+				lua_pushinteger(L, i+1);
+				lua_gettable(L, -2);
+
+				if (lua_istable(L, -1))            //+6: Info,Tbl,Coll,Info,Lines,Line
+				{
+					pl->Text = AddStringToCollectorField(L, cpos, "Text");
+					pl->Data = AddStringToCollectorField(L, cpos, "Data");
+					pl->Flags = GetFlagsFromTable(L, -1, "Flags");
+				}
+			}
+		}
+
+		lua_pop(L,1);
+	}
+	else lua_pop(L, 2);
+}
+
+// the KeyBar table is on stack top
+static void OPI_FillPanelModes(lua_State *L, struct OpenPanelInfo *Info, int cpos)
+{
+	lua_getfield(L, -1, "PanelModesArray");
+	lua_getfield(L, -2, "PanelModesNumber");
+
+	if (lua_istable(L,-2) && lua_isnumber(L,-1))
+	{
+		intptr_t PanelModesNumber = lua_tointeger(L, -1);
+		lua_pop(L,1);                               //+5: Info,Tbl,Coll,Info,Modes
+
+		if (PanelModesNumber > 0)
+		{
+			struct PanelMode *pm = (struct PanelMode*)
+				AddBufToCollector(L, cpos, PanelModesNumber * sizeof(struct PanelMode));
+			Info->PanelModesArray = pm;
+			Info->PanelModesNumber = PanelModesNumber;
+
+			for(int i=0; i<PanelModesNumber; ++i,++pm,lua_pop(L,1))
+			{
+				lua_pushinteger(L, i+1);
+				lua_gettable(L, -2);
+
+				if (lua_istable(L, -1))                  //+6: Info,Tbl,Coll,Info,Modes,Mode
+				{
+					pm->ColumnTypes  = AddStringToCollectorField(L, cpos, "ColumnTypes");
+					pm->ColumnWidths = AddStringToCollectorField(L, cpos, "ColumnWidths");
+					pm->StatusColumnTypes  = AddStringToCollectorField(L, cpos, "StatusColumnTypes");
+					pm->StatusColumnWidths = AddStringToCollectorField(L, cpos, "StatusColumnWidths");
+					pm->ColumnTitles = (const wchar_t* const*)CreateStringsArray(L, cpos, "ColumnTitles", NULL);
+					pm->Flags = GetFlagsFromTable(L, -1, "Flags");
+				}
+			}
+		}
+
+		lua_pop(L,1);
+	}
+	else lua_pop(L, 2);
+}
+
+// the KeyBar table is on stack top
+static void OPI_FillKeyBarTitles(lua_State *L, struct OpenPanelInfo *Info, int cpos)
+{
+	lua_getfield(L, -1, "KeyBar");
+
+	if (lua_istable(L, -1))
+	{
+		struct KeyBarTitles *kbt = (struct KeyBarTitles*)
+			AddBufToCollector(L, cpos, sizeof(struct KeyBarTitles));
+		Info->KeyBar = kbt;
+		kbt->CountLabels = lua_objlen(L, -1);
+		size_t size = kbt->CountLabels * sizeof(struct KeyBarLabel);
+		kbt->Labels = (struct KeyBarLabel*)AddBufToCollector(L, cpos, size);
+
+		for(size_t i=0; i < kbt->CountLabels; i++)
+		{
+			lua_rawgeti(L, -1, i+1);
+
+			if (!lua_istable(L, -1))
+			{
+				kbt->CountLabels = i;
+				lua_pop(L, 1);
+				break;
+			}
+
+			kbt->Labels[i].Key.VirtualKeyCode = GetOptIntFromTable(L, "VirtualKeyCode", 0);
+			lua_getfield(L, -1, "ControlKeyState");
+			kbt->Labels[i].Key.ControlKeyState = (DWORD) GetFlagCombination(L, -1, NULL);
+			lua_pop(L, 1);
+			kbt->Labels[i].Text = AddStringToCollectorField(L, cpos, "Text");
+			kbt->Labels[i].LongText = AddStringToCollectorField(L, cpos, "LongText");
+			lua_pop(L, 1);
+		}
+	}
+
+	lua_pop(L, 1);
+}
+
 void LF_GetOpenPanelInfo(lua_State* L, struct OpenPanelInfo *aInfo)
 {
-	int cpos;
-	size_t dfn;
-	struct OpenPanelInfo *Info;
+	int stack_top = lua_gettop(L);
 
 	if (!GetExportFunction(L, "GetOpenPanelInfo"))     //+1
 		return;
@@ -617,145 +724,42 @@ void LF_GetOpenPanelInfo(lua_State* L, struct OpenPanelInfo *aInfo)
 
 	PushPluginTable(L, aInfo->hPanel);                 //+2: Info,Tbl
 	lua_newtable(L);                                   //+3: Info,Tbl,Coll
-	cpos = lua_gettop(L);       // collector stack position
+	int cpos = lua_gettop(L);       // collector stack position
 	lua_pushvalue(L,-1);                               //+4: Info,Tbl,Coll,Coll
 	lua_setfield(L, -3, COLLECTOR_OPI);                //+3: Info,Tbl,Coll
 	lua_pushvalue(L,-3);                               //+4: Info,Tbl,Coll,Info
 	//---------------------------------------------------------------------------
 	// First element in the collector; can be retrieved on later calls;
-	Info = (struct OpenPanelInfo*) AddBufToCollector(L, cpos, sizeof(struct OpenPanelInfo));
+	struct OpenPanelInfo *Info =
+		(struct OpenPanelInfo*) AddBufToCollector(L, cpos, sizeof(struct OpenPanelInfo));
 	//---------------------------------------------------------------------------
 	Info->StructSize = sizeof(struct OpenPanelInfo);
 	Info->hPanel     = aInfo->hPanel;
-	Info->FreeSize   = CAST(unsigned __int64, GetOptNumFromTable(L, "FreeSize", 0));
+	Info->FreeSize   = (unsigned __int64) GetOptNumFromTable(L, "FreeSize", 0);
 	Info->Flags      = GetFlagsFromTable(L, -1, "Flags");
 	Info->HostFile   = AddStringToCollectorField(L, cpos, "HostFile");
 	Info->CurDir     = AddStringToCollectorField(L, cpos, "CurDir");
 	Info->Format     = AddStringToCollectorField(L, cpos, "Format");
 	Info->PanelTitle = AddStringToCollectorField(L, cpos, "PanelTitle");
 	//---------------------------------------------------------------------------
-	lua_getfield(L, -1, "InfoLines");
-	lua_getfield(L, -2, "InfoLinesNumber");
-
-	if (lua_istable(L,-2) && lua_isnumber(L,-1))
-	{
-		intptr_t InfoLinesNumber = lua_tointeger(L, -1);
-		lua_pop(L,1);                         //+5: Info,Tbl,Coll,Info,Lines
-
-		if (InfoLinesNumber > 0)
-		{
-			int i;
-			struct InfoPanelLine *pl = (struct InfoPanelLine*)
-			                           AddBufToCollector(L, cpos, InfoLinesNumber * sizeof(struct InfoPanelLine));
-			Info->InfoLines = pl;
-			Info->InfoLinesNumber = InfoLinesNumber;
-
-			for(i=0; i<InfoLinesNumber; ++i,++pl,lua_pop(L,1))
-			{
-				lua_pushinteger(L, i+1);
-				lua_gettable(L, -2);
-
-				if (lua_istable(L, -1))            //+6: Info,Tbl,Coll,Info,Lines,Line
-				{
-					pl->Text = AddStringToCollectorField(L, cpos, "Text");
-					pl->Data = AddStringToCollectorField(L, cpos, "Data");
-					pl->Flags = GetFlagsFromTable(L, -1, "Flags");
-				}
-			}
-		}
-
-		lua_pop(L,1);
-	}
-	else lua_pop(L, 2);
-
+	OPI_FillInfoLines(L, Info, cpos);
+	OPI_FillPanelModes(L, Info, cpos);
+	OPI_FillKeyBarTitles(L, Info, cpos);
 	//---------------------------------------------------------------------------
+	size_t dfn;
 	Info->DescrFiles = CreateStringsArray(L, cpos, "DescrFiles", &dfn);
 	Info->DescrFilesNumber = dfn;
-	//---------------------------------------------------------------------------
-	lua_getfield(L, -1, "PanelModesArray");
-	lua_getfield(L, -2, "PanelModesNumber");
-
-	if (lua_istable(L,-2) && lua_isnumber(L,-1))
-	{
-		intptr_t PanelModesNumber = lua_tointeger(L, -1);
-		lua_pop(L,1);                               //+5: Info,Tbl,Coll,Info,Modes
-
-		if (PanelModesNumber > 0)
-		{
-			int i;
-			struct PanelMode *pm = (struct PanelMode*)
-			                       AddBufToCollector(L, cpos, PanelModesNumber * sizeof(struct PanelMode));
-			Info->PanelModesArray = pm;
-			Info->PanelModesNumber = PanelModesNumber;
-
-			for(i=0; i<PanelModesNumber; ++i,++pm,lua_pop(L,1))
-			{
-				lua_pushinteger(L, i+1);
-				lua_gettable(L, -2);
-
-				if (lua_istable(L, -1))                  //+6: Info,Tbl,Coll,Info,Modes,Mode
-				{
-					pm->ColumnTypes  = (wchar_t*)AddStringToCollectorField(L, cpos, "ColumnTypes");
-					pm->ColumnWidths = (wchar_t*)AddStringToCollectorField(L, cpos, "ColumnWidths");
-					pm->StatusColumnTypes  = (wchar_t*)AddStringToCollectorField(L, cpos, "StatusColumnTypes");
-					pm->StatusColumnWidths = (wchar_t*)AddStringToCollectorField(L, cpos, "StatusColumnWidths");
-					pm->ColumnTitles = (const wchar_t* const*)CreateStringsArray(L, cpos, "ColumnTitles", NULL);
-					pm->Flags = GetFlagsFromTable(L, -1, "Flags");
-				}
-			}
-		}
-
-		lua_pop(L,1);
-	}
-	else lua_pop(L, 2);
-
 	//---------------------------------------------------------------------------
 	Info->StartPanelMode = GetOptIntFromTable(L, "StartPanelMode", 0);
 	Info->StartSortMode  = GetFlagsFromTable(L, -1, "StartSortMode");
 	Info->StartSortOrder = GetOptIntFromTable(L, "StartSortOrder", 0);
-	//---------------------------------------------------------------------------
-	lua_getfield(L, -1, "KeyBar");
-
-	if (lua_istable(L, -1))
-	{
-		size_t size;
-		int i;
-		struct KeyBarTitles *kbt = (struct KeyBarTitles*)AddBufToCollector(L, cpos, sizeof(struct KeyBarTitles));
-		Info->KeyBar = kbt;
-		kbt->CountLabels = lua_objlen(L, -1);
-		size = kbt->CountLabels * sizeof(struct KeyBarLabel);
-		kbt->Labels = (struct KeyBarLabel*)AddBufToCollector(L, cpos, size);
-		memset(kbt->Labels, 0, size);
-
-		for(i=0; i < (int)kbt->CountLabels; i++)
-		{
-			lua_rawgeti(L, -1, i+1);
-
-			if (!lua_istable(L, -1))
-			{
-				kbt->CountLabels = i;
-				lua_pop(L, 1);
-				break;
-			}
-
-			kbt->Labels[i].Key.VirtualKeyCode = GetOptIntFromTable(L, "VirtualKeyCode", 0);
-			lua_getfield(L, -1, "ControlKeyState");
-			kbt->Labels[i].Key.ControlKeyState = CAST(DWORD, GetFlagCombination(L, -1, NULL));
-			lua_pop(L, 1);
-			kbt->Labels[i].Text = AddStringToCollectorField(L, cpos, "Text");
-			kbt->Labels[i].LongText = AddStringToCollectorField(L, cpos, "LongText");
-			lua_pop(L, 1);
-		}
-	}
-
-	lua_pop(L, 1);
 	//---------------------------------------------------------------------------
 	// _ModuleShortcutData is a non-standard field used with LuaMacro panel modules
 	Info->ShortcutData = AddStringToCollectorField(L, cpos, "_ModuleShortcutData");
 	if (Info->ShortcutData == NULL)
 		Info->ShortcutData = AddStringToCollectorField(L, cpos, "ShortcutData");
 	//---------------------------------------------------------------------------
-	lua_pop(L,4);
+	lua_settop(L, stack_top);
 	*aInfo = *Info;
 }
 //---------------------------------------------------------------------------
@@ -905,18 +909,25 @@ static HANDLE FillFarMacroCall (lua_State* L, int narg)
 	return (HANDLE)fmc;
 }
 
+static void push_guid(lua_State *L, const void *pGuid)
+{
+	lua_pushlstring(L, (const char*)pGuid, sizeof(GUID));
+}
+
 HANDLE LF_Open(lua_State* L, const struct OpenInfo *Info)
 {
 	FP_PROTECT();
+	int entry_top = lua_gettop(L);
+	HANDLE Result = NULL;
 
 	if (!CheckReloadDefaultScript(L) || !GetExportFunction(L, "Open"))
-		return NULL;
+		return Result;
 
 	if (Info->OpenFrom == OPEN_LUAMACRO)
 		return Open_Luamacro(L, Info);
 
 	lua_pushinteger(L, Info->OpenFrom); // 1-st argument
-	lua_pushlstring(L, (const char*)Info->Guid, sizeof(GUID)); // 2-nd argument
+	push_guid(L, Info->Guid); // 2-nd argument
 
 	// 3-rd argument
 
@@ -927,31 +938,35 @@ HANDLE LF_Open(lua_State* L, const struct OpenInfo *Info)
 	}
 	else if (Info->OpenFrom == OPEN_SHORTCUT)
 	{
-		struct OpenShortcutInfo *osi = CAST(struct OpenShortcutInfo*, Info->Data);
+		struct OpenShortcutInfo *osi = (struct OpenShortcutInfo*)Info->Data;
 		lua_createtable(L, 0, 3);
 		PutWStrToTable(L, "HostFile", osi->HostFile, -1);
 		PutWStrToTable(L, "ShortcutData", osi->ShortcutData, -1);
 		PutFlagsToTable(L, "Flags", osi->Flags);
 	}
 	else if (Info->OpenFrom == OPEN_COMMANDLINE)
-		push_utf8_string(L, CAST(struct OpenCommandLineInfo*, Info->Data)->CommandLine, -1);
+	{
+		push_utf8_string(L, ((struct OpenCommandLineInfo*)Info->Data)->CommandLine, -1);
+	}
 	else if (Info->OpenFrom == OPEN_DIALOG)
 	{
-		struct OpenDlgPluginData *data = CAST(struct OpenDlgPluginData*, Info->Data);
+		struct OpenDlgPluginData *data = (struct OpenDlgPluginData*)Info->Data;
 		lua_createtable(L, 0, 1);
 		NewDialogData(L, NULL, data->hDlg, FALSE);
 		lua_setfield(L, -2, "hDlg");
 	}
 	else if (Info->OpenFrom == OPEN_ANALYSE)
 	{
-		struct OpenAnalyseInfo* oai = CAST(struct OpenAnalyseInfo*, Info->Data);
+		struct OpenAnalyseInfo* oai = (struct OpenAnalyseInfo*)Info->Data;
 		PushAnalyseInfo(L, oai->Info);
 		lua_rawgeti(L, LUA_REGISTRYINDEX, (int)(intptr_t)oai->Handle);
 		lua_setfield(L, -2, "Handle");
 		luaL_unref(L, LUA_REGISTRYINDEX, (int)(intptr_t)oai->Handle);
 	}
 	else
+	{
 		lua_pushinteger(L, Info->Data);
+	}
 
 	// Call export.Open()
 
@@ -960,31 +975,26 @@ HANDLE LF_Open(lua_State* L, const struct OpenInfo *Info)
 		int top = lua_gettop(L);
 		if (pcall_msg(L, 3, LUA_MULTRET) == 0)
 		{
-			HANDLE ret;
-			int narg = lua_gettop(L) - top + 4; // narg
-			if (narg > 0 && lua_istable(L, -narg))
+			int nret = lua_gettop(L) - top + 4; // nret
+			if (nret > 0 && lua_istable(L, -nret))
 			{
-				lua_getfield(L, -narg, "type"); // narg+1
+				lua_getfield(L, -nret, "type"); // nret+1
 				if (lua_type(L,-1)==LUA_TSTRING && lua_objlen(L,-1)==5 && !strcmp("panel",lua_tostring(L,-1)))
 				{
-					lua_pop(L,1); // narg
-					lua_rawgeti(L,-narg,1); // narg+1
+					lua_pop(L,1); // nret
+					lua_rawgeti(L,-nret,1); // nret+1
 					if (lua_toboolean(L, -1))
 					{
 						struct FarMacroCall* fmc = CreateFarMacroCall(1);
 						fmc->Values[0].Type = FMVT_PANEL;
-						fmc->Values[0].Value.Pointer = RegisterObject(L); // narg
-						lua_pop(L,narg); // +0
-						return fmc;
+						fmc->Values[0].Value.Pointer = RegisterObject(L); // nret
+						Result = fmc;
 					}
-					lua_pop(L,narg+1); // +0
-					return NULL;
+					goto Exit;
 				}
-				lua_pop(L,1); // narg
+				lua_pop(L,1); // nret
 			}
-			ret = FillFarMacroCall(L,narg);
-			lua_pop(L,narg);
-			return ret;
+			Result = FillFarMacroCall(L,nret);
 		}
 	}
 	else
@@ -992,18 +1002,15 @@ HANDLE LF_Open(lua_State* L, const struct OpenInfo *Info)
 		if (pcall_msg(L, 3, 1) == 0)
 		{
 			if (lua_type(L,-1) == LUA_TNUMBER && lua_tonumber(L,-1) == -1)
-			{
-				lua_pop(L,1);
-				return PANEL_STOP;
-			}
-			else if (lua_toboolean(L, -1))             //+1: Obj
-				return RegisterObject(L);               //+0
-
-			lua_pop(L,1);
+				Result = PANEL_STOP;
+			else if (lua_toboolean(L, -1))
+				Result = RegisterObject(L);
 		}
 	}
 
-	return NULL;
+Exit:
+	lua_settop(L, entry_top);
+	return Result;
 }
 
 void LF_ClosePanel(lua_State* L, const struct ClosePanelInfo *Info)
@@ -1045,7 +1052,7 @@ intptr_t LF_Configure(lua_State* L, const struct ConfigureInfo *Info)
 
 	if (GetExportFunction(L, "Configure"))    //+1: Func
 	{
-		lua_pushlstring(L, (const char*)Info->Guid, sizeof(GUID));
+		push_guid(L, Info->Guid);
 
 		if (0 == pcall_msg(L, 1, 1))          //+1
 		{
@@ -1289,8 +1296,6 @@ void getPluginMenuItems(lua_State* L, struct PluginMenuItem *pmi, const char* na
 
 void LF_GetPluginInfo(lua_State* L, struct PluginInfo *PI)
 {
-	int cpos;
-
 	if (!GetExportFunction(L, "GetPluginInfo"))     //+1
 		return;
 
@@ -1304,7 +1309,7 @@ void LF_GetPluginInfo(lua_State* L, struct PluginInfo *PI)
 	}
 
 	ReplacePluginInfoCollector(L, COLLECTOR_PI);       //+2: Info,Coll
-	cpos = lua_gettop(L);  // collector position
+	int cpos = lua_gettop(L);  // collector position
 	lua_pushvalue(L, -2);                              //+3: Info,Coll,Info
 	//--------------------------------------------------------------------------
 	PI->StructSize = sizeof(*PI);

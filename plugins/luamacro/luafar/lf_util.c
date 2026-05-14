@@ -52,7 +52,7 @@ unsigned __int64 GetFileSizeFromTable(lua_State *L, const char *key)
 FILETIME GetFileTimeFromTable(lua_State *L, const char *key)
 {
 	FILETIME ft;
-	INT64 tm = {0};
+	INT64 tm = 0;
 	int OK = 0;
 
 	lua_getfield(L, -1, key);
@@ -67,12 +67,12 @@ FILETIME GetFileTimeFromTable(lua_State *L, const char *key)
 	}
 	else
 	{
-		OK =  bit64_getvalue(L, -1, &tm);
+		OK = bit64_getvalue(L, -1, &tm);
 	}
 	if (OK)
 	{
-		ft.dwHighDateTime = CAST(DWORD, (UINT64)tm >> 32);
-		ft.dwLowDateTime  = CAST(DWORD, tm & 0xFFFFFFFF);
+		ft.dwHighDateTime = (DWORD) ((UINT64)tm >> 32);
+		ft.dwLowDateTime  = (DWORD) (tm & 0xFFFFFFFF);
 	}
 	else
 		ft.dwLowDateTime = ft.dwHighDateTime = 0;
@@ -88,7 +88,7 @@ void PutFileTimeToTable(lua_State *L, const char* key, FILETIME ft)
 		LARGE_INTEGER li;
 		li.LowPart = ft.dwLowDateTime;
 		li.HighPart = ft.dwHighDateTime;
-		PutNumToTable(L, key, CAST(double, li.QuadPart/10000)); // convert 100ns units to 1ms ones
+		PutNumToTable(L, key, (double) li.QuadPart/10000); // convert 100ns units to 1ms ones
 	}
 	else
 	{

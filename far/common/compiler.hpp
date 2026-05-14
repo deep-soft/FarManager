@@ -110,27 +110,27 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 //----------------------------------------------------------------------------
 #if COMPILER(CL)
-#define COMPILER_NAME L"Microsoft Visual C++"
+#define COMPILER_NAME "Microsoft Visual C++"
 #define COMPILER_VERSION_MAJOR (_MSC_FULL_VER / 10000000)
 #define COMPILER_VERSION_MINOR (_MSC_FULL_VER % 10000000 / 100000)
 #define COMPILER_VERSION_PATCH (_MSC_FULL_VER % 100000)
 #elif COMPILER(GCC)
-#define COMPILER_NAME L"GCC"
+#define COMPILER_NAME "GCC"
 #define COMPILER_VERSION_MAJOR __GNUC__
 #define COMPILER_VERSION_MINOR __GNUC_MINOR__
 #define COMPILER_VERSION_PATCH __GNUC_PATCHLEVEL__
 #elif COMPILER(INTEL)
-#define COMPILER_NAME L"Intel C++ Compiler"
+#define COMPILER_NAME "Intel C++ Compiler"
 #define COMPILER_VERSION_MAJOR (__INTEL_COMPILER / 100)
 #define COMPILER_VERSION_MINOR (__INTEL_COMPILER % 100)
 #define COMPILER_VERSION_PATCH __INTEL_COMPILER_UPDATE
 #elif COMPILER(CLANG)
-#define COMPILER_NAME L"Clang"
+#define COMPILER_NAME "Clang"
 #define COMPILER_VERSION_MAJOR __clang_major__
 #define COMPILER_VERSION_MINOR __clang_minor__
 #define COMPILER_VERSION_PATCH __clang_patchlevel__
 #else
-#define COMPILER_NAME L"Unknown compiler"
+#define COMPILER_NAME "Unknown compiler"
 #define COMPILER_VERSION_MAJOR 0
 #define COMPILER_VERSION_MINOR 0
 #define COMPILER_VERSION_PATCH 0
@@ -164,6 +164,12 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 			DETAIL_COMPILER_VERSION(COMPILER_VERSION_MAJOR, COMPILER_VERSION_MINOR, COMPILER_VERSION_PATCH) >= \
 			DETAIL_COMPILER_VERSION(major, minor, patch) \
 		) \
+	)
+
+#define REQUIRE_COMPILER(compiler, major, minor, patch, ...) \
+	static_assert( \
+		CHECK_COMPILER(compiler, major, minor, patch), \
+		COMPILER_NAME " " #major "." #minor "." #patch " (or higher) required" __VA_ARGS__ \
 	)
 
 #endif // COMPILER_HPP_6A237B14_5BAA_4106_9D7F_7C7BA14A36B0

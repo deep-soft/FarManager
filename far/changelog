@@ -1,4 +1,157 @@
 --------------------------------------------------------------------------------
+drkns 2026-05-12 22:05:18+01:00 - build 6685
+
+1. Continue 6684.1.
+
+--------------------------------------------------------------------------------
+drkns 2026-05-12 21:14:58+01:00 - build 6684
+
+1. 0001610: Attempt to fix some historical madness in FindFile.
+
+2. Refactoring.
+
+--------------------------------------------------------------------------------
+MZK 2026-05-10 12:27:04-04:00 - build 6683
+
+1. gh-1000: Do not materialize text coordinates in Find All menu items.
+   Instead of extracting line and position of the found pattern
+   from the item's text, macros should use Menu.GetItemExtendedData.
+
+--------------------------------------------------------------------------------
+drkns 2026-05-09 12:59:44+01:00 - build 6682
+
+1. Bump VS version to 2022, remove 2019 workarounds.
+
+2. Emulate SRW locks for old OSes.
+   SQLite 3.54 uses them, so they can't be stubs anymore.
+
+3. Continue 6677.2.
+
+--------------------------------------------------------------------------------
+yjh 2026-05-06 01:52:15+03:00 - build 6681
+
+1. SQLite: v3.53.1
+
+--------------------------------------------------------------------------------
+drkns 2026-04-28 23:20:47+01:00 - build 6680
+
+1. Correction of 6679.
+
+--------------------------------------------------------------------------------
+drkns 2026-04-28 21:51:48+01:00 - build 6679
+
+1. Refactoring, tests.
+
+--------------------------------------------------------------------------------
+MZK 2026-04-18 10:27:01-04:00 - build 6678
+
+1. gh-1006: Macro API to set menu item extended data: Menu.SetItemExtendedData.
+
+2. Updated Edit.SyncEditorAndFindAllMenu.lua to demonstrate usage of this API.
+
+--------------------------------------------------------------------------------
+drkns 2026-04-13 21:37:42+01:00 - build 6677
+
+1. Continue 6673.2.
+
+2. Autorestart when appropriate.
+
+3. Refactoring.
+
+--------------------------------------------------------------------------------
+yjh 2026-04-11 11:27:13+03:00 - build 6676
+
+1. SQLite: v3.53.0
+
+--------------------------------------------------------------------------------
+drkns 2026-04-07 18:59:21+01:00 - build 6675
+
+1. Improve keyboard layouts detection.
+
+2. Refactoring.
+
+--------------------------------------------------------------------------------
+drkns 2026-04-07 00:05:18+01:00 - build 6674
+
+1. Logging improvements.
+
+--------------------------------------------------------------------------------
+drkns 2026-04-06 19:36:40+01:00 - build 6673
+
+1. Refactoring.
+
+2. Allow view/edit times as UTC in Attributes and Filters.
+
+--------------------------------------------------------------------------------
+drkns 2026-04-04 23:58:07+01:00 - build 6672
+
+1. Correction of 6070.
+
+--------------------------------------------------------------------------------
+drkns 2026-04-02 20:06:51+01:00 - build 6671
+
+1. Correction of 1.70.1748 and 3.0.4859.
+
+2. Propagate current directory to the terminal.
+
+3. Refactoring.
+
+4. Do not refresh viewer if there are no changes.
+
+--------------------------------------------------------------------------------
+drkns 2026-03-29 20:19:23+01:00 - build 6670
+
+1. Show build date in far:about.
+
+2. Fix setting date/time in corner cases.
+
+3. Make plugins sorting more predictable.
+
+--------------------------------------------------------------------------------
+drkns 2026-03-27 20:33:11+00:00 - build 6669
+
+1. Add upper limit to API struct size checks to detect uninitialized memory.
+   This means that some buggy plugins might suddenly stop working. C'est la vie.
+
+--------------------------------------------------------------------------------
+drkns 2026-03-26 20:31:07+00:00 - build 6668
+
+1. Continue 6667.
+
+2. Add paging to 'set' and 'far::about' outputs.
+
+--------------------------------------------------------------------------------
+drkns 2026-03-25 20:07:10+00:00 - build 6667
+
+1. Add sqlite3.dll version check.
+
+--------------------------------------------------------------------------------
+drkns 2026-03-23 23:23:23+00:00 - build 6666
+
+1. Allow decimal size suffixes in filters and search.
+
+--------------------------------------------------------------------------------
+drkns 2026-03-23 22:34:47+00:00 - build 6665
+
+1. Refactoring, tests.
+
+--------------------------------------------------------------------------------
+drkns 2026-03-21 23:34:45+00:00 - build 6664
+
+1. Correction of 6663.2.
+
+--------------------------------------------------------------------------------
+drkns 2026-03-20 21:54:19+00:00 - build 6663
+
+1. Correction of 6659.
+
+2. Continue 6662.
+
+3. Fix mouse handling in command line.
+
+4. Fix mode indicators.
+
+--------------------------------------------------------------------------------
 drkns 2026-03-17 18:15:36+00:00 - build 6662
 
 1. Correction of 6483.

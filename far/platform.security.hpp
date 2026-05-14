@@ -63,6 +63,9 @@ namespace os::security
 	sid_ptr make_sid(PSID_IDENTIFIER_AUTHORITY IdentifierAuthority, BYTE SubAuthorityCount, DWORD SubAuthority0 = 0, DWORD SubAuthority1 = 0, DWORD SubAuthority2 = 0, DWORD SubAuthority3 = 0, DWORD SubAuthority4 = 0, DWORD SubAuthority5 = 0, DWORD SubAuthority6 = 0, DWORD SubAuthority7 = 0);
 
 	[[nodiscard]]
+	sid_ptr make_admin_sid();
+
+	[[nodiscard]]
 	bool is_admin();
 
 	[[nodiscard]]

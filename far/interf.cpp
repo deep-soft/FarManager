@@ -402,7 +402,7 @@ void CloseConsole()
 	MoveRealCursor(0, ScrY);
 	console.SetCursorInfo(InitialCursorInfo);
 
-	SetRealColor(colors::default_color());
+	console.SetTextAttributes(colors::default_color());
 
 	if (InitialConsoleMode)
 	{
@@ -903,7 +903,7 @@ void chars_to_cells(string_view Str, size_t& CharsConsumed, size_t const CellsAv
 	assert(CharsConsumed < Str.size() || CellsConsumed == visual_string_length(Str));
 }
 
-std::vector<FAR_CHAR_INFO> text_to_char_info(string_view Str, size_t& CharsConsumed, size_t const CellsAvailable, size_t& CellsConsumed)
+static std::vector<FAR_CHAR_INFO> text_to_char_info(string_view Str, size_t& CharsConsumed, size_t const CellsAvailable, size_t& CellsConsumed)
 {
 	CharsConsumed = 0;
 	CellsConsumed = 0;
@@ -1331,11 +1331,6 @@ void SetColor(PaletteColors Color)
 void SetColor(const FarColor& Color)
 {
 	CurColor=Color;
-}
-
-void SetRealColor(const FarColor& Color)
-{
-	console.SetTextAttributes(Color);
 }
 
 const FarColor& GetColor()

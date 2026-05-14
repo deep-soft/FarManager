@@ -9,7 +9,6 @@
 #endif
 
 #define ARRSIZE(buff) (sizeof(buff)/sizeof(buff[0]))
-#define CAST(tp,expr) ((tp)(expr))
 
 #ifdef __cplusplus
 extern "C" {

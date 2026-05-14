@@ -69,7 +69,6 @@ namespace console_detail
 		NONCOPYABLE(console);
 
 		console();
-		~console();
 
 		bool Allocate() const;
 		bool Free() const;
@@ -214,6 +213,8 @@ namespace console_detail
 		void command_finished(int ExitCode) const;
 		void command_not_found(string_view Command) const;
 
+		void propagate_cd(string_view CurDir) const;
+
 		[[nodiscard]]
 		std::optional<bool> is_grapheme_clusters_on() const;
 
@@ -256,6 +257,9 @@ namespace console_detail
 		os::handle m_WidthTestScreen;
 
 		KEY_EVENT_RECORD mutable m_QueuedKeys{};
+
+		class external_console;
+		std::unique_ptr<external_console> m_ExternalConsole;
 	};
 }
 

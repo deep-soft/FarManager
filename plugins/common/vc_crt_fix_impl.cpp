@@ -257,10 +257,19 @@ extern "C" BOOL WINAPI WRAPPER(GetLogicalProcessorInformation)(PSYSTEM_LOGICAL_P
 {
 	struct implementation
 	{
-		static BOOL WINAPI impl(PSYSTEM_LOGICAL_PROCESSOR_INFORMATION, PDWORD)
+		static BOOL WINAPI impl(PSYSTEM_LOGICAL_PROCESSOR_INFORMATION Info, PDWORD Size)
 		{
-			SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
-			return FALSE;
+			if (*Size < sizeof(*Info))
+			{
+				*Size = sizeof(*Info);
+				SetLastError(ERROR_INSUFFICIENT_BUFFER);
+				return FALSE;
+			}
+
+			*Info = {};
+			Info->ProcessorMask = 1;
+			Info->Relationship = RelationProcessorCore;
+			return TRUE;
 		}
 	};
 
@@ -340,6 +349,45 @@ extern "C" int WINAPI WRAPPER(LCMapStringEx)(LPCWSTR LocaleName, DWORD MapFlags,
 	CREATE_AND_RETURN(modules::kernel32, LocaleName, MapFlags, SrcStr, SrcCount, DestStr, DestCount, VersionInformation, Reserved, SortHandle);
 }
 
+namespace srw_lock_impl
+{
+	constexpr uintptr_t EXCLUSIVE_LOCKED = 0x1;
+
+	static void spin_wait(unsigned int Iteration)
+	{
+		if (Iteration < 10)
+			YieldProcessor();
+		else if (Iteration < 20)
+			Sleep(0);
+		else
+			Sleep(1);
+	}
+
+	void initialize(SRWLOCK* SRWLock)
+	{
+		*SRWLock = {};
+	}
+
+	bool try_acquire(SRWLOCK* SRWLock)
+	{
+		return InterlockedCompareExchangePointer(
+			&SRWLock->Ptr,
+			reinterpret_cast<PVOID>(EXCLUSIVE_LOCKED),
+			nullptr) == nullptr;
+	}
+
+	void acquire(SRWLOCK* SRWLock)
+	{
+		for (unsigned int SpinCount = 0; !try_acquire(SRWLock); spin_wait(SpinCount++))
+			;
+	}
+
+	void release(SRWLOCK* SRWLock)
+	{
+		InterlockedExchangePointer(&SRWLock->Ptr, {});
+	}
+}
+
 // VC2022
 extern "C" BOOL WINAPI WRAPPER(SleepConditionVariableSRW)(PCONDITION_VARIABLE ConditionVariable, PSRWLOCK SRWLock, DWORD Milliseconds, ULONG Flags)
 {
@@ -374,9 +422,9 @@ extern "C" void WINAPI WRAPPER(AcquireSRWLockExclusive)(PSRWLOCK SRWLock)
 {
 	struct implementation
 	{
-		static void WINAPI impl(PSRWLOCK)
+		static void WINAPI impl(PSRWLOCK SRWLock)
 		{
-			SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
+			srw_lock_impl::acquire(SRWLock);
 		}
 	};
 
@@ -388,9 +436,9 @@ extern "C" void WINAPI WRAPPER(ReleaseSRWLockExclusive)(PSRWLOCK SRWLock)
 {
 	struct implementation
 	{
-		static void WINAPI impl(PSRWLOCK)
+		static void WINAPI impl(PSRWLOCK SRWLock)
 		{
-			SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
+			srw_lock_impl::release(SRWLock);
 		}
 	};
 
@@ -402,10 +450,9 @@ extern "C" BOOLEAN WINAPI WRAPPER(TryAcquireSRWLockExclusive)(PSRWLOCK SRWLock)
 {
 	struct implementation
 	{
-		static BOOLEAN WINAPI impl(PSRWLOCK)
+		static BOOLEAN WINAPI impl(PSRWLOCK SRWLock)
 		{
-			SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
-			return FALSE;
+			return srw_lock_impl::try_acquire(SRWLock);
 		}
 	};
 
@@ -419,7 +466,7 @@ extern "C" void WINAPI WRAPPER(InitializeSRWLock)(PSRWLOCK SRWLock)
 	{
 		static void WINAPI impl(PSRWLOCK SRWLock)
 		{
-			*SRWLock = SRWLOCK_INIT;
+			srw_lock_impl::initialize(SRWLock);
 		}
 	};
 

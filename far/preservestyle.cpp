@@ -61,7 +61,7 @@ enum PreserveStyleType
 
 static bool IsPreserveStyleTokenSeparator(wchar_t C)
 {
-	return contains(L"_-."sv, C);
+	return L"_-."sv.contains(C);
 }
 
 static int GetPreserveCaseStyleMask(const string_view Str)
@@ -285,7 +285,7 @@ bool PreserveStyleReplaceString(
 
 	const auto BlankOrWordDiv = [&WordDiv](wchar_t Ch)
 	{
-		return std::iswblank(Ch) || contains(WordDiv, Ch);
+		return std::iswblank(Ch) || WordDiv.contains(Ch);
 	};
 
 	for (int I=Position; (options.Reverse && I>=0) || (!options.Reverse && static_cast<size_t>(I) < Source.size()); options.Reverse? I-- : I++)

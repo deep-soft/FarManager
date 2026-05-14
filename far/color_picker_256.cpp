@@ -116,8 +116,7 @@ static constexpr auto distinct_cube_map = []
 {
 	std::array<uint8_t, colors::index::cube_count> Result;
 
-	// Not constexpr, VS2019 LTO crashes and burns
-	const auto CubeInverseMapping = foreground_inverse_mapping<cube_size>();
+	constexpr auto CubeInverseMapping = foreground_inverse_mapping<cube_size>();
 
 	for (uint8_t i = 0; i != Result.size(); ++i)
 	{
@@ -137,8 +136,7 @@ static constexpr auto distinct_grey_map = []
 {
 	std::array<uint8_t, colors::index::grey_count> Result;
 
-	// Not constexpr, VS2019 LTO crashes and burns
-	const auto GreyInverseMapping = foreground_inverse_mapping<colors::index::grey_count>();
+	constexpr auto GreyInverseMapping = foreground_inverse_mapping<colors::index::grey_count>();
 
 	for (uint8_t i = 0; i != Result.size(); ++i)
 	{

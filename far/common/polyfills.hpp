@@ -55,39 +55,6 @@ namespace std::this_thread
 
 //----------------------------------------------------------------------------
 
-#ifndef __cpp_lib_to_underlying
-#include <type_traits>
-
-namespace std
-{
-	template<class enum_type>
-	[[nodiscard]]
-	constexpr auto to_underlying(enum_type const Enum) noexcept
-	{
-		return static_cast<std::underlying_type_t<enum_type>>(Enum);
-	}
-}
-#endif
-
-#ifndef __cpp_lib_unreachable
-#include <cassert>
-
-namespace std
-{
-	[[noreturn]]
-	inline void unreachable()
-	{
-		assert(false);
-
-#if COMPILER(CL)
-		__assume(0);
-#else
-		__builtin_unreachable();
-#endif
-	}
-}
-#endif
-
 #ifndef __cpp_lib_ranges_fold
 #include <algorithm>
 #if !defined _LIBCPP___ALGORITHM_FOLD_H && !defined _LIBCPP___ALGORITHM_RANGES_FOLD_H // as of March 2025 libc++ doesn't define __cpp_lib_ranges_fold

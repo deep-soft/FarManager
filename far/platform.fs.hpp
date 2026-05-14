@@ -38,6 +38,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // Platform:
 #include "platform.hpp"
 #include "platform.chrono.hpp"
+#include "platform.fwd.hpp"
 #include "platform.security.hpp"
 
 // Common:
@@ -77,7 +78,7 @@ namespace os::fs
 	using find_file_handle = os::detail::handle_t<detail::find_file_handle_closer>;
 	using find_volume_handle = os::detail::handle_t<detail::find_volume_handle_closer>;
 
-	using drives_set = std::bitset<26>;
+	using drives_set = std::bitset<'Z' - 'A' + 1>;
 
 	using security_descriptor = block_ptr<SECURITY_DESCRIPTOR, default_buffer_size>;
 
@@ -120,9 +121,6 @@ namespace os::fs
 
 		[[nodiscard]]
 		string get_device_path(wchar_t Letter);
-
-		[[nodiscard]]
-		string get_device_path(size_t Number);
 
 		[[nodiscard]]
 		string get_win32nt_device_path(wchar_t Letter);
@@ -266,9 +264,19 @@ namespace os::fs
 		bool SetEnd();
 
 		[[nodiscard]]
-		bool GetTime(chrono::time_point* CreationTime, chrono::time_point* LastAccessTime, chrono::time_point* LastWriteTime, chrono::time_point* ChangeTime) const;
+		bool GetTime(
+			chrono::time_point* CreationTime,
+			chrono::time_point* LastAccessTime,
+			chrono::time_point* LastWriteTime,
+			chrono::time_point* ChangeTime
+		) const;
 
-		bool SetTime(const chrono::time_point* CreationTime, const chrono::time_point* LastAccessTime, const chrono::time_point* LastWriteTime, const chrono::time_point* ChangeTime) const;
+		bool SetTime(
+			chrono::time_point CreationTime,
+			chrono::time_point LastAccessTime,
+			chrono::time_point LastWriteTime,
+			chrono::time_point ChangeTime
+		) const;
 
 		[[nodiscard]]
 		bool GetSize(unsigned long long& Size) const;
@@ -482,7 +490,7 @@ namespace os::fs
 		bool create_hard_link(const wchar_t* FileName, const wchar_t* ExistingFileName, SECURITY_ATTRIBUTES* SecurityAttributes);
 
 		[[nodiscard]]
-		bool copy_file(const wchar_t* ExistingFileName, const wchar_t* NewFileName, LPPROGRESS_ROUTINE ProgressRoutine, void* Data, BOOL* Cancel, DWORD CopyFlags);
+		bool copy_file(const wchar_t* ExistingFileName, const wchar_t* NewFileName, progress_routine ProgressRoutine, void* Data, DWORD CopyFlags);
 
 		[[nodiscard]]
 		bool move_file(const wchar_t* ExistingFileName, const wchar_t* NewFileName, DWORD Flags);
@@ -543,18 +551,16 @@ namespace os::fs
 	bool delete_file(string_view FileName);
 
 	using progress_routine = function_ref<DWORD(
-		unsigned long long TotalFileSize,
-		unsigned long long TotalBytesTransferred,
-		unsigned long long StreamSize,
-		unsigned long long StreamBytesTransferred,
+		uint64_t TotalFileSize,
+		uint64_t TotalBytesTransferred,
+		uint64_t StreamSize,
+		uint64_t StreamBytesTransferred,
 		DWORD StreamNumber,
-		DWORD CallbackReason,
-		HANDLE SourceFile,
-		HANDLE DestinationFile
+		DWORD CallbackReason
 	)>;
 
 	[[nodiscard]]
-	bool copy_file(string_view ExistingFileName, string_view NewFileName, progress_routine ProgressRoutine, BOOL* Cancel, DWORD CopyFlags);
+	bool copy_file(string_view ExistingFileName, string_view NewFileName, progress_routine ProgressRoutine, DWORD CopyFlags);
 
 	[[nodiscard]]
 	bool move_file(string_view ExistingFileName, string_view NewFileName, DWORD Flags = 0);

@@ -60,7 +60,7 @@ namespace path
 	static_assert(separators.front() == separator);
 
 	constexpr bool is_nt_separator(wchar_t x) noexcept { return x == separator; }
-	constexpr bool is_separator(wchar_t x) noexcept { return contains(separators, x); }
+	constexpr bool is_separator(wchar_t x) noexcept { return separators.contains(x); }
 
 	decltype(is_separator)* get_is_separator(string_view Path);
 

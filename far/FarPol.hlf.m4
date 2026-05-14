@@ -1793,6 +1793,9 @@ znajdować.
  - #P# dla petabajtów;
  - #E# dla eksabajtów.
 
+ Jednostki te są jednostkami binarnymi (nie dziesiątkowymi), np. 1K to 1024 bajty, nie 1000.
+ Aby podać jednostki dziesiętne należy użyć małych liter, np. 1k.
+
  #Typy kolumn# - pozwala na sformatowanie wyników wyszukiwania.
 Typy kolumn są kodowane jednym lub więcej znakami rozdzielanymi przecinkami.
 Obsługiwane są następujące typy kolumn:
@@ -1965,6 +1968,9 @@ podane warunki. Jeżeli analiza jest wyłączona, nazwa pliku jest ignorowana.
  - #T# dla terabajtów;
  - #P# dla petabajtów;
  - #E# dla eksabajtów.
+
+ Jednostki te są jednostkami binarnymi (nie dziesiątkowymi), np. 1K to 1024 bajty, nie 1000.
+ Aby podać jednostki dziesiętne należy użyć małych liter, np. 1k.
 
  Warunki filtru zostaną spełnione, jeżeli analiza wielkości pliku jest włączona i znajduje się
 w podanym zakresie. Jeżeli nic nie podano (pusta linia) w jednej lub obu granicach zakresu
@@ -3699,7 +3705,7 @@ główny folder wybranego dysku (działa tylko dla dysków, a dla wtyczek).
 
  #Ctrl+H# pokazuje odłączone (odmapowane) wolumeny.
 
- #Shift+F6# allows to change the volume label.
+ #Shift+F6# pozwala zmienić etykietę napędu.
 
  #Ctrl+R# pozwala odświeżyć menu wyboru dysku.
 
@@ -5179,7 +5185,7 @@ dużej ilości danych.
         ^<wrap>Łańcuchy zawierające "nazwa=", ale nie zawierające "wartosc", są przetwarzane
 (w rzeczywistości - omijane) szybciej.
 
- #\N#   - ^<wrap>odniesienie do wcześniej dopasowanych nawiasów. N jest numer.
+ #\N#   - ^<wrap>odniesienie do wcześniej dopasowanych nawiasów. N jest liczbą.
 Wszystkie nawiasy oprócz (?:wzorzec), (?=wzorzec), (?!wzorzec), (?<=wzorzec) i (?<!wzorzec)
 posiadają numer (w kolejności występowania).
         Przykład:

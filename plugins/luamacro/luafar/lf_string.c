@@ -671,13 +671,13 @@ int ustring_GlobalMemoryStatus(lua_State *L)
 
 	lua_createtable(L, 0, 8);
 	PutNumToTable(L, "MemoryLoad",           ms.dwMemoryLoad);
-	PutNumToTable(L, "TotalPhys",            CAST(double, ms.ullTotalPhys));
-	PutNumToTable(L, "AvailPhys",            CAST(double, ms.ullAvailPhys));
-	PutNumToTable(L, "TotalPageFile",        CAST(double, ms.ullTotalPageFile));
-	PutNumToTable(L, "AvailPageFile",        CAST(double, ms.ullAvailPageFile));
-	PutNumToTable(L, "TotalVirtual",         CAST(double, ms.ullTotalVirtual));
-	PutNumToTable(L, "AvailVirtual",         CAST(double, ms.ullAvailVirtual));
-	PutNumToTable(L, "AvailExtendedVirtual", CAST(double, ms.ullAvailExtendedVirtual));
+	PutNumToTable(L, "TotalPhys",            (double) ms.ullTotalPhys);
+	PutNumToTable(L, "AvailPhys",            (double) ms.ullAvailPhys);
+	PutNumToTable(L, "TotalPageFile",        (double) ms.ullTotalPageFile);
+	PutNumToTable(L, "AvailPageFile",        (double) ms.ullAvailPageFile);
+	PutNumToTable(L, "TotalVirtual",         (double) ms.ullTotalVirtual);
+	PutNumToTable(L, "AvailVirtual",         (double) ms.ullAvailVirtual);
+	PutNumToTable(L, "AvailExtendedVirtual", (double) ms.ullAvailExtendedVirtual);
 	return 1;
 }
 

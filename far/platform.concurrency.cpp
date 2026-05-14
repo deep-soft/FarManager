@@ -102,9 +102,7 @@ namespace os::concurrency
 		finalise();
 
 		handle::operator=(std::move(rhs));
-
-		m_ThreadId = rhs.m_ThreadId;
-		rhs.m_ThreadId = {};
+		m_ThreadId = std::exchange(rhs.m_ThreadId, 0);
 
 		return *this;
 	}

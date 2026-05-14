@@ -70,7 +70,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 //----------------------------------------------------------------------------
 
-static void AddToPrintersMenu(VMenu2 *PrinterList, std::span<PRINTER_INFO_4W const> const Printers)
+static void AddToPrintersMenu(VMenu2 *PrinterList, std::span<PRINTER_INFO_4 const> const Printers)
 {
 	string strDefaultPrinter;
 	// BUGBUG check result
@@ -116,14 +116,17 @@ void PrintFiles(FileList* SrcPanel)
 		if (DirsCount == SelCount)
 			return;
 
-		block_ptr<PRINTER_INFO_4W, os::default_buffer_size> pi(os::default_buffer_size);
+#define PRINTER_INFO_LEVEL 4
+#define PRINTER_INFO(n) CONCATENATE(PRINTER_INFO_, n)
+
+		block_ptr<PRINTER_INFO(PRINTER_INFO_LEVEL), os::default_buffer_size> pi(os::default_buffer_size);
 
 		DWORD Needed = 0, PrintersCount = 0;
 
 		while (!EnumPrinters(
 			PRINTER_ENUM_LOCAL | PRINTER_ENUM_CONNECTIONS,
 			nullptr,
-			4,
+			PRINTER_INFO_LEVEL,
 			std::bit_cast<BYTE*>(pi.data()),
 			static_cast<DWORD>(pi.size()),
 			&Needed,

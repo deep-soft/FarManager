@@ -556,11 +556,9 @@ namespace
 		return !(Item.Flags & (LIF_HIDDEN | LIF_FILTERED));
 	}
 
-	string_view get_item_cell_text(string_view ItemName, segment CellSegment)
+	string_view get_item_text(const menu_item_ex& Item)
 	{
-		const auto Intersection{ intersect(segment{ 0, segment::length_tag{ static_cast<segment::domain_t>(ItemName.size()) } }, CellSegment) };
-		if (Intersection.empty()) return {};
-		return ItemName.substr(Intersection.start(), Intersection.length());
+		return Item.Name;
 	}
 
 	std::pair<int, int> item_hpos_limits(const int ItemLength, const int TextAreaWidth, const item_hscroll_policy Policy) noexcept
@@ -629,14 +627,14 @@ namespace
 		return -adjust_hpos_shift(-Shift, TextAreaWidth - Right, TextAreaWidth - Left, TextAreaWidth);
 	}
 
-	void toggle_fixed_columns(std::vector<vmenu_fixed_column_t>& FixedColumns)
+	void toggle_fixed_columns(std::vector<VMenu::fixed_column_t>& FixedColumns)
 	{
 		assert(!FixedColumns.empty());
 
-		if (auto firstHiddenColumn{ std::ranges::find(FixedColumns, 0, &vmenu_fixed_column_t::CurrentWidth) };
+		if (auto firstHiddenColumn{ std::ranges::find(FixedColumns, 0, &VMenu::fixed_column_t::CurrentWidth) };
 			firstHiddenColumn != FixedColumns.end())
 		{
-			firstHiddenColumn->CurrentWidth = firstHiddenColumn->TextSegment.length();
+			firstHiddenColumn->CurrentWidth = firstHiddenColumn->MaxWidth;
 			return;
 		}
 
@@ -1087,7 +1085,6 @@ void VMenu::clear()
 	m_MaxItemLength = 0;
 	m_HorizontalTracker->clear();
 	m_FixedColumns.clear();
-	m_ItemTextSegment = segment::ray();
 
 	SetMenuFlags(VMENU_UPDATEREQUIRED);
 }
@@ -1193,7 +1190,7 @@ void VMenu::FilterStringUpdated()
 				ItemHiddenCount++;
 			}
 
-			if (CurItem.Name.empty() && PrevGroup == -1)
+			if (get_item_text(CurItem).empty() && PrevGroup == -1)
 			{
 				CurItem.Flags |= LIF_FILTERED;
 				ItemHiddenCount++;
@@ -1206,7 +1203,7 @@ void VMenu::FilterStringUpdated()
 		}
 		else
 		{
-			if(!contains_icase(remove_highlight(trim(CurItem.Name)), strFilter))
+			if(!contains_icase(remove_highlight(trim(get_item_text(CurItem))), strFilter))
 			{
 				CurItem.Flags |= LIF_FILTERED;
 				ItemHiddenCount++;
@@ -1378,7 +1375,7 @@ long long VMenu::VMProcess(int OpCode, void* vParam, long long iParam)
 						continue;
 
 					int Res = 0;
-					const auto strTemp = trim(remove_highlight(Item.Name));
+					const auto strTemp = trim(remove_highlight(get_item_text(Item)));
 
 					switch (iParam)
 					{
@@ -1598,13 +1595,23 @@ long long VMenu::VMProcess(int OpCode, void* vParam, long long iParam)
 		}
 		case MCODE_F_MENU_GETEXTENDEDDATA:
 		{
-			if (m_ExtendedDataProvider)
+			if (m_ExtendedDataGetter)
 			{
 				const auto ItemPos{ GetItemPosition(iParam) };
 				if (ItemPos == -1) return -1;
 
-				*static_cast<extended_item_data*>(vParam) = m_ExtendedDataProvider(Items[ItemPos]);
-				return 1;
+				return m_ExtendedDataGetter(Items[ItemPos], *static_cast<extended_item_data*>(vParam)) ? 1 : 0;
+			}
+			return -1;
+		}
+		case MCODE_F_MENU_SETEXTENDEDDATA:
+		{
+			if (m_ExtendedDataSetter)
+			{
+				const auto ItemPos{ GetItemPosition(iParam) };
+				if (ItemPos == -1) return -1;
+
+				return m_ExtendedDataSetter(Items[ItemPos], *static_cast<extended_item_data*>(vParam)) ? 1 : 0;
 			}
 			return -1;
 		}
@@ -2479,7 +2486,7 @@ bool VMenu::AlignAnnotations()
 	return SetAllItemsHPos(
 		[&](const menu_item_ex& Item)
 		{
-			return AlignPos - static_cast<int>(visual_string_length(GetItemText(Item).substr(0, Item.SafeGetFirstAnnotation())));
+			return AlignPos - static_cast<int>(visual_string_length(get_item_text(Item).substr(0, Item.SafeGetFirstAnnotation())));
 		});
 }
 
@@ -2841,7 +2848,7 @@ void VMenu::ConnectSeparator(const size_t ItemIndex, string& separator, const in
 	// We should think of how to deal with fixed columns and horizontally shifted items.
 	// Maybe use fixed columns in the menus where it is necessary
 	// and connect separators in trivial cases only (or not at all)?
-	if (CheckFlags(VMENU_NOMERGEBORDER) || !m_FixedColumns.empty() || m_ItemTextSegment.start() > 0 || separator.size() <= 3)
+	if (CheckFlags(VMENU_NOMERGEBORDER) || !m_FixedColumns.empty() || separator.size() <= 3)
 		return;
 
 	for (const auto I : std::views::iota(0uz, separator.size() - 3))
@@ -2929,11 +2936,11 @@ void VMenu::DrawFixedColumns(
 	set_color(Colors, ColorIndices.Normal);
 
 	auto CurCellAreaStart{ FixedColumnsArea.start() };
-	for (const auto CurFixedColumn : m_FixedColumns | std::views::filter(&vmenu_fixed_column_t::CurrentWidth))
+	for (const auto CurFixedColumn : m_FixedColumns | std::views::filter(&VMenu::fixed_column_t::CurrentWidth))
 	{
 		const segment CellArea{ CurCellAreaStart, segment::length_tag{ CurFixedColumn.CurrentWidth } };
 
-		const auto CellText{ get_item_cell_text(Item.Name, CurFixedColumn.TextSegment) };
+		const auto CellText{ m_FixedColumnProvider(Item, CurFixedColumn) };
 		if (!ClippedText(CellText, CellArea))
 			ClippedText(BlankLine, CellArea);
 
@@ -2957,7 +2964,7 @@ bool VMenu::DrawItemText(
 	const segment Bounds{ TextArea.start(), segment::sentinel_tag{ TextArea.end() } };
 
 	const auto [ItemText, HighlightPos]{ [&]{
-		const auto RawItemText_{ GetItemText(Item) };
+		const auto RawItemText_{ get_item_text(Item) };
 		auto HotkeyPos_{ string::npos };
 		auto ItemText_{ CheckFlags(VMENU_SHOWAMPERSAND) ? string{ RawItemText_ } : HiText2Str(RawItemText_, &HotkeyPos_) };
 		std::ranges::replace(ItemText_, L'\t', L' ');
@@ -3055,7 +3062,7 @@ wchar_t VMenu::GetHighlights(const menu_item_ex* const Item) const
 		return 0;
 
 	wchar_t Ch;
-	return HiTextHotkey(GetItemText(*Item), Ch)? Ch : 0;
+	return HiTextHotkey(get_item_text(*Item), Ch)? Ch : 0;
 }
 
 void VMenu::AssignHighlights(const menu_layout& Layout)
@@ -3109,7 +3116,7 @@ void VMenu::AssignHighlights(const menu_layout& Layout)
 			wchar_t Hotkey{};
 			size_t HotkeyVisualPos{};
 			// TODO: проверка на LIF_HIDDEN
-			if (HiTextHotkey(GetItemText(Item), Hotkey, &HotkeyVisualPos) && RegisterHotkey(Hotkey))
+			if (HiTextHotkey(get_item_text(Item), Hotkey, &HotkeyVisualPos) && RegisterHotkey(Hotkey))
 				SetItemHotkey(Item, Hotkey, HotkeyVisualPos);
 			else
 				ClearItemHotkey(Item);
@@ -3121,7 +3128,7 @@ void VMenu::AssignHighlights(const menu_layout& Layout)
 		auto& Item{ Items[I] };
 		if (Item.AutoHotkey) continue;
 
-		const auto ItemText = GetItemText(Item);
+		const auto ItemText = get_item_text(Item);
 		const auto VisibleTextSegment{ intersect(
 			segment{ 0, segment::length_tag{ static_cast<segment::domain_t>(ItemText.size()) } },
 			segment::ray(-Item.HorizontalPosition)) };
@@ -3153,7 +3160,7 @@ bool VMenu::CheckKeyHiOrAcc(DWORD Key, int Type, bool Translate, bool ChangePos,
 		if ((!Type && Item.AccelKey && Key == Item.AccelKey)
 			|| (Type
 				&& (Item.AutoHotkey || !CheckFlags(VMENU_SHOWAMPERSAND))
-				&& IsKeyHighlighted(GetItemText(Item), Key, Translate, Item.AutoHotkey)))
+				&& IsKeyHighlighted(get_item_text(Item), Key, Translate, Item.AutoHotkey)))
 		{
 			NewPos = static_cast<int>(std::ranges::distance(Items.data(), &Item));
 			if (ChangePos)
@@ -3176,9 +3183,7 @@ bool VMenu::CheckKeyHiOrAcc(DWORD Key, int Type, bool Translate, bool ChangePos,
 
 void VMenu::UpdateMaxLength(int const ItemLength)
 {
-	m_MaxItemLength = std::max(
-		m_MaxItemLength,
-		intersect(segment{ 0, segment::length_tag{ ItemLength } }, m_ItemTextSegment).length());
+	m_MaxItemLength = std::max(m_MaxItemLength, ItemLength);
 }
 
 void VMenu::SetMaxHeight(int NewMaxHeight)
@@ -3210,16 +3215,6 @@ void VMenu::SetTitle(string_view const Title)
 {
 	SetMenuFlags(VMENU_UPDATEREQUIRED);
 	strTitle = Title;
-}
-
-void VMenu::SetFixedColumns(std::vector<vmenu_fixed_column_t>&& FixedColumns, segment ItemTextSegment)
-{
-	m_FixedColumns = std::move(FixedColumns);
-	for (auto& column : m_FixedColumns)
-	{
-		column.CurrentWidth = std::clamp(column.CurrentWidth, int{}, column.TextSegment.length());
-	}
-	m_ItemTextSegment = ItemTextSegment;
 }
 
 void VMenu::ResizeConsole()
@@ -3457,9 +3452,20 @@ std::any* VMenu::GetComplexUserData(int Position)
 	return &Items[ItemPos].ComplexUserData;
 }
 
-void VMenu::RegisterExtendedDataProvider(extended_item_data_provider&& ExtendedDataProvider)
+void VMenu::RegisterFixedColumnsProvider(std::vector<fixed_column_t>&& FixedColumns, fixed_column_provider&& FixedColumnProvider)
 {
-	m_ExtendedDataProvider = std::move(ExtendedDataProvider);
+	m_FixedColumns = std::move(FixedColumns);
+	for (auto& column : m_FixedColumns)
+	{
+		column.CurrentWidth = std::clamp(column.CurrentWidth, int{}, column.MaxWidth);
+	}
+	m_FixedColumnProvider = std::move(FixedColumnProvider);
+}
+
+void VMenu::RegisterExtendedDataProvider(extended_item_data_getter&& ExtendedDataGetter, extended_item_data_setter&& ExtendedDataSetter)
+{
+	m_ExtendedDataGetter = std::move(ExtendedDataGetter);
+	m_ExtendedDataSetter = std::move(ExtendedDataSetter);
 }
 
 FarListItem *VMenu::MenuItem2FarList(const menu_item_ex *MItem, FarListItem *FItem)
@@ -3502,9 +3508,7 @@ int VMenu::FindItem(int StartIndex, string_view const Pattern, unsigned long lon
 	{
 		for (const auto I: std::views::iota(static_cast<size_t>(StartIndex), Items.size()))
 		{
-			// Consider: Strictly speaking, we should remove highlight
-			// only within m_ItemTextSegment leaving everything else intact.
-			const auto strTmpBuf = remove_highlight(Items[I].Name);
+			const auto strTmpBuf = remove_highlight(get_item_text(Items[I]));
 
 			if (Flags&LIFIND_EXACTMATCH)
 			{
@@ -3528,11 +3532,9 @@ void VMenu::SortItems(bool Reverse, int Offset)
 {
 	SortItems([](const menu_item_ex& a, const menu_item_ex& b, const SortItemParam& Param)
 	{
-		// Consider: Strictly speaking, we should remove highlight
-		// only within m_ItemTextSegment leaving everything else intact.
 		const auto
-			strName1 = remove_highlight(a.Name),
-			strName2 = remove_highlight(b.Name);
+			strName1 = remove_highlight(get_item_text(a)),
+			strName2 = remove_highlight(get_item_text(b));
 
 		const auto Less = string_sort::less(string_view(strName1).substr(Param.Offset), string_view(strName2).substr(Param.Offset));
 		return Param.Reverse? !Less : Less;
@@ -3551,6 +3553,7 @@ bool VMenu::Pack()
 		{
 			if (!(Items[FirstIndex].Flags & LIF_SEPARATOR) && !(Items[LastIndex].Flags & LIF_SEPARATOR))
 			{
+				// Not using get_item_text because... just in case
 				if (Items[FirstIndex].Name == Items[LastIndex].Name)
 				{
 					DeleteItem(static_cast<int>(LastIndex));
@@ -3623,13 +3626,8 @@ int VMenu::CalculateTextAreaWidth() const
 
 int VMenu::GetItemVisualLength(const menu_item_ex& Item) const
 {
-	const auto ItemCellText{ get_item_cell_text(Item.Name, m_ItemTextSegment) };
-	return static_cast<int>(CheckFlags(VMENU_SHOWAMPERSAND) ? visual_string_length(ItemCellText) : HiStrlen(ItemCellText));
-}
-
-string_view VMenu::GetItemText(const menu_item_ex& Item) const
-{
-	return get_item_cell_text(Item.Name, m_ItemTextSegment);
+	const auto ItemText{ get_item_text(Item) };
+	return static_cast<int>(CheckFlags(VMENU_SHOWAMPERSAND) ? visual_string_length(ItemText) : HiStrlen(ItemText));
 }
 
 #ifdef ENABLE_TESTS
@@ -3696,7 +3694,7 @@ TEST_CASE("find.nearest.selectable.item")
 
 TEST_CASE("markup.slice.boundaries")
 {
-	struct test_data
+	static const struct
 	{
 		struct test_segment: public segment
 		{
@@ -3707,9 +3705,8 @@ TEST_CASE("markup.slice.boundaries")
 		test_segment Segment;
 		std::initializer_list<test_segment> Slices;
 		std::initializer_list<int> Markup;
-	};
-
-	static const test_data TestDataPoints[] =
+	}
+	TestDataPoints[]
 	{
 		{ { 20, 50 }, { { 10, 15 } }, { 50 } },
 		{ { 20, 50 }, { { 10, 20 } }, { 50 } },
@@ -3729,7 +3726,7 @@ TEST_CASE("markup.slice.boundaries")
 		{ { 20, 70 }, { { 30, 40 }, { 40, 60 } }, { 30, 40, 40, 60, 70 } },
 		{ { 20, 70 }, { { 30, 50 }, { 40, 60 } }, { 30, 50, 50, 60, 70 } },
 		{ { 20, 70 }, { { 50, 60 }, { 30, 40 } }, { 50, 60, 70 } },
-		{ { 20, 50 }, { { 0, 0 } }, { 50 } },
+		{ { 20, 50 }, { {  0,  0 } }, { 50 } },
 	};
 
 	std::vector<int> Markup;
@@ -3746,20 +3743,19 @@ TEST_CASE("item.hpos.limits")
 {
 	using enum item_hscroll_policy;
 
-	struct test_data
+	static const struct
 	{
 		int ItemLength;
 		int TextAreaWidth;
 		// cling_to_edge, bound, bound_stick_to_left
 		std::initializer_list<std::pair<int, int>> Expected;
-	};
-
-	static const test_data TestDataPoints[] =
+	}
+	TestDataPoints[]
 	{
-		{ 1, 5, { { 0, 4 }, { 0, 4 }, { 0, 0 } } },
-		{ 3, 5, { { -2, 4 }, { 0, 2 }, { 0, 0 } } },
-		{ 5, 5, { { -4, 4 }, { 0, 0 }, { 0, 0 } } },
-		{ 7, 5, { { -6, 4 }, { -2, 0 }, { -2, 0 } } },
+		{  1, 5, { {  0, 4 }, {  0, 4 }, {  0, 0 } } },
+		{  3, 5, { { -2, 4 }, {  0, 2 }, {  0, 0 } } },
+		{  5, 5, { { -4, 4 }, {  0, 0 }, {  0, 0 } } },
+		{  7, 5, { { -6, 4 }, { -2, 0 }, { -2, 0 } } },
 		{ 10, 5, { { -9, 4 }, { -5, 0 }, { -5, 0 } } },
 	};
 
@@ -3781,14 +3777,13 @@ TEST_CASE("adjust.hpos.shift")
 	static constexpr int TextAreaWidth{ 10 };
 	static constexpr std::array Shifts{ -20, -19, -18, -17, -15, -14, -13, -11, -10, -9, -7, -5, -3, -1, 0, 1, 3, 5, 7, 9, 10, 11, 13, 14, 15, 17, 18, 19, 20 };
 
-	struct test_data
+	static constexpr struct
 	{
 		int Left;
 		int Right;
 		std::array<int, Shifts.size()> Expected;
-	};
-
-	static constexpr test_data TestDataPoints[] =
+	}
+	TestDataPoints[]
 	{
 		//   Shifts{ -20, -19, -18, -17, -15, -14, -13, -11, -10,  -9,  -7,  -5, -3, -1, 0, 1, 3,  5,  7,  9, 10, 11, 13, 14, 15, 17, 18, 19, 20 }
 		{ -10, -5, {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  0,  0, 0, 6, 8, 10, 12, 14, 15, 16, 18, 19, 19, 19, 19, 19, 19 } },

@@ -37,13 +37,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "common/compiler.hpp"
 
-#if !CHECK_COMPILER(CL, 19, 29, 30148)
-#error Visual C++ 2019 Update 16.11.24 (or higher) required
-#elif !CHECK_COMPILER(GCC, 12, 0, 0)
-#error GCC 12.0.0 (or higher) required
-#elif !CHECK_COMPILER(CLANG, 16, 0, 0)
-#error Clang 16.0.0 (or higher) required
-#endif
+REQUIRE_COMPILER(CL, 19, 42, 34444, " (Visual Studio 2022 Fall 2024 LTSC 17.12)");
+REQUIRE_COMPILER(GCC, 12, 0, 0);
+REQUIRE_COMPILER(CLANG, 16, 0, 0);
 
 #include "common/shims_pre.hpp"
 

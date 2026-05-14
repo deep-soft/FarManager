@@ -88,9 +88,7 @@ namespace far
 		return fmt::vformat(fmt::string_view(Format), fmt::make_format_args(Args...));
 	}
 
-	// Don't "auto" it yet, ICE in VS2019
-	template <typename... args>
-	auto vformat(string_view const Format, args const&... Args)
+	auto vformat(string_view const Format, auto const&... Args)
 	{
 		return fmt::vformat(fmt::wstring_view(Format), fmt::make_wformat_args(Args...));
 	}
@@ -143,9 +141,7 @@ namespace format_helpers
 	template<typename object_type>
 	struct format_no_spec
 	{
-		// Don't "auto" it yet, ICE in VS2019
-		template<typename FormatContext>
-		auto format(object_type const& Value, FormatContext& ctx) const
+		auto format(object_type const& Value, auto& ctx) const
 		{
 			return fmt::format_to(ctx.out(), L"{}"sv, fmt::formatter<object_type, wchar_t>::to_string(Value));
 		}

@@ -166,9 +166,7 @@ namespace string_utils::detail
 	}
 }
 
-// Don't "auto" it yet, ICE in VS2019
-template <typename... args>
-void append(std::wstring& Str, args const&... Args)
+void append(std::wstring& Str, auto const&... Args)
 {
 	string_utils::detail::append_impl(Str, { string_utils::detail::append_arg(Args)... });
 }
@@ -184,34 +182,6 @@ auto concat(auto const&... Args)
 }
 
 // uniform "contains"
-template<typename... traits>
-[[nodiscard]]
-bool contains(const std::basic_string<traits...>& Str, const auto& What) noexcept
-{
-	if constexpr (requires { Str.contains(What); })
-	{
-		return Str.contains(What);
-	}
-	else
-	{
-		return Str.find(What) != Str.npos;
-	}
-}
-
-template<typename... traits>
-[[nodiscard]]
-constexpr bool contains(const std::basic_string_view<traits...> Str, const auto& What) noexcept
-{
-	if constexpr (requires { Str.contains(What); })
-	{
-		return Str.contains(What);
-	}
-	else
-	{
-		return Str.find(What) != Str.npos;
-	}
-}
-
 namespace detail
 {
 	template<typename raw_string_type>
@@ -306,7 +276,7 @@ namespace inplace
 
 	inline void quote_space(std::wstring& Str)
 	{
-		if (contains(Str, L' '))
+		if (Str.contains(L' '))
 			quote(Str);
 	}
 

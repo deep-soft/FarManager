@@ -149,13 +149,11 @@ string ReplaceBrackets(string_view Str, string_view MatchData, std::span<RegExpM
 
 [[nodiscard]]
 string GroupDigits(unsigned long long Value);
-[[nodiscard]]
-string GroupDigitsInvariant(unsigned long long Value);
 
 [[nodiscard]]
 inline bool IsWordDiv(string_view const WordDiv, wchar_t const Chr)
 {
-	return !Chr || contains(WordDiv, Chr);
+	return !Chr || WordDiv.contains(Chr);
 }
 
 [[nodiscard]]

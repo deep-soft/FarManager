@@ -1086,19 +1086,14 @@ bool background_searcher::LookForString(string_view const FileName)
 		}
 		else
 		{
-			bool ErrorState = false;
 			for (auto& i: m_CodePages)
 			{
 				if (alreadyRead == readBlockSize)
 					i.BytesToSkip = 0;
 
-				ErrorState = false;
 				// Пропускаем ошибочные кодовые страницы
 				if (!i.MaxCharSize)
-				{
-					ErrorState = true;
 					continue;
-				}
 
 				// Если начало файла очищаем информацию о поиске по словам
 				if (m_SearchDlgParams.WholeWords.value() && alreadyRead == readBlockSize)
@@ -1114,19 +1109,13 @@ bool background_searcher::LookForString(string_view const FileName)
 					// то считаем, что нашли то, что нужно
 					if(m_SearchDlgParams.WholeWords.value() && i.WordFound)
 						return true;
-					else
-					{
-						ErrorState = true;
-						continue;
-					}
-					// Выходим, если прочитали меньше размера строки поиска и нет поиска по словам
-				}
 
-				if (readBlockSize < m_SearchDlgParams.SearchStr.size() && !(m_SearchDlgParams.WholeWords.value() && i.WordFound))
-				{
-					ErrorState = true;
 					continue;
 				}
+
+				// Выходим, если прочитали меньше размера строки поиска и нет поиска по словам
+				if (readBlockSize < m_SearchDlgParams.SearchStr.size() && !(m_SearchDlgParams.WholeWords.value() && i.WordFound))
+					continue;
 
 				// Количество символов в выходном буфере
 				size_t bufferCount;
@@ -1142,10 +1131,7 @@ bool background_searcher::LookForString(string_view const FileName)
 
 					// Выходим, если размер буфера меньше длины строки поиска
 					if (bufferCount < m_SearchDlgParams.SearchStr.size())
-					{
-						ErrorState = true;
 						continue;
-					}
 
 					// Копируем буфер чтения в буфер сравнения
 					if (i.CodePage== CP_UTF16BE)
@@ -1176,10 +1162,7 @@ bool background_searcher::LookForString(string_view const FileName)
 
 					// Выходим, если нам не удалось сконвертировать строку
 					if (!bufferCount)
-					{
-						ErrorState = true;
 						continue;
-					}
 
 					if (!IsLastBlock)
 						bufferCount -= Diagnostics.PartialOutput;
@@ -1200,10 +1183,7 @@ bool background_searcher::LookForString(string_view const FileName)
 
 						// Если размер буфера меньше размера слова, то выходим
 						if (readBlockSize < m_SearchDlgParams.SearchStr.size())
-						{
-							ErrorState = true;
 							continue;
-						}
 					}
 
 					// Устанавливаем буфер сравнения
@@ -1273,13 +1253,6 @@ bool background_searcher::LookForString(string_view const FileName)
 					Next(FoundOffset);
 				}
 
-				// Выходим, если мы вышли за пределы количества байт разрешённых для поиска
-				if (SearchInFirst && alreadyRead >= SearchInFirst)
-				{
-					ErrorState = true;
-					continue;
-				}
-
 				if (!IsLastBlock)
 				{
 					if (IsUtf16CodePage(i.CodePage))
@@ -1311,19 +1284,14 @@ bool background_searcher::LookForString(string_view const FileName)
 					}
 				}
 			}
-
-			if (ErrorState)
-				return false;
 		}
 
-		// Если мы потенциально прочитали не весь файл
-		if (!IsLastBlock)
-		{
-			// Отступаем назад на длину слова поиска минус 1
-			if (!File.SetPointer(-StepBackOffset, nullptr, FILE_CURRENT))
-				return false;
-			alreadyRead -= StepBackOffset;
-		}
+		if (IsLastBlock || (SearchInFirst && alreadyRead >= SearchInFirst))
+			return false;
+
+		if (!File.SetPointer(-StepBackOffset, nullptr, FILE_CURRENT))
+			return false;
+		alreadyRead -= StepBackOffset;
 	}
 
 	return false;

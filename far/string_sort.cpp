@@ -49,9 +49,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 static std::strong_ordering per_char_compare(const string_view Str1, const string_view Str2, const auto Comparer)
 {
-	// VS2019 bug - 'classic' CTAD breaks the compilation here
-	auto Iterator = std::pair(Str1.cbegin(), Str2.cbegin());
-	const auto End = std::pair(Str1.cend(), Str2.cend());
+	std::pair
+		Iterator{ Str1.cbegin(), Str2.cbegin() },
+		End{ Str1.cend(), Str2.cend() };
 
 	while (Iterator.first != End.first && Iterator.second != End.second)
 	{

@@ -152,13 +152,6 @@ struct item_color_indices;
 struct menu_layout;
 class vmenu_horizontal_tracker;
 
-struct vmenu_fixed_column_t
-{
-	segment TextSegment;
-	int CurrentWidth;
-	wchar_t Separator;
-};
-
 struct SortItemParam
 {
 	bool Reverse;
@@ -196,7 +189,6 @@ public:
 	void SetDialogStyle(bool Style) { ChangeFlags(VMENU_WARNDIALOG, Style); SetColors(nullptr); }
 	void SetUpdateRequired(bool SetUpdate) { ChangeFlags(VMENU_UPDATEREQUIRED, SetUpdate); }
 	void SetMenuFlags(DWORD Flags) { VMFlags.Set(Flags); }
-	void SetFixedColumns(std::vector<vmenu_fixed_column_t>&& FixedColumns, segment ItemTextSegment);
 	void ClearFlags(DWORD Flags) { VMFlags.Clear(Flags); }
 	bool CheckFlags(DWORD Flags) const { return VMFlags.Check(Flags); }
 	DWORD GetFlags() const { return VMFlags.Flags(); }
@@ -232,7 +224,7 @@ public:
 	std::any* GetComplexUserData(int Position = -1);
 	const std::any* GetComplexUserData(int Position = -1) const
 	{
-		return const_cast<VMenu*>(this)->GetComplexUserData();
+		return const_cast<VMenu*>(this)->GetComplexUserData(Position);
 	}
 	template<class T>
 	T* GetComplexUserDataPtr(int Position = -1)
@@ -246,9 +238,20 @@ public:
 	}
 	void SetComplexUserData(const std::any& Data, int Position = -1);
 
+	struct fixed_column_t
+	{
+		int MaxWidth;
+		int CurrentWidth;
+		wchar_t Separator;
+		short ColumnId;
+	};
+	using fixed_column_provider = std::function<string(const menu_item_ex&, const fixed_column_t&)>;
+	void RegisterFixedColumnsProvider(std::vector<fixed_column_t>&& FixedColumns, fixed_column_provider&& FixedColumnProvider);
+
 	using extended_item_data = std::vector<std::pair<FarMacroValue, FarMacroValue>>;
-	using extended_item_data_provider = std::function<extended_item_data(const menu_item_ex&)>;
-	void RegisterExtendedDataProvider(extended_item_data_provider&& ExtendedDataProvider);
+	using extended_item_data_getter = std::function<bool(const menu_item_ex&, extended_item_data&)>;
+	using extended_item_data_setter = std::function<bool(menu_item_ex&, const extended_item_data&)>;
+	void RegisterExtendedDataProvider(extended_item_data_getter&& ExtendedDataGetter, extended_item_data_setter&& ExtendedDataSetter);
 
 	int GetSelectPos() const { return SelectPos; }
 	int GetLastSelectPosResult() const { return SelectPosResult; }
@@ -322,8 +325,7 @@ private:
 		string_view BlankLine) const;
 
 	[[nodiscard]] int CalculateTextAreaWidth() const;
-	[[nodiscard]] int GetItemVisualLength(const menu_item_ex& Item) const; // Intersected with m_ItemTextSegment
-	[[nodiscard]] string_view GetItemText(const menu_item_ex& Item) const; // Intersected with m_ItemTextSegment
+	[[nodiscard]] int GetItemVisualLength(const menu_item_ex& Item) const;
 
 	int GetItemPosition(int Position) const;
 	bool CheckKeyHiOrAcc(DWORD Key, int Type, bool Translate, bool ChangePos, int& NewPos);
@@ -355,11 +357,12 @@ private:
 	int TopPos{};
 	int MaxHeight;
 	bool WasAutoHeight{};
-	int m_MaxItemLength{}; // Each Item.Name is intersected with m_ItemTextSegment
+	int m_MaxItemLength{};
 	std::unique_ptr<vmenu_horizontal_tracker> m_HorizontalTracker;
-	std::vector<vmenu_fixed_column_t> m_FixedColumns;
-	segment m_ItemTextSegment{ segment::ray() };
-	extended_item_data_provider m_ExtendedDataProvider;
+	std::vector<fixed_column_t> m_FixedColumns;
+	fixed_column_provider m_FixedColumnProvider;
+	extended_item_data_getter m_ExtendedDataGetter;
+	extended_item_data_setter m_ExtendedDataSetter;
 	window_ptr CurrentWindow;
 	bool PrevCursorVisible{};
 	size_t PrevCursorSize{};

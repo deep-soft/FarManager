@@ -541,6 +541,7 @@ enum enumFileFilterConfig
 	ID_FF_TIMEAFTEREDIT,
 	ID_FF_CURRENT,
 	ID_FF_BLANK,
+	ID_FF_UTC,
 
 	ID_FF_SEPARATOR3,
 	ID_FF_SEPARATOR4,
@@ -597,31 +598,33 @@ static void FilterDlgRelativeDateItemsUpdate(Dialog* Dlg, bool bClear)
 {
 	SCOPED_ACTION(Dialog::suppress_redraw)(Dlg);
 
-	if (Dlg->SendMessage(DM_GETCHECK, ID_FF_DATERELATIVE, nullptr))
+	const auto switch_items = [&](bool const ToRelative)
 	{
-		Dlg->SendMessage(DM_SHOWITEM, ID_FF_DATEBEFOREEDIT, nullptr);
-		Dlg->SendMessage(DM_SHOWITEM, ID_FF_DATEAFTEREDIT, nullptr);
-		Dlg->SendMessage(DM_SHOWITEM, ID_FF_CURRENT, nullptr);
-		Dlg->SendMessage(DM_SHOWITEM,ID_FF_DAYSBEFOREEDIT,ToPtr(1));
-		Dlg->SendMessage(DM_SHOWITEM,ID_FF_DAYSAFTEREDIT,ToPtr(1));
-	}
-	else
-	{
-		Dlg->SendMessage(DM_SHOWITEM, ID_FF_DAYSBEFOREEDIT, nullptr);
-		Dlg->SendMessage(DM_SHOWITEM, ID_FF_DAYSAFTEREDIT, nullptr);
-		Dlg->SendMessage(DM_SHOWITEM,ID_FF_DATEBEFOREEDIT,ToPtr(1));
-		Dlg->SendMessage(DM_SHOWITEM,ID_FF_DATEAFTEREDIT,ToPtr(1));
-		Dlg->SendMessage(DM_SHOWITEM,ID_FF_CURRENT,ToPtr(1));
-	}
+		Dlg->SendMessage(DM_SHOWITEM, ID_FF_DATEBEFOREEDIT, ToPtr(!ToRelative));
+		Dlg->SendMessage(DM_SHOWITEM, ID_FF_DAYSBEFOREEDIT, ToPtr(ToRelative));
+		Dlg->SendMessage(DM_SHOWITEM, ID_FF_DATEAFTEREDIT, ToPtr(!ToRelative));
+		Dlg->SendMessage(DM_SHOWITEM, ID_FF_DAYSAFTEREDIT, ToPtr(ToRelative));
+		Dlg->SendMessage(DM_SHOWITEM, ID_FF_CURRENT, ToPtr(!ToRelative));
+		Dlg->SendMessage(DM_SHOWITEM, ID_FF_UTC, ToPtr(!ToRelative));
+	};
+
+	switch_items(Dlg->SendMessage(DM_GETCHECK, ID_FF_DATERELATIVE, {}) == BSTATE_CHECKED);
 
 	if (bClear)
 	{
-		Dlg->SendMessage(DM_SETTEXTPTR,ID_FF_DATEAFTEREDIT,nullptr);
-		Dlg->SendMessage(DM_SETTEXTPTR,ID_FF_DAYSAFTEREDIT,nullptr);
-		Dlg->SendMessage(DM_SETTEXTPTR,ID_FF_TIMEAFTEREDIT,nullptr);
-		Dlg->SendMessage(DM_SETTEXTPTR,ID_FF_DATEBEFOREEDIT,nullptr);
-		Dlg->SendMessage(DM_SETTEXTPTR,ID_FF_TIMEBEFOREEDIT,nullptr);
-		Dlg->SendMessage(DM_SETTEXTPTR,ID_FF_DAYSBEFOREEDIT,nullptr);
+		static constexpr enumFileFilterConfig ItemsToClear[]
+		{
+			ID_FF_DATEBEFOREEDIT,
+			ID_FF_DAYSBEFOREEDIT,
+			ID_FF_TIMEBEFOREEDIT,
+			ID_FF_DATEAFTERSIGN,
+			ID_FF_DATEAFTEREDIT,
+			ID_FF_DAYSAFTEREDIT,
+			ID_FF_TIMEAFTEREDIT,
+		};
+
+		for (const auto& i: ItemsToClear)
+			Dlg->SendMessage(DM_SETTEXTPTR, i, {});
 	}
 }
 
@@ -658,7 +661,9 @@ static intptr_t FileFilterConfigDlgProc(Dialog* Dlg,intptr_t Msg,intptr_t Param1
 			else if (Param1==ID_FF_CURRENT || Param1==ID_FF_BLANK)
 			{
 				const auto& [Date, Time] = Param1==ID_FF_CURRENT?
-					time_point_to_string(os::chrono::nt_clock::now(), 16, 2) :
+					static_cast<FARCHECKEDSTATE>(Dlg->SendMessage(DM_GETCHECK, ID_FF_UTC, {})) == BSTATE_CHECKED?
+						time_point_to_utc_string(os::chrono::nt_clock::now(), 16, 2) :
+						time_point_to_localtime_string(os::chrono::nt_clock::now(), 16, 2) :
 					std::tuple<string, string>{};
 
 				SCOPED_ACTION(Dialog::suppress_redraw)(Dlg);
@@ -668,20 +673,53 @@ static intptr_t FileFilterConfigDlgProc(Dialog* Dlg,intptr_t Msg,intptr_t Param1
 				const auto da = relative? ID_FF_DAYSAFTEREDIT  : ID_FF_DATEAFTEREDIT;
 
 				Dlg->SendMessage(DM_SETTEXTPTR,da, UNSAFE_CSTR(Date));
-				Dlg->SendMessage(DM_EDITUNCHANGEDFLAG, da, nullptr);
 				Dlg->SendMessage(DM_SETTEXTPTR,ID_FF_TIMEAFTEREDIT, UNSAFE_CSTR(Time));
-				Dlg->SendMessage(DM_EDITUNCHANGEDFLAG, ID_FF_TIMEAFTEREDIT, nullptr);
 
 				Dlg->SendMessage(DM_SETTEXTPTR,db, UNSAFE_CSTR(Date));
-				Dlg->SendMessage(DM_EDITUNCHANGEDFLAG, db, nullptr);
 				Dlg->SendMessage(DM_SETTEXTPTR,ID_FF_TIMEBEFOREEDIT, UNSAFE_CSTR(Time));
-				Dlg->SendMessage(DM_EDITUNCHANGEDFLAG, ID_FF_TIMEBEFOREEDIT, nullptr);
 
 				Dlg->SendMessage(DM_SETFOCUS, db, nullptr);
 
 				COORD r{};
 				Dlg->SendMessage(DM_SETCURSORPOS,db,&r);
 				break;
+			}
+			else if (Param1 == ID_FF_UTC)
+			{
+				SCOPED_ACTION(Dialog::suppress_redraw)(Dlg);
+
+				if (Dlg->SendMessage(DM_GETCHECK, ID_FF_DATERELATIVE, nullptr) == BSTATE_CHECKED)
+					break; // Relative dates don't have UTC/local distinction
+
+				const auto ToUTC = static_cast<FARCHECKEDSTATE>(std::bit_cast<intptr_t>(Param2)) == BSTATE_CHECKED;
+
+				const auto Update = [&](int const DateId, int const TimeId)
+				{
+					string_view const
+						Date = std::bit_cast<const wchar_t*>(Dlg->SendMessage(DM_GETCONSTTEXTPTR, DateId, {})),
+						Time = std::bit_cast<const wchar_t*>(Dlg->SendMessage(DM_GETCONSTTEXTPTR, TimeId, {}));
+
+					const auto MergedTime = merge_time({}, parse_time(Date, Time, static_cast<int>(locale.date_format())));
+
+					os::chrono::time_point TimePoint;
+
+					ToUTC?
+						os::chrono::localtime_to_timepoint(os::chrono::local_time{ MergedTime }, TimePoint) :
+						os::chrono::utc_to_timepoint(os::chrono::utc_time{ MergedTime }, TimePoint);
+
+					if (TimePoint == os::chrono::time_point{})
+						return;
+
+					const auto [NewDate, NewTime] = ToUTC?
+						time_point_to_utc_string(TimePoint, 16, 2) :
+						time_point_to_localtime_string(TimePoint, 16, 2);
+
+					Dlg->SendMessage(DM_SETTEXTPTR, DateId, UNSAFE_CSTR(NewDate));
+					Dlg->SendMessage(DM_SETTEXTPTR, TimeId, UNSAFE_CSTR(NewTime));
+				};
+
+				Update(ID_FF_DATEBEFOREEDIT, ID_FF_TIMEBEFOREEDIT);
+				Update(ID_FF_DATEAFTEREDIT, ID_FF_TIMEAFTEREDIT);
 			}
 			else if (Param1==ID_FF_RESET)
 			{
@@ -889,7 +927,8 @@ bool FileFilterConfig(FileFilterParams& Filter, bool ColorConfig)
 		{ DI_FIXEDIT,     {{47, 8 }, {57, 8 }}, DIF_MASKEDIT, },
 		{ DI_FIXEDIT,     {{59, 8 }, {74, 8 }}, DIF_MASKEDIT, },
 		{ DI_BUTTON,      {{0,  6 }, {0,  6 }}, DIF_BTNNOCLOSE, msg(lng::MFileFilterCurrent), },
-		{ DI_BUTTON,      {{0,  6 }, {74, 6 }}, DIF_BTNNOCLOSE, msg(lng::MFileFilterBlank), },
+		{ DI_BUTTON,      {{0,  6 }, {66, 6 }}, DIF_BTNNOCLOSE, msg(lng::MFileFilterBlank), },
+		{ DI_CHECKBOX,    {{68, 6 }, {74, 6 }}, DIF_NONE, L"UTC"sv, },
 		{ DI_TEXT,        {{-1, 9 }, {0,  9 }}, DIF_SEPARATOR, },
 		{ DI_VTEXT,       {{22, 5 }, {22, 9 }}, DIF_SEPARATORUSER, },
 		{ DI_CHECKBOX,    {{5,  10}, {0,  10}}, DIF_AUTOMATION, msg(lng::MFileFilterAttr)},
@@ -1017,7 +1056,7 @@ bool FileFilterConfig(FileFilterParams& Filter, bool ColorConfig)
 	const auto ProcessPoint = [&](auto Point, auto DateId, auto TimeId)
 	{
 		FilterDlg[ID_FF_DATERELATIVE].Selected = BSTATE_UNCHECKED;
-		std::tie(FilterDlg[DateId].strData, FilterDlg[TimeId].strData) = time_point_to_string(Point, 16, 2);
+		std::tie(FilterDlg[DateId].strData, FilterDlg[TimeId].strData) = time_point_to_localtime_string(Point, 16, 2);
 	};
 
 	Dates.visit(overload
@@ -1129,6 +1168,17 @@ bool FileFilterConfig(FileFilterParams& Filter, bool ColorConfig)
 			FilterDlg[ID_FF_TIMEBEFOREEDIT].strData[8] = TimeSeparator;
 			FilterDlg[ID_FF_TIMEAFTEREDIT].strData[8] = TimeSeparator;
 
+			const auto ParseTimePoint = [&](int const DateId, int const TimeId)
+			{
+				const auto MergedTime = merge_time({}, parse_time(FilterDlg[DateId].strData, FilterDlg[TimeId].strData, static_cast<int>(DateFormat)));
+
+				os::chrono::time_point TimePoint;
+				static_cast<FARCHECKEDSTATE>(Dlg->SendMessage(DM_GETCHECK, ID_FF_UTC, {})) == BSTATE_CHECKED?
+					os::chrono::utc_to_timepoint(os::chrono::utc_time{ MergedTime }, TimePoint) :
+					os::chrono::localtime_to_timepoint(os::chrono::local_time{ MergedTime }, TimePoint);
+				return TimePoint;
+			};
+
 			const auto NewDates = IsRelative?
 				filter_dates
 				(
@@ -1137,8 +1187,8 @@ bool FileFilterConfig(FileFilterParams& Filter, bool ColorConfig)
 				) :
 				filter_dates
 				(
-					ParseTimePoint(FilterDlg[ID_FF_DATEAFTEREDIT].strData, FilterDlg[ID_FF_TIMEAFTEREDIT].strData, static_cast<int>(DateFormat)),
-					ParseTimePoint(FilterDlg[ID_FF_DATEBEFOREEDIT].strData, FilterDlg[ID_FF_TIMEBEFOREEDIT].strData, static_cast<int>(DateFormat))
+					ParseTimePoint(ID_FF_DATEAFTEREDIT, ID_FF_TIMEAFTEREDIT),
+					ParseTimePoint(ID_FF_DATEBEFOREEDIT, ID_FF_TIMEBEFOREEDIT)
 				);
 
 			Filter.SetDate(FilterDlg[ID_FF_MATCHDATE].Selected != 0, static_cast<enumFDateType>(FilterDlg[ID_FF_DATETYPE].ListPos), NewDates);

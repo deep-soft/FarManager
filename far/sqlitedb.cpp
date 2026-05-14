@@ -175,9 +175,43 @@ namespace
 		}
 	}
 
+	struct sqlite_version
+	{
+		constexpr explicit(false) sqlite_version(int const VersionNumber):
+			major(VersionNumber / 1000000),
+			minor(VersionNumber / 1000 % 1000),
+			patch(VersionNumber % 1000)
+		{
+		}
+
+		constexpr sqlite_version(unsigned const Major, unsigned const Minor, unsigned const Patch):
+			major(Major),
+			minor(Minor),
+			patch(Patch)
+		{
+		}
+
+		constexpr explicit(false) operator int() const
+		{
+			return major * 1000000 + minor * 1000 + patch;
+		}
+
+		unsigned major;
+		unsigned minor;
+		unsigned patch;
+	};
+
 	SCOPED_ACTION(components::component)([]
 	{
-		return components::info{ L"SQLite"sv, far::format(L"{} (API) / {} (library)"sv, WIDE_S(SQLITE_VERSION), encoding::utf8::get_chars(sqlite::sqlite3_libversion())) };
+		sqlite_version const
+			ApiVersion{ SQLITE_VERSION_NUMBER },
+			LibVersion{ sqlite::sqlite3_libversion_number() };
+
+		return components::info{ L"SQLite"sv, far::format(
+			L"{}.{}.{} (API) / {}.{}.{} (library)"sv,
+			ApiVersion.major, ApiVersion.minor, ApiVersion.patch,
+			LibVersion.major, LibVersion.minor, LibVersion.patch
+		)};
 	});
 }
 
@@ -201,8 +235,42 @@ bool far_sqlite_exception::is_constraint_unique() const
 	return m_ErrorCode == SQLITE_CONSTRAINT_UNIQUE;
 }
 
+static void check_version()
+{
+	sqlite_version constexpr
+		ApiVersion { SQLITE_VERSION_NUMBER },
+		MinVersion
+		{
+			3,
+			52,
+			0
+		};
+
+	static_assert(ApiVersion >= MinVersion);
+
+	sqlite_version const LibVersion{ sqlite::sqlite3_libversion_number() };
+
+	if (LibVersion < MinVersion)
+	{
+		throw far_known_exception(far::format(
+			L""
+			"SQLite library is too old\n\n"
+			"Loaded version:   {}.{}.{}\n"
+			"Minimum version:  {}.{}.{}\n"
+			"Expected version: {}.{}.{}"sv,
+			LibVersion.major, LibVersion.minor, LibVersion.patch,
+			MinVersion.major, MinVersion.minor, MinVersion.patch,
+			ApiVersion.major, ApiVersion.minor, ApiVersion.patch
+		));
+	}
+
+	LOGINFO(L"SQLite {}.{}.{} loaded"sv, LibVersion.major, LibVersion.minor, LibVersion.patch);
+}
+
 void SQLiteDb::library_load()
 {
+	check_version();
+
 	sqlite::sqlite3_config(SQLITE_CONFIG_LOG, sqlite_log, nullptr);
 
 	if (const auto Result = sqlite::sqlite3_initialize(); Result != SQLITE_OK)
@@ -430,7 +498,7 @@ public:
 	{
 		database_ptr Db;
 
-		int Retires = 0;
+		int Attempts = 0;
 
 		for (;;)
 		{
@@ -438,7 +506,7 @@ public:
 			if (Result == SQLITE_OK)
 				break;
 
-			if (Result == SQLITE_BUSY && BusyHandler.first && BusyHandler.first(BusyHandler.second, Retires++))
+			if (Result == SQLITE_BUSY && BusyHandler.first && BusyHandler.first(BusyHandler.second, Attempts++))
 				continue;
 
 			if (Db)
@@ -463,7 +531,7 @@ public:
 		if (WAL && !os::fs::can_create_file_in(path::parent_path(Path))) // can't open db -- copy to %TEMP%
 		{
 			const auto TmpDbPath = concat(MakeTemp(), str(GetCurrentProcessId()), L'-', PointToName(Path));
-			if (!os::fs::copy_file(Path, TmpDbPath, nullptr, nullptr, 0))
+			if (!os::fs::copy_file(Path, TmpDbPath, nullptr, 0))
 				throw_exception(Path, SQLITE_READONLY);
 
 			Deleter.add(TmpDbPath);
@@ -569,7 +637,7 @@ SQLiteDb::SQLiteStmt SQLiteDb::create_stmt(std::string_view const Stmt, bool Per
 	// that is the number of bytes in the input string *including* the nul-terminator.
 
 	// We use data() instead of operator[] here to bypass any bounds checks in debug mode
-	const auto IsNullTerminated = Stmt.data()[Stmt.size()] == L'\0';
+	const auto IsNullTerminated = Stmt.data()[Stmt.size()] == '\0';
 
 	invoke(m_Db.get(), [&]
 	{

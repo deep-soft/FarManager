@@ -72,7 +72,7 @@ namespace build
 			L""sv;
 
 		return far::format(L"{}, version {}.{}.{}{}"sv,
-			COMPILER_NAME,
+			WIDE_SV(COMPILER_NAME),
 			COMPILER_VERSION_MAJOR,
 			COMPILER_VERSION_MINOR,
 			COMPILER_VERSION_PATCH,
@@ -83,7 +83,7 @@ namespace build
 	string library()
 	{
 		return far::format(L"{}, version {}.{}.{}"sv,
-			STANDARD_LIBRARY_NAME,
+			WIDE_SV(STANDARD_LIBRARY_NAME),
 			STANDARD_LIBRARY_VERSION_MAJOR,
 			STANDARD_LIBRARY_VERSION_MINOR,
 			STANDARD_LIBRARY_VERSION_PATCH

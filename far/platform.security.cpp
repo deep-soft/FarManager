@@ -93,6 +93,12 @@ namespace os::security
 		return sid_ptr(AllocateAndInitializeSid(IdentifierAuthority, SubAuthorityCount, SubAuthority0, SubAuthority1, SubAuthority2, SubAuthority3, SubAuthority4, SubAuthority5, SubAuthority6, SubAuthority7, &Sid)? Sid : nullptr);
 	}
 
+	sid_ptr make_admin_sid()
+	{
+		SID_IDENTIFIER_AUTHORITY NtAuthority = SECURITY_NT_AUTHORITY;
+		return make_sid(&NtAuthority, 2, SECURITY_BUILTIN_DOMAIN_RID, DOMAIN_ALIAS_RID_ADMINS);
+	}
+
 	bool is_admin()
 	{
 		static const auto Result = []
@@ -104,13 +110,12 @@ namespace os::security
 				return Elevation.TokenIsElevated != 0;
 
 			// Old method
-			SID_IDENTIFIER_AUTHORITY NtAuthority = SECURITY_NT_AUTHORITY;
-			const auto AdministratorsGroup = make_sid(&NtAuthority, 2, SECURITY_BUILTIN_DOMAIN_RID, DOMAIN_ALIAS_RID_ADMINS);
-			if (!AdministratorsGroup)
+			const auto AdminSid = make_admin_sid();
+			if (!AdminSid)
 				return false;
 
 			BOOL IsMember;
-			return CheckTokenMembership(nullptr, AdministratorsGroup.get(), &IsMember) && IsMember;
+			return CheckTokenMembership(nullptr, AdminSid.get(), &IsMember) && IsMember;
 		}();
 
 		return Result;

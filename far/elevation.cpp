@@ -316,12 +316,6 @@ auto elevation::execute(lng Why, string_view const Object, auto Fallback, const 
 	}
 }
 
-static auto make_admin_sid()
-{
-	SID_IDENTIFIER_AUTHORITY NtAuthority = SECURITY_NT_AUTHORITY;
-	return os::security::make_sid(&NtAuthority, 2, SECURITY_BUILTIN_DOMAIN_RID, DOMAIN_ALIAS_RID_ADMINS);
-}
-
 static auto make_explicit_admin_access(os::security::sid_ptr const& AdminSid)
 {
 	EXPLICIT_ACCESS Access{};
@@ -349,7 +343,7 @@ static os::handle create_named_pipe(string_view const Name)
 	if (!InitializeSecurityDescriptor(&SD, SECURITY_DESCRIPTOR_REVISION))
 		return nullptr;
 
-	const auto AdminSid = make_admin_sid();
+	const auto AdminSid = os::security::make_admin_sid();
 	if (!AdminSid)
 		return nullptr;
 
@@ -378,7 +372,7 @@ static bool grant_duplicate_handle()
 		return false;
 	}
 
-	const auto AdminSid = make_admin_sid();
+	const auto AdminSid = os::security::make_admin_sid();
 	if (!AdminSid)
 		return false;
 
@@ -715,37 +709,43 @@ bool elevation::delete_file(const string& Object)
 		});
 }
 
-void elevation::progress_routine(LPPROGRESS_ROUTINE ProgressRoutine) const
+void elevation::progress_routine(os::fs::low::progress_routine const ProgressRoutine) const
 {
 	if (!ProgressRoutine)
 		return;
 
-	const auto TotalFileSize = Read<LARGE_INTEGER>();
-	const auto TotalBytesTransferred = Read<LARGE_INTEGER>();
-	const auto StreamSize = Read<LARGE_INTEGER>();
-	const auto StreamBytesTransferred = Read<LARGE_INTEGER>();
+	const auto TotalFileSize = Read<uint64_t>();
+	const auto TotalBytesTransferred = Read<uint64_t>();
+	const auto StreamSize = Read<uint64_t>();
+	const auto StreamBytesTransferred = Read<uint64_t>();
 	const auto StreamNumber = Read<DWORD>();
 	const auto CallbackReason = Read<DWORD>();
 	const auto Data = Read<intptr_t>();
-	// BUGBUG: SourceFile, DestinationFile ignored
 
-	const auto Result = ProgressRoutine(TotalFileSize, TotalBytesTransferred, StreamSize, StreamBytesTransferred, StreamNumber, CallbackReason, INVALID_HANDLE_VALUE, INVALID_HANDLE_VALUE, ToPtr(Data));
+	const auto Result = ProgressRoutine(
+		TotalFileSize,
+		TotalBytesTransferred,
+		StreamSize,
+		StreamBytesTransferred,
+		StreamNumber,
+		CallbackReason,
+		ToPtr(Data)
+	);
 
 	Write(CallbackMagic, Result);
 }
 
-bool elevation::copy_file(const string& From, const string& To, LPPROGRESS_ROUTINE ProgressRoutine, void* Data, BOOL* Cancel, DWORD Flags)
+bool elevation::copy_file(const string& From, const string& To, os::fs::low::progress_routine const ProgressRoutine, void* Data, DWORD Flags)
 {
 	return execute(lng::MElevationRequiredCopy, From,
 		false,
 		[&]
 		{
-			return os::fs::low::copy_file(From.c_str(), To.c_str(), ProgressRoutine, Data, Cancel, Flags);
+			return os::fs::low::copy_file(From.c_str(), To.c_str(), ProgressRoutine, Data, Flags);
 		},
 		[&]
 		{
 			Write(C_FUNCTION_COPYFILE, From, To, std::bit_cast<intptr_t>(ProgressRoutine), std::bit_cast<intptr_t>(Data), Flags);
-			// BUGBUG: Cancel ignored
 
 			while (Read<int>() == CallbackMagic)
 			{
@@ -1177,10 +1177,9 @@ private:
 		const auto UserCopyProgressRoutine = Read<intptr_t>();
 		const auto Data = Read<intptr_t>();
 		const auto Flags = Read<DWORD>();
-		// BUGBUG: Cancel ignored
 
 		callback_param Param{ this, ToPtr(Data) };
-		const auto Result = os::fs::low::copy_file(From.c_str(), To.c_str(), UserCopyProgressRoutine? CopyProgressRoutineWrapper : nullptr, &Param, nullptr, Flags);
+		const auto Result = os::fs::low::copy_file(From.c_str(), To.c_str(), UserCopyProgressRoutine? CopyProgressRoutineWrapper : nullptr, &Param, Flags);
 
 		Write(0 /* not CallbackMagic */, os::last_error(), Result);
 
@@ -1368,7 +1367,14 @@ private:
 		Write(os::last_error(), Result);
 	}
 
-	static DWORD CALLBACK CopyProgressRoutineWrapper(LARGE_INTEGER TotalFileSize, LARGE_INTEGER TotalBytesTransferred, LARGE_INTEGER StreamSize, LARGE_INTEGER StreamBytesTransferred, DWORD StreamNumber, DWORD CallbackReason, HANDLE SourceFile,HANDLE DestinationFile, LPVOID Data)
+	static DWORD CopyProgressRoutineWrapper(
+		uint64_t const TotalFileSize,
+		uint64_t const TotalBytesTransferred,
+		uint64_t const StreamSize,
+		uint64_t const StreamBytesTransferred,
+		DWORD StreamNumber,
+		DWORD CallbackReason,
+		void* Data)
 	{
 		const auto Param = static_cast<callback_param*>(Data);
 

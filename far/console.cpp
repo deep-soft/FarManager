@@ -43,15 +43,16 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "strmix.hpp"
 #include "exception.hpp"
 #include "palette.hpp"
+#include "pathmix.hpp"
 #include "encoding.hpp"
 #include "char_width.hpp"
 #include "log.hpp"
+#include "main.hpp"
 
 // Platform:
 #include "platform.version.hpp"
 
 // Common:
-#include "common.hpp"
 #include "common/2d/algorithm.hpp"
 #include "common/algorithm.hpp"
 #include "common/enum_substrings.hpp"
@@ -74,6 +75,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 static bool sWindowMode;
 static bool sEnableVirtualTerminal;
+
+static auto sDefaultVtColor = colors::default_color();
+static wchar_t sDefaultVtColorStr[256] = CSI "m";
 
 constexpr auto bad_char_replacement = L' ';
 
@@ -294,10 +298,11 @@ static short GetDelta(CONSOLE_SCREEN_BUFFER_INFO const& csbi)
 
 namespace console_detail
 {
-	// пишем/читаем порциями по 32 K, иначе проблемы.
+	// Old Windows versions apparently have some static buffers inside Read|WriteConsoleOutputW.
+	// Going over this limit can produce funny visual artefacts.
 	const unsigned int MAXSIZE = 32768;
 
-	class external_console
+	class console::external_console
 	{
 	public:
 		NONCOPYABLE(external_console);
@@ -511,9 +516,6 @@ protected:
 		stream_buffer_overrider m_In, m_Out, m_Err, m_Log;
 	};
 
-	static nifty_counter::buffer<external_console> Storage;
-	static auto& ExternalConsole = reinterpret_cast<external_console&>(Storage);
-
 	class hide_cursor
 	{
 	public:
@@ -724,12 +726,8 @@ protected:
 		m_StreamBuf(std::make_unique<consolebuf>(GetStdHandle(STD_OUTPUT_HANDLE))),
 		m_StreamBuffersOverrider(std::make_unique<stream_buffers_overrider>())
 	{
-		placement::construct(ExternalConsole);
-	}
-
-	console::~console()
-	{
-		placement::destruct(ExternalConsole);
+		if (get_run_mode() == run_mode::interactive)
+			m_ExternalConsole = std::make_unique<external_console>();
 	}
 
 	bool console::Allocate() const
@@ -867,7 +865,7 @@ protected:
 			if (WindowCoord.x > csbi.dwSize.X)
 			{
 				// windows sometimes uses existing colors to init right region of screen buffer
-				ClearExtraRegions(colors::default_color(), CR_RIGHT);
+				ClearExtraRegions(sDefaultVtColor, CR_RIGHT);
 			}
 		}
 
@@ -1412,11 +1410,11 @@ protected:
 
 	bool console::ReadOutput(matrix<FAR_CHAR_INFO>& Buffer, point const BufferCoord, rectangle const& ReadRegionRelative) const
 	{
-		if (ExternalConsole.Imports.pReadOutput)
+		if (m_ExternalConsole && m_ExternalConsole->Imports.pReadOutput)
 		{
 			const COORD BufferSize{ static_cast<short>(Buffer.width()), static_cast<short>(Buffer.height()) };
 			auto ReadRegion = make_rect(ReadRegionRelative);
-			return ExternalConsole.Imports.pReadOutput(Buffer.data(), BufferSize, make_coord(BufferCoord), &ReadRegion) != FALSE;
+			return m_ExternalConsole->Imports.pReadOutput(Buffer.data(), BufferSize, make_coord(BufferCoord), &ReadRegion) != FALSE;
 		}
 
 		const int Delta = sWindowMode? GetDelta() : 0;
@@ -1937,7 +1935,7 @@ protected:
 				// Words cannot describe how much I despise VT.
 
 				// Save cursor position
-				Str = ANSISYSSC L""sv;
+				Str = CSI "m" ANSISYSSC L""sv;
 
 				foreign_blocks_list ForeignBlocksList;
 
@@ -1983,7 +1981,7 @@ protected:
 				Str.clear();
 			}
 
-			return ::console.Write(CSI L"m"sv);
+			return ::console.Write(sDefaultVtColorStr);
 		}
 
 		class cursor_suppressor: hide_cursor
@@ -2128,11 +2126,14 @@ protected:
 
 		static bool SetTextAttributesVT(const FarColor& Attributes)
 		{
-			// For fallback
-			SetTextAttributesNT(Attributes);
-
 			string Str;
 			make_vt_attributes(Attributes, Str, {});
+
+			// Make sure it sticks like in NT mode
+			sDefaultVtColor = Attributes;
+			assert(Str.size() < std::size(sDefaultVtColorStr));
+			*std::ranges::copy(Str, sDefaultVtColorStr).out = L'\0';
+
 			return ::console.Write(Str);
 		}
 
@@ -2149,6 +2150,8 @@ protected:
 
 		static size_t GetPaletteVT_partial(std::array<COLORREF, 256>& Palette, size_t const Offset, size_t const Count)
 		{
+			assert(Offset + Count <= Palette.size());
+
 			try
 			{
 				const auto
@@ -2369,11 +2372,11 @@ protected:
 			return implementation::WriteOutputVT(Buffer, BufferCoord, WriteRegion);
 		}
 
-		if (ExternalConsole.Imports.pWriteOutput)
+		if (m_ExternalConsole && m_ExternalConsole->Imports.pWriteOutput)
 		{
 			const COORD BufferSize{ static_cast<short>(Buffer.width()), static_cast<short>(Buffer.height()) };
 			auto WriteRegion = make_rect(WriteRegionRelative);
-			return ExternalConsole.Imports.pWriteOutput(Buffer.data(), BufferSize, make_coord(BufferCoord), &WriteRegion) != FALSE;
+			return m_ExternalConsole->Imports.pWriteOutput(Buffer.data(), BufferSize, make_coord(BufferCoord), &WriteRegion) != FALSE;
 		}
 
 		const int Delta = sWindowMode? GetDelta() : 0;
@@ -2464,8 +2467,8 @@ protected:
 
 	bool console::Commit() const
 	{
-		if (ExternalConsole.Imports.pCommit)
-			return ExternalConsole.Imports.pCommit() != FALSE;
+		if (m_ExternalConsole && m_ExternalConsole->Imports.pCommit)
+			return m_ExternalConsole->Imports.pCommit() != FALSE;
 
 		// reserved
 		return true;
@@ -2473,8 +2476,8 @@ protected:
 
 	bool console::GetTextAttributes(FarColor& Attributes) const
 	{
-		if (ExternalConsole.Imports.pGetTextAttributes)
-			return ExternalConsole.Imports.pGetTextAttributes(&Attributes) != FALSE;
+		if (m_ExternalConsole && m_ExternalConsole->Imports.pGetTextAttributes)
+			return m_ExternalConsole->Imports.pGetTextAttributes(&Attributes) != FALSE;
 
 		CONSOLE_SCREEN_BUFFER_INFO ConsoleScreenBufferInfo;
 		if (!get_console_screen_buffer_info(GetOutputHandle(), &ConsoleScreenBufferInfo))
@@ -2486,8 +2489,8 @@ protected:
 
 	bool console::SetTextAttributes(const FarColor& Attributes) const
 	{
-		if (ExternalConsole.Imports.pSetTextAttributes)
-			return ExternalConsole.Imports.pSetTextAttributes(&Attributes) != FALSE;
+		if (m_ExternalConsole && m_ExternalConsole->Imports.pSetTextAttributes)
+			return m_ExternalConsole->Imports.pSetTextAttributes(&Attributes) != FALSE;
 
 		return (IsVtActive()? implementation::SetTextAttributesVT : implementation::SetTextAttributesNT)(Attributes);
 	}
@@ -2755,8 +2758,8 @@ protected:
 
 	bool console::ClearExtraRegions(const FarColor& Color, int Mode) const
 	{
-		if (ExternalConsole.Imports.pClearExtraRegions)
-			return ExternalConsole.Imports.pClearExtraRegions(&Color, Mode) != FALSE;
+		if (m_ExternalConsole && m_ExternalConsole->Imports.pClearExtraRegions)
+			return m_ExternalConsole->Imports.pClearExtraRegions(&Color, Mode) != FALSE;
 
 		CONSOLE_SCREEN_BUFFER_INFO csbi;
 		if (!get_console_screen_buffer_info(GetOutputHandle(), &csbi))
@@ -3061,7 +3064,7 @@ protected:
 
 	bool console::ExternalRendererLoaded() const
 	{
-		return ExternalConsole.Imports.pWriteOutput.operator bool();
+		return m_ExternalConsole && m_ExternalConsole->Imports.pWriteOutput;
 	}
 
 	size_t console::GetWidthPreciseExpensive(string_view const Str)
@@ -3258,6 +3261,43 @@ protected:
 		send_vt_command(far::format(OSC("9001;CmdNotFound;{}"), Command));
 	}
 
+	static auto osc7(string_view const CurDir)
+	{
+		// OSC 7 is supposed to contain a proper file URI with forward slashes, percent-encoded reserved characters etc.,
+		// but it seems that implementations accept paths as is as long as they are properly prefixed.
+		// Good enough for now.
+
+		// Skip parsing if it's a boring local path, which is the vast majority of cases.
+		if (path::is_separator(CurDir.front()))
+		{
+			switch (const auto Type = ParsePath(CurDir))
+			{
+			case root_type::remote:
+			case root_type::unc_remote:
+				return far::format(OSC("7;file://"), CurDir.substr(Type == root_type::remote? L"\\\\"sv.size() : L"\\\\?\\UNC\\"sv.size()));
+
+			case root_type::win32nt_drive_letter:
+				return far::format(OSC("7;file:///"), CurDir.substr(L"\\\\?\\"sv.size()));
+
+			default:
+				// No point in converting other funny paths.
+				// They likely won't be recognized by the terminal anyway,
+				// so just send them as local and hope for the best
+				break;
+			}
+		}
+
+		return far::format(OSC("7;file:///{}"), CurDir);
+	}
+
+	void console::propagate_cd(string_view const CurDir) const
+	{
+		send_vt_command(osc7(CurDir));
+
+		// Alternative method, should work better with Windows paths
+		send_vt_command(far::format(OSC(L"9;9;{}"), CurDir));
+	}
+
 	std::optional<bool> console::is_grapheme_clusters_on() const
 	{
 		const auto Response = decrqm(L"2027"sv);
@@ -3309,39 +3349,97 @@ NIFTY_DEFINE(console_detail::console, console);
 
 TEST_CASE("console.vt_color")
 {
-	const auto I = FCF_INDEXMASK;
+	constexpr auto idx = [](COLORREF const Color) { return colors::single_color{Color, true}; };
+	constexpr auto rgb = [](COLORREF const Color) { return colors::single_color{Color, false}; };
 
-	static const struct
+	static constexpr struct
 	{
-		FarColor Color;
-		string_view Fg, Bg;
+		colors::single_color Color;
+		string_view Strings[3];
 	}
 	Tests[]
 	{
-		{ { I, { 0x0      }, { 0x0      } }, L"30"sv,               L"40"sv,               },
-		{ { I, { 0x1      }, { 0x1      } }, L"34"sv,               L"44"sv,               },
-		{ { I, { 0x7      }, { 0x7      } }, L"37"sv,               L"47"sv,               },
-		{ { I, { 0x8      }, { 0x8      } }, L"90"sv,               L"100"sv,              },
-		{ { I, { 0x9      }, { 0x9      } }, L"94"sv,               L"104"sv,              },
-		{ { I, { 0xF      }, { 0xF      } }, L"97"sv,               L"107"sv,              },
-		{ { I, { 0x10     }, { 0x10     } }, L"38;5;16"sv,          L"48;5;16"sv,          },
-		{ { I, { 0xC0     }, { 0xC0     } }, L"38;5;192"sv,         L"48;5;192"sv,         },
-		{ { I, { 0xFF     }, { 0xFF     } }, L"38;5;255"sv,         L"48;5;255"sv,         },
-		{ { 0, { 0x000000 }, { 0x000000 } }, L"38;2;0;0;0"sv,       L"48;2;0;0;0"sv,       },
-		{ { 0, { 0x123456 }, { 0x654321 } }, L"38;2;86;52;18"sv,    L"48;2;33;67;101"sv,   },
-		{ { 0, { 0x00D5FF }, { 0xBB5B00 } }, L"38;2;255;213;0"sv,   L"48;2;0;91;187"sv,    },
-		{ { 0, { 0xABCDEF }, { 0xFEDCBA } }, L"38;2;239;205;171"sv, L"48;2;186;220;254"sv, },
-		{ { 0, { 0xFFFFFF }, { 0xFFFFFF } }, L"38;2;255;255;255"sv, L"48;2;255;255;255"sv, },
+		{ idx(0x0),      { L"30"sv,               L"40"sv,               L"58:5:0"sv            }, },
+		{ idx(0x1),      { L"34"sv,               L"44"sv,               L"58:5:4"sv            }, },
+		{ idx(0x2),      { L"32"sv,               L"42"sv,               L"58:5:2"sv            }, },
+		{ idx(0x3),      { L"36"sv,               L"46"sv,               L"58:5:6"sv            }, },
+		{ idx(0x4),      { L"31"sv,               L"41"sv,               L"58:5:1"sv            }, },
+		{ idx(0x5),      { L"35"sv,               L"45"sv,               L"58:5:5"sv            }, },
+		{ idx(0x6),      { L"33"sv,               L"43"sv,               L"58:5:3"sv            }, },
+		{ idx(0x7),      { L"37"sv,               L"47"sv,               L"58:5:7"sv            }, },
+		{ idx(0x8),      { L"90"sv,               L"100"sv,              L"58:5:8"sv            }, },
+		{ idx(0x9),      { L"94"sv,               L"104"sv,              L"58:5:12"sv           }, },
+		{ idx(0xA),      { L"92"sv,               L"102"sv,              L"58:5:10"sv           }, },
+		{ idx(0xB),      { L"96"sv,               L"106"sv,              L"58:5:14"sv           }, },
+		{ idx(0xC),      { L"91"sv,               L"101"sv,              L"58:5:9"sv            }, },
+		{ idx(0xD),      { L"95"sv,               L"105"sv,              L"58:5:13"sv           }, },
+		{ idx(0xE),      { L"93"sv,               L"103"sv,              L"58:5:11"sv           }, },
+		{ idx(0xF),      { L"97"sv,               L"107"sv,              L"58:5:15"sv           }, },
+		{ idx(0x10),     { L"38;5;16"sv,          L"48;5;16"sv,          L"58:5:16"sv           }, },
+		{ idx(0xC0),     { L"38;5;192"sv,         L"48;5;192"sv,         L"58:5:192"sv          }, },
+		{ idx(0xFF),     { L"38;5;255"sv,         L"48;5;255"sv,         L"58:5:255"sv          }, },
+		{ rgb(0x000000), { L"38;2;0;0;0"sv,       L"48;2;0;0;0"sv,       L"58:2::0:0:0"sv       }, },
+		{ rgb(0x010203), { L"38;2;3;2;1"sv,       L"48;2;3;2;1"sv,       L"58:2::3:2:1"sv       }, },
+		{ rgb(0x123456), { L"38;2;86;52;18"sv,    L"48;2;86;52;18"sv,    L"58:2::86:52:18"sv    }, },
+		{ rgb(0x654321), { L"38;2;33;67;101"sv,   L"48;2;33;67;101"sv,   L"58:2::33:67:101"sv   }, },
+		{ rgb(0x00D5FF), { L"38;2;255;213;0"sv,   L"48;2;255;213;0"sv,   L"58:2::255:213:0"sv   }, },
+		{ rgb(0xBB5B00), { L"38;2;0;91;187"sv,    L"48;2;0;91;187"sv,    L"58:2::0:91:187"sv    }, },
+		{ rgb(0xABCDEF), { L"38;2;239;205;171"sv, L"48;2;239;205;171"sv, L"58:2::239:205:171"sv }, },
+		{ rgb(0xFEDCBA), { L"38;2;186;220;254"sv, L"48;2;186;220;254"sv, L"58:2::186:220:254"sv }, },
+		{ rgb(0xFFFFFF), { L"38;2;255;255;255"sv, L"48;2;255;255;255"sv, L"58:2::255:255:255"sv }, },
 	};
 
 	for (const auto& i: Tests)
 	{
-		string Str[2];
-		console_detail::make_vt_color(colors::single_color::foreground(i.Color), console_detail::colors_mapping_type::foreground, Str[0]);
-		console_detail::make_vt_color(colors::single_color::background(i.Color), console_detail::colors_mapping_type::background, Str[1]);
-		REQUIRE(Str[0] == i.Fg);
-		REQUIRE(Str[1] == i.Bg);
+		for (const auto& Str: i.Strings)
+		{
+			string Result;
+			console_detail::make_vt_color(i.Color, static_cast<console_detail::colors_mapping_type>(&Str - i.Strings), Result);
+			REQUIRE(Str == Result);
+		}
 	}
+}
+
+TEST_CASE("console.vt_style")
+{
+	static constexpr struct tests
+	{
+		FARCOLORFLAGS Style;
+		string_view On, Off;
+	}
+	Tests[]
+	{
+		{ FCF_FG_BOLD,      L"1"sv,  L"22"sv },
+		{ FCF_FG_ITALIC,    L"3"sv,  L"23"sv },
+		{ FCF_FG_OVERLINE,  L"53"sv, L"55"sv },
+		{ FCF_FG_STRIKEOUT, L"9"sv,  L"29"sv },
+		{ FCF_FG_FAINT,     L"2"sv,  L"22"sv },
+		{ FCF_FG_BLINK,     L"5"sv,  L"25"sv },
+		{ FCF_INVERSE,      L"7"sv,  L"27"sv },
+		{ FCF_FG_INVISIBLE, L"8"sv,  L"28"sv },
+	};
+
+	for (const auto& i: Tests)
+	{
+		string On, Off;
+		console_detail::make_vt_style(i.Style, On, 0);
+		console_detail::make_vt_style(0, Off, i.Style);
+		REQUIRE(i.On == On);
+		REQUIRE(i.Off == Off);
+	}
+
+	const auto AllStyles = static_cast<FARCOLORFLAGS>(-1);
+
+	const auto
+		AllOn  = join(L";"sv, Tests | std::views::transform(&tests::On)),
+		AllOff = join(L";"sv, Tests | std::views::transform(&tests::Off));
+
+	string On, Off;
+	console_detail::make_vt_style(AllStyles, On, 0);
+	console_detail::make_vt_style(0, Off, AllStyles);
+
+	REQUIRE(AllOn == On);
+	REQUIRE(AllOff == Off);
 }
 
 TEST_CASE("console.vt_sequence")
