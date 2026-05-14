@@ -1,4 +1,4 @@
-# 2026-03-01 # 2026-02-01 # 2025-07-02 07:30 # 2024-09-02 00:40
+# 2026-05-14 # 2026-03-01 # 2026-02-01 # 2025-07-02 07:30 # 2024-09-02 00:40
 # far.sln, source archive # copy files from extra folder, soft_fast_search patch
 name: Build release VC
 
@@ -46,10 +46,10 @@ jobs:
     if: ${{ inputs.code-style-checks }}
     steps:
       - name: Checkout source
-        uses: deep-soft/checkout@v4
+        uses: deep-soft/checkout@v6
 
       - name: Setup Python
-        uses: deep-soft/setup-python@v5
+        uses: deep-soft/setup-python@v6
 
       - name: Run checks
         working-directory: far
@@ -61,9 +61,9 @@ jobs:
     if: ${{ inputs.hlf-checks }}
     steps:
       - name: Checkout source
-        uses: deep-soft/checkout@v4
+        uses: deep-soft/checkout@v6
 
-      - uses: deep-soft/setup-dotnet@v4
+      - uses: deep-soft/setup-dotnet@v5
         with:
           dotnet-version: '6.0'
 
@@ -110,7 +110,7 @@ jobs:
           echo " if: always() && inputs.extra_plugins_profile && matrix.platform_sln == 'x64'"
 
       - name: Checkout source
-        uses: deep-soft/checkout@v4
+        uses: deep-soft/checkout@v6
 
       - name: soft_fast_search_patch
         if: ${{ inputs.soft_fast_search_patch }}
@@ -145,7 +145,7 @@ jobs:
           languages: cpp
 
       - name: Set MSVC environment
-        uses: deep-soft/msvc-dev-cmd@v1
+        uses: deep-soft/msvc-dev-cmd@v2
         with:
           arch: ${{ matrix.arch }}
 
@@ -194,7 +194,7 @@ jobs:
           echo " if: always() && inputs.extra_plugins_profile && matrix.platform_sln == 'x64'"
 
       - name: Checkout source
-        uses: deep-soft/checkout@v4
+        uses: deep-soft/checkout@v6
 
       - name: soft_fast_search_patch
         if: ${{ inputs.soft_fast_search_patch }}
@@ -248,7 +248,7 @@ jobs:
           languages: cpp
 
       - name: Set MSVC environment
-        uses: deep-soft/msvc-dev-cmd@v1
+        uses: deep-soft/msvc-dev-cmd@v2
         with:
           arch: ${{ matrix.arch }}
 
@@ -388,7 +388,7 @@ jobs:
       - name: Upload zip
         if: matrix.build_config  == 'Release'
         continue-on-error: true
-        uses: deep-soft/upload-artifact@v4
+        uses: deep-soft/upload-artifact@v7
         with:
           name: ${{ env.PROG_NAME }}.${{ matrix.platform_name }}.${{ env.VERSION }}.zip
           #path: _build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}/${{ env.PROG_NAME }}.${{ matrix.build_config }}.${{ matrix.platform_sln }}.${{ env.VERSION }}.zip
@@ -397,7 +397,7 @@ jobs:
       - name: Upload folder
         if: matrix.build_config  == 'Debug'
         continue-on-error: true
-        uses: deep-soft/upload-artifact@v4
+        uses: deep-soft/upload-artifact@v7
         with:
           name: ${{ env.PROG_NAME }}.${{ matrix.build_config }}.${{ matrix.platform_name }}
           path: _build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}
@@ -413,7 +413,7 @@ jobs:
       - name: Publish
         if: matrix.build_config  == 'Release'
         continue-on-error: true
-        uses: deep-soft/action-gh-release@v2.1
+        uses: deep-soft/action-gh-release@v3
         with:
           tag_name: ${{ env.TAG_NAME }}-${{ env.VERSION }}
 #          files: |
@@ -433,7 +433,7 @@ jobs:
       - name: Publish latest Release
         if: matrix.build_config  == 'Release'
         continue-on-error: false
-        uses: deep-soft/action-gh-release@v2.1
+        uses: deep-soft/action-gh-release@v3
         with:
           draft: false
           tag_name: ${{ env.PROG_NAME }}-latest
@@ -487,7 +487,7 @@ jobs:
       - name: extra - Publish
         if: always() && inputs.extra_plugins_profile && matrix.platform_sln == 'x64'
         continue-on-error: true
-        uses: deep-soft/action-gh-release@v2.1
+        uses: deep-soft/action-gh-release@v3
         with:
           tag_name: ${{ env.TAG_NAME }}-${{ env.VERSION }}
           files: |
@@ -504,7 +504,7 @@ jobs:
       - name: extra - Publish latest Release
         if: always() && inputs.extra_plugins_profile && matrix.platform_sln == 'x64'
         continue-on-error: false
-        uses: deep-soft/action-gh-release@v2.1
+        uses: deep-soft/action-gh-release@v3
         with:
           draft: false
           tag_name: ${{ env.PROG_NAME }}-latest
