@@ -57,7 +57,7 @@ jobs:
 
 #------------------------------------------------------------------------------
   hlf-checks:
-    runs-on: windows-latest
+    runs-on: windows-2025-vs2026
     if: ${{ inputs.hlf-checks }}
     steps:
       - name: Checkout source
@@ -80,7 +80,7 @@ jobs:
 
 #------------------------------------------------------------------------------
   msbuild-debug-codeql:
-    runs-on: windows-latest
+    runs-on: windows-2025-vs2026
     if: ${{ inputs.msbuild-debug-codeql }}
     strategy:
       fail-fast: false
@@ -165,7 +165,7 @@ jobs:
 
 #------------------------------------------------------------------------------
   msbuild:
-    runs-on: windows-latest
+    runs-on: windows-2025-vs2026
     strategy:
       fail-fast: false
       matrix:
