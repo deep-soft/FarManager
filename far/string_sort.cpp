@@ -125,7 +125,10 @@ struct ordinal_comparer_icase
 		if (Char1 == Char2)
 			return std::strong_ordering::equal;
 
-		return ordinal_comparer{}(upper(Char1), upper(Char2));
+		wchar_t Buffer[]{ Char1, Char2 };
+		inplace::upper(Buffer);
+
+		return ordinal_comparer{}(Buffer[0], Buffer[1]);
 	}
 
 	static constexpr bool ignore_case = true;
@@ -152,10 +155,7 @@ static auto compare_ordinal_t(const string_view Str1, const string_view Str2)
 			return windows_to_std(Result);
 	}
 
-	return per_char_compare(Str1, Str2, [](string_view::const_iterator& It1, string_view::const_iterator, string_view::const_iterator& It2, string_view::const_iterator)
-	{
-		return Comparer{}(*It1++, *It2++);
-	});
+	return std::lexicographical_compare_three_way(ALL_CONST_RANGE(Str1), ALL_CONST_RANGE(Str2), Comparer{});
 }
 
 static auto compare_ordinal(const string_view Str1, const string_view Str2)
@@ -265,24 +265,21 @@ struct invariant_comparer_icase
 		if (Char1 == Char2)
 			return std::strong_ordering::equal;
 
-		return invariant_comparer{}(upper(Char1), upper(Char2));
+		wchar_t Buffer[]{ Char1, Char2 };
+		inplace::upper(Buffer);
+
+		return invariant_comparer{}(Buffer[0], Buffer[1]);
 	}
 };
 
 static auto compare_invariant(const string_view Str1, const string_view Str2)
 {
-	return per_char_compare(Str1, Str2, [](string_view::const_iterator& It1, string_view::const_iterator, string_view::const_iterator& It2, string_view::const_iterator)
-	{
-		return invariant_comparer{}(*It1++, *It2++);
-	});
+	return std::lexicographical_compare_three_way(ALL_CONST_RANGE(Str1), ALL_CONST_RANGE(Str2), invariant_comparer{});
 }
 
 static auto compare_invariant_icase(const string_view Str1, const string_view Str2)
 {
-	return per_char_compare(Str1, Str2, [](string_view::const_iterator& It1, string_view::const_iterator, string_view::const_iterator& It2, string_view::const_iterator)
-	{
-		return invariant_comparer{}(upper(*It1++), upper(*It2++));
-	});
+	return std::lexicographical_compare_three_way(ALL_CONST_RANGE(Str1), ALL_CONST_RANGE(Str2), invariant_comparer_icase{});
 }
 
 static auto compare_invariant_numeric(const string_view Str1, const string_view Str2)
@@ -383,19 +380,19 @@ void string_sort::adjust_comparer(size_t const Collation, bool const CaseSensiti
 	DefaultComparer = Comparers[CollationIndex][DigitsAsNumbers][CaseSensitive];
 }
 
-bool string_sort::less_icase_t::operator()(string_view Str1, string_view Str2) const
+bool string_sort::ordinal::less_icase_t::operator()(string_view Str1, string_view Str2) const
 {
 	return std::is_lt(compare_ordinal_icase(Str1, Str2));
 }
 
-std::strong_ordering string_sort::keyhole::compare_ordinal_icase(string_view const Str1, string_view const Str2)
+std::strong_ordering string_sort::ordinal::compare_icase(string_view const Str1, string_view const Str2)
 {
-	return ::compare_ordinal_icase(Str1, Str2);
+	return compare_ordinal_icase(Str1, Str2);
 }
 
-std::strong_ordering string_sort::keyhole::compare_ordinal_numeric(string_view const Str1, string_view const Str2)
+std::strong_ordering string_sort::ordinal::compare_numeric(string_view const Str1, string_view const Str2)
 {
-	return ::compare_ordinal_numeric(Str1, Str2);
+	return compare_ordinal_numeric(Str1, Str2);
 }
 
 #ifdef ENABLE_TESTS
@@ -450,9 +447,13 @@ TEST_CASE("strings.sorting")
 
 	for (const auto& i: Tests)
 	{
+		REQUIRE(compare_ordinal_numeric(i.Str1, i.Str2) == i.CaseResult);
+		REQUIRE(compare_ordinal_numeric_icase(i.Str1, i.Str2) == i.IcaseResult);
 		REQUIRE(compare_invariant_numeric(i.Str1, i.Str2) == i.CaseResult);
 		REQUIRE(compare_invariant_numeric_icase(i.Str1, i.Str2) == i.IcaseResult);
 
+		REQUIRE(invert(compare_ordinal_numeric(i.Str2, i.Str1)) == i.CaseResult);
+		REQUIRE(invert(compare_ordinal_numeric_icase(i.Str2, i.Str1)) == i.IcaseResult);
 		REQUIRE(invert(compare_invariant_numeric(i.Str2, i.Str1)) == i.CaseResult);
 		REQUIRE(invert(compare_invariant_numeric_icase(i.Str2, i.Str1)) == i.IcaseResult);
 	}

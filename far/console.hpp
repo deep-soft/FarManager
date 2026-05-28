@@ -244,6 +244,10 @@ namespace console_detail
 
 		std::optional<KEY_EVENT_RECORD> queued() const;
 
+		void load_external() const;
+
+		auto get_external(auto Accessor) const;
+
 		HANDLE m_OriginalInputHandle;
 		HANDLE m_ActiveConsoleScreenBuffer{};
 		mutable string m_Title;
@@ -259,7 +263,7 @@ namespace console_detail
 		KEY_EVENT_RECORD mutable m_QueuedKeys{};
 
 		class external_console;
-		std::unique_ptr<external_console> m_ExternalConsole;
+		mutable std::optional<std::unique_ptr<external_console>> m_ExternalConsole;
 	};
 }
 

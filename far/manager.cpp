@@ -399,7 +399,9 @@ int Manager::GetModalExitCode() const
 */
 int Manager::CountWindowsWithName(string_view const Name, bool IgnoreCase) const
 {
-	const auto AreEqual = IgnoreCase? equal_icase : equal;
+	using comparer = bool(*)(string_view, string_view);
+	comparer const Equal = equal, EqualIcase = equal_icase;
+	const auto AreEqual = IgnoreCase? EqualIcase : Equal;
 
 	string strType, strCurName;
 

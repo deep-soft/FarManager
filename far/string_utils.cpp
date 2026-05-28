@@ -39,6 +39,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // Internal:
 #include "exception.hpp"
 #include "interf.hpp"
+#include "string_sort.hpp"
 
 // Platform:
 
@@ -114,16 +115,6 @@ void inplace::lower(wchar_t& Char)
 	lower({ &Char, 1 });
 }
 
-void inplace::upper(wchar_t* Str)
-{
-	upper({ Str, std::wcslen(Str) });
-}
-
-void inplace::lower(wchar_t* Str)
-{
-	lower({ Str, std::wcslen(Str) });
-}
-
 void inplace::upper(string& Str, size_t Pos, size_t Count)
 {
 	upper({ Str.data() + Pos, Count == string::npos? Str.size() - Pos : Count });
@@ -187,9 +178,9 @@ size_t string_comparer_icase::operator()(string_view const Str) const
 	return make_hash(upper(Str));
 }
 
-bool string_comparer_icase::operator()(wchar_t Chr1, wchar_t Chr2) const
+bool string_comparer_icase::operator()(wchar_t const Chr1, wchar_t const Chr2) const
 {
-	return Chr1 == Chr2 || upper(Chr1) == upper(Chr2);
+	return equal_icase(Chr1, Chr2);
 }
 
 bool string_comparer_icase::operator()(const string_view Str1, const string_view Str2) const
@@ -197,9 +188,19 @@ bool string_comparer_icase::operator()(const string_view Str1, const string_view
 	return equal_icase(Str1, Str2);
 }
 
+static bool equal_icase_impl(string_view const Str1, string_view const Str2)
+{
+	return std::is_eq(string_sort::ordinal::compare_icase(Str1, Str2));
+}
+
+bool equal_icase(wchar_t const Char1, wchar_t const Char2)
+{
+	return Char1 == Char2 || equal_icase_impl({ &Char1, 1 }, { &Char2, 1 });
+}
+
 bool equal_icase(const string_view Str1, const string_view Str2)
 {
-	return Str1 == Str2 || std::ranges::equal(Str1, Str2, string_comparer_icase{});
+	return Str1 == Str2 || equal_icase_impl(Str1, Str2);
 }
 
 bool starts_with_icase(const string_view Str, const string_view Prefix)
@@ -227,11 +228,7 @@ size_t find_icase(string_view const Str, string_view const What, size_t Pos)
 
 size_t find_icase(string_view const Str, wchar_t const What, size_t Pos)
 {
-	if (Pos >= Str.size())
-		return Str.npos;
-
-	const auto It = std::ranges::find_if(Str.cbegin() + Pos, Str.cend(), [&](wchar_t const Char){ return string_comparer_icase{}(What, Char); });
-	return It == Str.cend() ? Str.npos : It - Str.cbegin();
+	return find_icase(Str, string_view{ &What, 1 }, Pos);
 }
 
 bool contains_icase(const string_view Str, const string_view What)

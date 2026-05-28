@@ -162,15 +162,6 @@ namespace cfunctions
 	}
 }
 
-class pluginapi_sort_accessor
-{
-public:
-	static auto compare_ordinal_icase(string_view const Str1, string_view const Str2)
-	{
-		return string_sort::ordering_as_int(string_sort::keyhole::compare_ordinal_icase(Str1, Str2));
-	}
-};
-
 namespace pluginapi
 {
 static int WINAPIV apiSprintf(wchar_t* Dest, const wchar_t* Format, ...) noexcept //?deprecated
@@ -2033,7 +2024,7 @@ static void WINAPI apiStrUpper(wchar_t *s1) noexcept
 	return cpp_try(
 	[&]
 	{
-		inplace::upper(s1);
+		inplace::upper({s1, std::wcslen(s1)});
 	});
 }
 
@@ -2042,7 +2033,7 @@ static void WINAPI apiStrLower(wchar_t *s1) noexcept
 	return cpp_try(
 	[&]
 	{
-		inplace::lower(s1);
+		inplace::lower({s1, std::wcslen(s1)});
 	});
 }
 
@@ -2070,7 +2061,7 @@ static int WINAPI apiStrCmpNI(const wchar_t* Str1, const wchar_t* Str2, intptr_t
 	return cpp_try(
 	[&]
 	{
-		return pluginapi_sort_accessor::compare_ordinal_icase(string_view(Str1).substr(0, MaxSize), string_view(Str2).substr(0, MaxSize));
+		return string_sort::ordering_as_int(string_sort::ordinal::compare_icase(string_view(Str1).substr(0, MaxSize), string_view(Str2).substr(0, MaxSize)));
 	});
 }
 
@@ -2079,7 +2070,7 @@ static int WINAPI apiStrCmpI(const wchar_t* Str1, const wchar_t* Str2) noexcept
 	return cpp_try(
 	[&]
 	{
-		return pluginapi_sort_accessor::compare_ordinal_icase(Str1, Str2);
+		return string_sort::ordering_as_int(string_sort::ordinal::compare_icase(Str1, Str2));
 	});
 }
 

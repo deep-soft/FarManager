@@ -185,7 +185,7 @@ bool CmpName(const string_view pattern, string_view str, const bool skippath, co
 				continue;
 			}
 
-			if (string_comparer_icase()(ch, pattern[i]))
+			if (equal_icase(ch, pattern[i]))
 				return true;
 		}
 
@@ -261,7 +261,7 @@ bool CmpName(const string_view pattern, string_view str, const bool skippath, co
 			}
 		}
 
-		if (si < str.size() && string_comparer_icase()(pc, str[si]))
+		if (si < str.size() && equal_icase(pc, str[si]))
 		{
 			++pi;
 			++si;

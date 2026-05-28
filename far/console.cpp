@@ -726,8 +726,6 @@ protected:
 		m_StreamBuf(std::make_unique<consolebuf>(GetStdHandle(STD_OUTPUT_HANDLE))),
 		m_StreamBuffersOverrider(std::make_unique<stream_buffers_overrider>())
 	{
-		if (get_run_mode() == run_mode::interactive)
-			m_ExternalConsole = std::make_unique<external_console>();
 	}
 
 	bool console::Allocate() const
@@ -1300,6 +1298,22 @@ protected:
 		return Result;
 	}
 
+	void console::load_external() const
+	{
+		if (m_ExternalConsole)
+			return;
+
+		m_ExternalConsole = get_run_mode() == run_mode::interactive?
+			std::make_unique<external_console>() :
+			nullptr;
+	}
+
+	auto console::get_external(auto const Accessor) const
+	{
+		load_external();
+		return m_ExternalConsole && *m_ExternalConsole? std::invoke(Accessor, (*m_ExternalConsole)->Imports).value() : nullptr;
+	}
+
 	bool console::PeekOneInput(INPUT_RECORD& Record) const
 	{
 		// See below
@@ -1410,11 +1424,11 @@ protected:
 
 	bool console::ReadOutput(matrix<FAR_CHAR_INFO>& Buffer, point const BufferCoord, rectangle const& ReadRegionRelative) const
 	{
-		if (m_ExternalConsole && m_ExternalConsole->Imports.pReadOutput)
+		if (const auto ReadOutputExternal = get_external(&external_console::ModuleImports::pReadOutput))
 		{
 			const COORD BufferSize{ static_cast<short>(Buffer.width()), static_cast<short>(Buffer.height()) };
 			auto ReadRegion = make_rect(ReadRegionRelative);
-			return m_ExternalConsole->Imports.pReadOutput(Buffer.data(), BufferSize, make_coord(BufferCoord), &ReadRegion) != FALSE;
+			return ReadOutputExternal(Buffer.data(), BufferSize, make_coord(BufferCoord), &ReadRegion) != FALSE;
 		}
 
 		const int Delta = sWindowMode? GetDelta() : 0;
@@ -2372,11 +2386,11 @@ protected:
 			return implementation::WriteOutputVT(Buffer, BufferCoord, WriteRegion);
 		}
 
-		if (m_ExternalConsole && m_ExternalConsole->Imports.pWriteOutput)
+		if (const auto WriteOutputExternal = get_external(&external_console::ModuleImports::pWriteOutput))
 		{
 			const COORD BufferSize{ static_cast<short>(Buffer.width()), static_cast<short>(Buffer.height()) };
 			auto WriteRegion = make_rect(WriteRegionRelative);
-			return m_ExternalConsole->Imports.pWriteOutput(Buffer.data(), BufferSize, make_coord(BufferCoord), &WriteRegion) != FALSE;
+			return WriteOutputExternal(Buffer.data(), BufferSize, make_coord(BufferCoord), &WriteRegion) != FALSE;
 		}
 
 		const int Delta = sWindowMode? GetDelta() : 0;
@@ -2467,8 +2481,8 @@ protected:
 
 	bool console::Commit() const
 	{
-		if (m_ExternalConsole && m_ExternalConsole->Imports.pCommit)
-			return m_ExternalConsole->Imports.pCommit() != FALSE;
+		if (const auto CommitExternal = get_external(&external_console::ModuleImports::pCommit))
+			return CommitExternal() != FALSE;
 
 		// reserved
 		return true;
@@ -2476,8 +2490,8 @@ protected:
 
 	bool console::GetTextAttributes(FarColor& Attributes) const
 	{
-		if (m_ExternalConsole && m_ExternalConsole->Imports.pGetTextAttributes)
-			return m_ExternalConsole->Imports.pGetTextAttributes(&Attributes) != FALSE;
+		if (const auto GetTextAttributesExternal = get_external(&external_console::ModuleImports::pGetTextAttributes))
+			return GetTextAttributesExternal(&Attributes) != FALSE;
 
 		CONSOLE_SCREEN_BUFFER_INFO ConsoleScreenBufferInfo;
 		if (!get_console_screen_buffer_info(GetOutputHandle(), &ConsoleScreenBufferInfo))
@@ -2489,8 +2503,8 @@ protected:
 
 	bool console::SetTextAttributes(const FarColor& Attributes) const
 	{
-		if (m_ExternalConsole && m_ExternalConsole->Imports.pSetTextAttributes)
-			return m_ExternalConsole->Imports.pSetTextAttributes(&Attributes) != FALSE;
+		if (const auto SetTextAttributesExternal = get_external(&external_console::ModuleImports::pSetTextAttributes))
+			return SetTextAttributesExternal(&Attributes) != FALSE;
 
 		return (IsVtActive()? implementation::SetTextAttributesVT : implementation::SetTextAttributesNT)(Attributes);
 	}
@@ -2758,8 +2772,8 @@ protected:
 
 	bool console::ClearExtraRegions(const FarColor& Color, int Mode) const
 	{
-		if (m_ExternalConsole && m_ExternalConsole->Imports.pClearExtraRegions)
-			return m_ExternalConsole->Imports.pClearExtraRegions(&Color, Mode) != FALSE;
+		if (const auto ClearExtraRegionsExternal = get_external(&external_console::ModuleImports::pClearExtraRegions))
+			return ClearExtraRegionsExternal(&Color, Mode) != FALSE;
 
 		CONSOLE_SCREEN_BUFFER_INFO csbi;
 		if (!get_console_screen_buffer_info(GetOutputHandle(), &csbi))
@@ -3064,7 +3078,7 @@ protected:
 
 	bool console::ExternalRendererLoaded() const
 	{
-		return m_ExternalConsole && m_ExternalConsole->Imports.pWriteOutput;
+		return get_external(&external_console::ModuleImports::pWriteOutput) != nullptr;
 	}
 
 	size_t console::GetWidthPreciseExpensive(string_view const Str)

@@ -68,23 +68,20 @@ namespace string_sort
 	}
 	less;
 
-	constexpr inline struct less_icase_t
+	namespace ordinal
 	{
-		using is_transparent = void;
+		constexpr inline struct less_icase_t
+		{
+			using is_transparent = void;
 
-		[[nodiscard]]
-		bool operator()(string_view Str1, string_view Str2) const;
+			[[nodiscard]]
+			bool operator()(string_view Str1, string_view Str2) const;
+		}
+		less_icase;
+
+		std::strong_ordering compare_icase(string_view Str1, string_view Str2);
+		std::strong_ordering compare_numeric(string_view Str1, string_view Str2);
 	}
-	less_icase;
-
-	class keyhole
-	{
-		friend SQLiteDb;
-		friend plugins_sort_accessor;
-		friend pluginapi_sort_accessor;
-		static std::strong_ordering compare_ordinal_icase(string_view Str1, string_view Str2);
-		static std::strong_ordering compare_ordinal_numeric(string_view Str1, string_view Str2);
-	};
 
 	namespace detail
 	{

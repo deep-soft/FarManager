@@ -75,9 +75,6 @@ namespace inplace
 	void upper(wchar_t& Char);
 	void lower(wchar_t& Char);
 
-	void upper(wchar_t* Str);
-	void lower(wchar_t* Str);
-
 	void upper(string& Str, size_t Pos = 0, size_t Count = string::npos);
 	void lower(string& Str, size_t Pos = 0, size_t Count = string::npos);
 }
@@ -124,6 +121,8 @@ template<typename T>
 using unordered_string_multimap_icase = std::unordered_multimap<string, T, string_comparer_icase, string_comparer_icase>;
 
 
+[[nodiscard]]
+bool equal_icase(wchar_t Char1, wchar_t Char2);
 [[nodiscard]]
 bool equal_icase(string_view Str1, string_view Str2);
 [[nodiscard]]

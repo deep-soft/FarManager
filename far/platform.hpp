@@ -408,6 +408,9 @@ namespace os
 
 			[[nodiscard]]
 			explicit(false) operator raw_function_pointer() const { return std::bit_cast<raw_function_pointer>(get_pointer(true)); }
+
+			[[nodiscard]]
+			raw_function_pointer value() const { return std::bit_cast<raw_function_pointer>(get_pointer(false)); }
 		};
 	}
 

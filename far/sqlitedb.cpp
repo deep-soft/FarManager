@@ -769,10 +769,10 @@ static void create_combined_collation(sqlite::sqlite3* const Db, const char* con
 
 void SQLiteDb::add_nocase_collation() const
 {
-	create_combined_collation(m_Db.get(), "nocase", &string_sort::keyhole::compare_ordinal_icase);
+	create_combined_collation(m_Db.get(), "nocase", &string_sort::ordinal::compare_icase);
 }
 
 void SQLiteDb::add_numeric_collation() const
 {
-	create_combined_collation(m_Db.get(), "numeric", &string_sort::keyhole::compare_ordinal_numeric);
+	create_combined_collation(m_Db.get(), "numeric", &string_sort::ordinal::compare_numeric);
 }

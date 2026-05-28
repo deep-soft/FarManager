@@ -1658,10 +1658,10 @@ void FarMacroApi::indexFunc() const
 	const auto& s = Params[0].toString();
 	const auto& p = Params[1].toString();
 
-	const auto StrStr = [](const string& Str1, const string& Str2) { return std::ranges::search(Str1, Str2); };
-	const auto StrStrI = [](const string& Str1, const string& Str2) { return std::ranges::search(Str1, Str2, string_comparer_icase{}); };
+	const auto Result = Params[2].asInteger()?
+		std::ranges::search(s, p) :
+		std::ranges::search(s, p, string_comparer_icase{});
 
-	const auto Result = Params[2].asInteger()? StrStr(s, p) : StrStrI(s, p);
 	const auto Position = Result.empty()? -1 : Result.begin() - s.cbegin();
 	PushValue(Position);
 }
@@ -1673,10 +1673,10 @@ void FarMacroApi::rindexFunc() const
 	const auto& s = Params[0].toString();
 	const auto& p = Params[1].toString();
 
-	const auto RevStrStr = [](const string& Str1, const string& Str2) { return std::ranges::find_end(Str1, Str2); };
-	const auto RevStrStrI = [](const string& Str1, const string& Str2) { return std::ranges::find_end(Str1, Str2, string_comparer_icase{}); };
+	const auto Result = Params[2].asInteger()?
+		std::ranges::find_end(s, p) :
+		std::ranges::find_end(s, p, string_comparer_icase{});
 
-	const auto Result = Params[2].asInteger()? RevStrStr(s, p) : RevStrStrI(s, p);
 	const auto Position = Result.empty()? -1 : Result.begin() - s.cbegin();
 	PushValue(Position);
 }

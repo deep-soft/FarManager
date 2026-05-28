@@ -342,7 +342,7 @@ static bool PartCmdLine(string_view const FullCommand, string& Command, string& 
 	}
 
 	string_view const Cmd{ Begin, CmdEnd };
-	if (std::ranges::binary_search(exclude_cmds(), Cmd, string_sort::less_icase))
+	if (std::ranges::binary_search(exclude_cmds(), Cmd, string_sort::ordinal::less_icase))
 		return false;
 
 	Command = Cmd;
