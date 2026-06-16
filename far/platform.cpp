@@ -344,12 +344,19 @@ static string format_error_impl(unsigned const ErrorCode, bool const Nt)
 
 	if (!Size)
 	{
+		// MS f-d it up: a bunch of errors are defined in SetupAPI.h as 0xE000XXXX with the usual ERROR_ prefix, but FormatMessage knows nothing about them.
+		// The same errors are also defined as HRESULT in winerror.h as 0x800FXXXX and FormatMessage knows about those.
+		// The code below basically turns errors like ERROR_INVALID_REG_PROPERTY into SPAPI_E_INVALID_REG_PROPERTY.
+		if (const auto SPAPI_E_Mask = APPLICATION_ERROR_MASK | ERROR_SEVERITY_ERROR; !Nt && flags::check_all(ErrorCode, SPAPI_E_Mask))
+			if (const auto Code = ErrorCode & ~SPAPI_E_Mask; Code <= 0xFFFF)
+				return format_error_impl(MAKE_HRESULT(SEVERITY_ERROR, FACILITY_SETUPAPI, Code), false);
+
 		// Do not use error_state::to_string here, it will call this function again and might cause a recursion
 		const auto LastError = last_error();
 		format_message_error_context const Context{ Nt, ErrorCode };
 		const auto ErrorStr = errors_to_string_impl(LastError.Win32Error, LastError.NtError, &Context);
 
-		LOGERROR(L"FormatMessage<{}>(0x{:08X}): {}"sv, Nt? L"NT"sv : L"Win32"sv, ErrorCode, ErrorStr);
+		LOGERROR(L"FormatMessage<{}>(0x{:08X}): Error: {{{}}} ({})"sv, Nt? L"NT"sv : L"Win32"sv, ErrorCode, ErrorStr, source_location_to_string(LastError.Location));
 		return {};
 	}
 
@@ -420,9 +427,16 @@ string error_state::NtErrorStr() const
 	return format_ntstatus(NtError);
 }
 
-string error_state::to_string() const
+string error_state::to_string_base() const
 {
 	return errors_to_string_impl(Win32Error, NtError);
+}
+
+string error_state::to_string() const
+{
+	return Location.file_name()?
+		far::format(L"Error: {{{}}} ({})"sv, to_string_base(), source_location_to_string(Location)) :
+		far::format(L"Error: {{{}}}"sv, to_string_base());
 }
 
 error_state last_error(source_location const& Location)
@@ -1158,4 +1172,69 @@ TEST_CASE("platform.rtdl")
 	}
 }
 
+TEST_CASE("postprocess_error_string")
+{
+	static const struct
+	{
+		DWORD Error;
+		string_view Str, Expected;
+	}
+	Tests[]
+	{
+		{ 0, L""sv,           L"0x00000000 - Unknown error"sv },
+		{ 42, L"1\n2\n3  "sv, L"0x0000002A - 1 2 3"sv },
+	};
+
+	for (const auto& i: Tests)
+	{
+		REQUIRE(os::postprocess_error_string(i.Error, string(i.Str)) == i.Expected);
+	}
+}
+
+TEST_CASE("error_state")
+{
+	static const struct
+	{
+		DWORD Win32Error;
+		NTSTATUS NtError;
+		source_location Location;
+	}
+	Tests[]
+	{
+		{ ERROR_SUCCESS,          STATUS_SUCCESS,                 source_location::current() },
+		{ ERROR_SUCCESS,          STATUS_GUARD_PAGE_VIOLATION,    {}                         },
+		{ ERROR_ARENA_TRASHED,    STATUS_SUCCESS,                 source_location::current() },
+		{ ERROR_ARENA_TRASHED,    STATUS_GUARD_PAGE_VIOLATION,    {}                         },
+	};
+
+	for (const auto& i: Tests)
+	{
+		const auto ErrorState = os::error_state(i.Win32Error, i.NtError, i.Location);
+
+		const auto Any = i.Win32Error != ERROR_SUCCESS || i.NtError != STATUS_SUCCESS;
+
+		REQUIRE(ErrorState.any() == Any);
+		REQUIRE(ErrorState.Win32Error == i.Win32Error);
+		REQUIRE(ErrorState.NtError == i.NtError);
+		REQUIRE(ErrorState.Location.file_name() == i.Location.file_name());
+		REQUIRE(ErrorState.Location.function_name() == i.Location.function_name());
+		REQUIRE(ErrorState.Location.line() == i.Location.line());
+
+		const auto Win32ErrorStr = os::format_error(i.Win32Error);
+		REQUIRE(ErrorState.Win32ErrorStr() == Win32ErrorStr);
+
+		const auto NtErrorStr = os::format_ntstatus(i.NtError);
+		REQUIRE(ErrorState.NtErrorStr() == NtErrorStr);
+
+		string const ErrorStrings[]
+		{
+			i.Win32Error? far::format(L"LastError: {}"sv, Win32ErrorStr) : L""s,
+			i.NtError?    far::format(L"NTSTATUS: {}"sv, NtErrorStr) : L""s,
+		};
+
+		const auto FullStr = join(L", "sv, ErrorStrings | std::views::filter([](string const& Str) { return !Str.empty(); }));
+
+		REQUIRE(far::format(L"{}"sv, ErrorState) == far::format(L"Error: {{{}}}{}"sv, FullStr, i.Location.file_name()? far::format(L" ({})"sv, source_location_to_string(i.Location)) : L""s));
+	}
+}
 #endif

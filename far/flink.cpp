@@ -351,7 +351,7 @@ bool DeleteReparsePoint(string_view const Object)
 	return fObject.IoControl(FSCTL_DELETE_REPARSE_POINT, &rgdb, REPARSE_GUID_DATA_BUFFER_HEADER_SIZE, nullptr, 0);
 }
 
-bool GetReparsePointInfo(string_view const Object, string& DestBuffer, LPDWORD ReparseTag)
+bool GetReparsePointInfo(string_view const Object, string& DestBuffer, DWORD* ReparseTag, bool* IsEditable)
 {
 	const block_ptr<REPARSE_DATA_BUFFER> rdb(MAXIMUM_REPARSE_DATA_BUFFER_SIZE);
 	if (!GetREPARSE_DATA_BUFFER(Object, *rdb))
@@ -360,35 +360,35 @@ bool GetReparsePointInfo(string_view const Object, string& DestBuffer, LPDWORD R
 	if (ReparseTag)
 		*ReparseTag=rdb->ReparseTag;
 
-	const auto Extract = [&](const auto& Buffer)
+	const auto Extract = [&]<typename T>(const T& Buffer)
 	{
+		if (rdb->ReparseDataLength < offsetof(T, PathBuffer))
+			return false;
+
+		if (IsEditable)
+			*IsEditable = true;
+
 		if (const auto NameLength = Buffer.PrintNameLength / sizeof(wchar_t))
 		{
 			DestBuffer.assign(Buffer.PathBuffer + Buffer.PrintNameOffset / sizeof(wchar_t), NameLength);
 			return true;
 		}
 
-		if (const auto NameLength = Buffer.SubstituteNameLength / sizeof(wchar_t))
-		{
-			DestBuffer.assign(Buffer.PathBuffer + Buffer.SubstituteNameOffset / sizeof(wchar_t), NameLength);
-			return true;
-		}
-
-		return false;
+		DestBuffer.assign(Buffer.PathBuffer + Buffer.SubstituteNameOffset / sizeof(wchar_t), Buffer.SubstituteNameLength / sizeof(wchar_t));
+		return true;
 	};
 
 	switch (rdb->ReparseTag)
 	{
+	// https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-fscc/b41f1cbf-10df-4a47-98d4-1c52a833d913
 	case IO_REPARSE_TAG_SYMLINK:
-		if (rdb->ReparseDataLength < sizeof(rdb->SymbolicLinkReparseBuffer))
-			return false;
 		return Extract(rdb->SymbolicLinkReparseBuffer);
 
+	// https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-fscc/ca069dad-ed16-42aa-b057-b6b207f447cc
 	case IO_REPARSE_TAG_MOUNT_POINT:
-		if (rdb->ReparseDataLength < sizeof(rdb->MountPointReparseBuffer))
-			return false;
 		return Extract(rdb->MountPointReparseBuffer);
 
+	// https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-fscc/ff4df658-7f27-476a-8025-4074c0121eec
 	case IO_REPARSE_TAG_NFS:
 		{
 			constexpr auto NFS_SPECFILE_LNK = 0x014B4E4C;
@@ -399,14 +399,15 @@ bool GetReparsePointInfo(string_view const Object, string& DestBuffer, LPDWORD R
 				WCHAR   DataBuffer[1];
 			};
 
-			if (rdb->ReparseDataLength < sizeof(NFS_REPARSE_DATA_BUFFER))
+			const auto DataOffset = offsetof(NFS_REPARSE_DATA_BUFFER, DataBuffer);
+			if (rdb->ReparseDataLength < DataOffset)
 				return false;
 
 			const auto& NfsReparseBuffer = view_as<NFS_REPARSE_DATA_BUFFER>(rdb->GenericReparseBuffer.DataBuffer);
 			if (NfsReparseBuffer.Type != NFS_SPECFILE_LNK)
 				return false;
 
-			DestBuffer.assign(NfsReparseBuffer.DataBuffer, (rdb->ReparseDataLength - sizeof(NfsReparseBuffer.Type)) / sizeof(wchar_t));
+			DestBuffer.assign(NfsReparseBuffer.DataBuffer, (rdb->ReparseDataLength - DataOffset) / sizeof(wchar_t));
 			return true;
 		}
 
@@ -422,13 +423,14 @@ bool GetReparsePointInfo(string_view const Object, string& DestBuffer, LPDWORD R
 				WCHAR StringList[1];
 			};
 
-			if (rdb->ReparseDataLength < sizeof(APPEXECLINK_REPARSE_DATA_BUFFER))
+			const auto DataOffset = offsetof(APPEXECLINK_REPARSE_DATA_BUFFER, StringList);
+			if (rdb->ReparseDataLength < DataOffset)
 				return false;
 
 			const auto& AppExecLinkReparseBuffer = view_as<APPEXECLINK_REPARSE_DATA_BUFFER>(rdb->GenericReparseBuffer.DataBuffer);
 
 			size_t Index = 0;
-			const auto StringSize = (rdb->ReparseDataLength - sizeof(AppExecLinkReparseBuffer.Version)) / sizeof(*AppExecLinkReparseBuffer.StringList);
+			const auto StringSize = (rdb->ReparseDataLength - DataOffset) / sizeof(*AppExecLinkReparseBuffer.StringList);
 			string_view const StringList{ AppExecLinkReparseBuffer.StringList, StringSize };
 
 			for (const auto& i: enum_substrings(StringList))
@@ -445,19 +447,21 @@ bool GetReparsePointInfo(string_view const Object, string& DestBuffer, LPDWORD R
 			return false;
 		}
 
+	// https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-fscc/68337353-9153-4ee1-ac6b-419839c3b7ad
 	case IO_REPARSE_TAG_LX_SYMLINK:
 		{
 			struct LX_SYMLINK_REPARSE_DATA_BUFFER
 			{
-				DWORD FileType;
+				DWORD Version;
 				char  PathBuffer[1];
 			};
 
-			if (rdb->ReparseDataLength < sizeof(LX_SYMLINK_REPARSE_DATA_BUFFER))
+			const auto DataOffset = offsetof(LX_SYMLINK_REPARSE_DATA_BUFFER, PathBuffer);
+			if (rdb->ReparseDataLength < DataOffset)
 				return false;
 
 			const auto& LxSymlinkReparseBuffer = view_as<LX_SYMLINK_REPARSE_DATA_BUFFER>(rdb->GenericReparseBuffer.DataBuffer);
-			DestBuffer = encoding::utf8::get_chars({ LxSymlinkReparseBuffer.PathBuffer, rdb->ReparseDataLength - sizeof(LxSymlinkReparseBuffer.FileType) });
+			DestBuffer = encoding::utf8::get_chars({ LxSymlinkReparseBuffer.PathBuffer, rdb->ReparseDataLength - DataOffset });
 			return true;
 		}
 
@@ -475,7 +479,8 @@ bool GetReparsePointInfo(string_view const Object, string& DestBuffer, LPDWORD R
 				WCHAR WciName[1];
 			};
 
-			if (rdb->ReparseDataLength < sizeof(WCI_REPARSE_DATA_BUFFER))
+			const auto DataOffset = offsetof(WCI_REPARSE_DATA_BUFFER, WciName);
+			if (rdb->ReparseDataLength < DataOffset)
 				return false;
 
 			const auto& WciReparseBuffer = view_as<WCI_REPARSE_DATA_BUFFER>(rdb->GenericReparseBuffer.DataBuffer);
@@ -543,13 +548,6 @@ bool EnumStreams(string_view const FileName, unsigned long long& StreamsSize, si
 	return Result;
 }
 
-bool DelSubstDrive(string_view const DeviceName)
-{
-	string strTargetPath;
-	return os::fs::QueryDosDevice(DeviceName, strTargetPath) &&
-		DefineDosDevice(DDD_RAW_TARGET_PATH | DDD_REMOVE_DEFINITION | DDD_EXACT_MATCH_ON_REMOVE, null_terminated(DeviceName).c_str(), strTargetPath.c_str()) != FALSE;
-}
-
 bool GetSubstName(int DriveType, string_view const Path, string &strTargetPath)
 {
 	/*
@@ -567,6 +565,11 @@ bool GetSubstName(int DriveType, string_view const Path, string &strTargetPath)
 	if ((DriveRemovable && !CheckRemovable) || (!DriveRemovable && !CheckOther))
 		return false;
 
+	return GetSubstName(Path, strTargetPath);
+}
+
+bool GetSubstName(string_view const Path, string& TargetPath)
+{
 	const auto Type = ParsePath(Path);
 	if (Type != root_type::drive_letter)
 		return false;
@@ -577,15 +580,15 @@ bool GetSubstName(int DriveType, string_view const Path, string &strTargetPath)
 	if (!os::fs::QueryDosDevice(Drive, Device))
 		return false;
 
-	if (starts_with_icase(Device, L"\\??\\UNC\\"sv))
+	if (const auto Prefix = L"\\??\\UNC\\"sv; starts_with_icase(Device, Prefix))
 	{
-		strTargetPath = concat(L"\\\\"sv, string_view(Device).substr(8));
+		TargetPath = concat(L"\\\\"sv, string_view(Device).substr(Prefix.size()));
 		return true;
 	}
 
-	if (Device.starts_with(L"\\??\\"sv))
+	if (const auto Prefix = L"\\??\\"sv; starts_with_icase(Device, Prefix))
 	{
-		strTargetPath.assign(Device, 4);
+		TargetPath.assign(Device, Prefix.size());
 		return true;
 	}
 

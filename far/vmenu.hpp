@@ -137,15 +137,12 @@ struct menu_item_ex: menu_item
 		: menu_item{ std::forward<T>(Name), Flags }
 	{}
 
-	std::list<segment> Annotations;
 	std::any ComplexUserData;
 	intptr_t SimpleUserData{};
 
-	int HorizontalPosition{}; // Relative to m_LeftColumnWidth. Positive: Indent; Negative: Hanging
+	int HorizontalPosition{}; // Positive: Indent; Negative: Hanging
 	wchar_t AutoHotkey{};
 	size_t AutoHotkeyPos{};
-
-	int SafeGetFirstAnnotation() const noexcept { return Annotations.empty() || Annotations.front().empty() ? 0 : Annotations.front().start(); }
 };
 
 struct item_color_indices;
@@ -253,6 +250,9 @@ public:
 	using extended_item_data_setter = std::function<bool(menu_item_ex&, const extended_item_data&)>;
 	void RegisterExtendedDataProvider(extended_item_data_getter&& ExtendedDataGetter, extended_item_data_setter&& ExtendedDataSetter);
 
+	using item_annotation_provider = std::function<segment(const menu_item_ex&)>;
+	void RegisterItemAnnotationProvider(item_annotation_provider&& ItemAnnotationProvider);
+
 	int GetSelectPos() const { return SelectPos; }
 	int GetLastSelectPosResult() const { return SelectPosResult; }
 	int GetSelectPos(FarListPos *ListPos) const;
@@ -308,24 +308,25 @@ private:
 	void DrawSeparator(size_t ItemIndex, int BoxType, int Y) const;
 	void ConnectSeparator(size_t ItemIndex, string& separator, int BoxType) const;
 	void ApplySeparatorName(const menu_item_ex& Item, string& separator) const;
-	void DrawRegularItem(const menu_item_ex& Item, const menu_layout& Layout, int Y, std::vector<int>& HighlightMarkup, string_view BlankLine) const;
+	void DrawRegularItem(const menu_item_ex& Item, const menu_layout& Layout, int Y, string_view BlankLine) const;
 	void DrawFixedColumns(
 		const menu_item_ex& Item,
-		small_segment FixedColumnsArea,
+		segment FixedColumnsArea,
 		int Y,
 		const item_color_indices& ColorIndices,
 		string_view BlankLine) const;
+	std::tuple<string, segment> GetItemTextWithHighlight(const menu_item_ex& Item) const;
 	[[nodiscard]]
 	bool DrawItemText(
 		const menu_item_ex& Item,
-		small_segment TextArea,
+		segment TextArea,
 		int Y,
 		const item_color_indices& ColorIndices,
-		std::vector<int>& HighlightMarkup,
 		string_view BlankLine) const;
 
 	[[nodiscard]] int CalculateTextAreaWidth() const;
 	[[nodiscard]] int GetItemVisualLength(const menu_item_ex& Item) const;
+	[[nodiscard]] int SafeGetItemAnnotationStart(const menu_item_ex& Item) const;
 
 	int GetItemPosition(int Position) const;
 	bool CheckKeyHiOrAcc(DWORD Key, int Type, bool Translate, bool ChangePos, int& NewPos);
@@ -363,6 +364,7 @@ private:
 	fixed_column_provider m_FixedColumnProvider;
 	extended_item_data_getter m_ExtendedDataGetter;
 	extended_item_data_setter m_ExtendedDataSetter;
+	item_annotation_provider m_ItemAnnotationProvider;
 	window_ptr CurrentWindow;
 	bool PrevCursorVisible{};
 	size_t PrevCursorSize{};

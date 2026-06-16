@@ -782,13 +782,15 @@ operation OperationFailed(const error_state_ex& ErrorState, string_view const Ob
 	if(any_of(static_cast<long>(ErrorState.Win32Error),
 		ERROR_ACCESS_DENIED,
 		ERROR_SHARING_VIOLATION,
+		ERROR_DEVICE_IN_USE,
 		ERROR_LOCK_VIOLATION,
-		ERROR_DRIVE_LOCKED
+		ERROR_DRIVE_LOCKED,
+		NERR_OpenFiles
 	))
 	{
 		const auto FullName = ConvertNameToFull(Object);
 
-		ComInitialiser.emplace();
+		ComInitialiser.emplace(os::com::mode::sta);
 		FileIsInUse = os::com::create_file_is_in_use(FullName);
 		if (FileIsInUse)
 		{

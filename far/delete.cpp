@@ -74,6 +74,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // External:
 #include "format.hpp"
+#include "platform.com.hpp"
 
 //----------------------------------------------------------------------------
 
@@ -716,8 +717,24 @@ ShellDelete::ShellDelete(panel_ptr SrcPanel, delete_type const Type):
 	if (!SrcPanel->get_first_selected(SingleSelData))
 		return;
 
-	if (m_DeleteType == delete_type::recycle && os::fs::drive::get_type(GetPathRoot(ConvertNameToFull(SingleSelData.FileName))) != DRIVE_FIXED)
-		m_DeleteType = delete_type::remove;
+	if (m_DeleteType == delete_type::recycle)
+	{
+		const auto TestItem = ConvertNameToFull(SingleSelData.FileName);
+
+		const auto CanRecycle = [&]
+		{
+			// Clever method, should be more accurate (Vista+)
+			// You don't want to know how it works
+			if (const auto Result = os::com::can_recycle(TestItem))
+				return *Result;
+
+			// Legacy method
+			return os::fs::drive::get_type(SrcPanel->GetCurDir().c_str()) == DRIVE_FIXED;
+		}();
+
+		if (!CanRecycle)
+			m_DeleteType = delete_type::remove;
+	}
 
 	show_confirmation(SrcPanel, m_DeleteType, SelCount, SingleSelData);
 
