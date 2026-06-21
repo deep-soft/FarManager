@@ -2537,7 +2537,7 @@ intptr_t FileEditor::EditorControl(int Command, intptr_t Param1, void *Param2)
 					Eol = eol::parse(esf->FileEOL);
 
 				if (esf->CodePage != CP_DEFAULT)
-					Codepage = esf->CodePage;
+					Codepage = encoding::codepage::normalise(esf->CodePage);
 			}
 
 			if (DoNotOverwrite(strName, PointToName(strName)))
@@ -2760,7 +2760,7 @@ uintptr_t FileEditor::GetDefaultCodePage()
 {
 	const auto cp = encoding::codepage::normalise(Global->Opt->EdOpt.DefaultCodePage);
 	return cp == CP_DEFAULT || !IsCodePageSupported(cp)?
-		encoding::codepage::ansi() :
+		encoding::codepage::ansi() : // NOT real_ansi. If the user set the whole system to UTF-8, he probably wants it by default everywhere, including the editor.
 		cp;
 }
 

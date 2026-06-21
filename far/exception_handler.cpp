@@ -984,7 +984,7 @@ static string get_locale()
 
 	const auto LocaleId = GetUserDefaultLCID();
 	const auto LanguageId = LANGIDFROMLCID(LocaleId);
-	return far::format(L"{} | LCID={:08X} (Lang={:04X} (Primary={:03X} Sub={:02X}) Sort={:X} SortVersion={:X}) | ANSI={} OEM={}"sv,
+	return far::format(L"{} | LCID={:08X} (Lang={:04X} (Primary={:03X} Sub={:02X}) Sort={:X} SortVersion={:X}) | ANSI={} OEM={}{}"sv,
 		LocaleName,
 		LocaleId,
 		LanguageId,
@@ -992,8 +992,9 @@ static string get_locale()
 		SUBLANGID(LanguageId),
 		SORTIDFROMLCID(LocaleId),
 		SORTVERSIONFROMLCID(LocaleId),
-		encoding::codepage::ansi(),
-		encoding::codepage::oem()
+		encoding::codepage::real_ansi(),
+		encoding::codepage::real_oem(),
+		encoding::codepage::is_system_utf8()? L" UTF-8"sv : L""sv
 	);
 }
 
@@ -2422,6 +2423,7 @@ constexpr auto real_wassert = _wassert;
 
 WARNING_PUSH()
 WARNING_DISABLE_MSC(4273) // 'function': inconsistent dll linkage
+WARNING_DISABLE_CLANG("-Wmissing-prototypes")
 void far_assert(wchar_t const* const Message, wchar_t const* const File, unsigned const Line)
 {
 	switch (assert_handler_impl(Message, { encoding::utf8::get_bytes(File).c_str(), "assert", Line }))
