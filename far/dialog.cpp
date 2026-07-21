@@ -214,7 +214,7 @@ static size_t ConvertItemEx2(const DialogItemEx& ItemEx, FarGetDialogItem *Item,
 			size+=ListBoxSize*sizeof(FarListItem);
 			for (const auto i: std::views::iota(0uz, ListBoxSize))
 			{
-				size += (ListBox->at(i).Name.size() + 1) * sizeof(wchar_t);
+				size += (ListBox->at(i).GetName().size() + 1) * sizeof(wchar_t);
 			}
 		}
 	}
@@ -246,7 +246,7 @@ static size_t ConvertItemEx2(const DialogItemEx& ItemEx, FarGetDialogItem *Item,
 						auto& item = ListBox->at(ii);
 						listItems[ii].Flags = item.Flags;
 						listItems[ii].Text = text;
-						text += item.Name.copy(text, item.Name.npos);
+						text += item.GetName().copy(text, item.GetName().npos);
 						*text++ = {};
 						listItems[ii].UserData = item.SimpleUserData;
 						listItems[ii].Reserved = 0;
@@ -2467,29 +2467,16 @@ bool Dialog::ProcessKey(const Manager::Key& Key)
 	if (Items[m_FocusPos].Flags&DIF_HIDDEN)
 		return true;
 
-	// небольшая оптимизация
-	if (Items[m_FocusPos].Type==DI_CHECKBOX)
+	// BUGBUG do we need this?
+	if (Items[m_FocusPos].Type != DI_CHECKBOX)
 	{
-		if (!(Items[m_FocusPos].Flags&DIF_3STATE))
+		switch (LocalKey())
 		{
-			if (LocalKey() == KEY_MULTIPLY) // в CheckBox 2-state Gray* не работает!
-				LocalKey = KEY_NONE;
-
-			if ((LocalKey() == KEY_ADD      && !Items[m_FocusPos].Selected) ||
-			        (LocalKey() == KEY_SUBTRACT &&  Items[m_FocusPos].Selected))
-				LocalKey=KEY_SPACE;
+		case KEY_ADD:      LocalKey = '+'; break;
+		case KEY_SUBTRACT: LocalKey = '-'; break;
+		case KEY_MULTIPLY: LocalKey = '*'; break;
 		}
-
-		/*
-		  блок else не нужен, т.к. ниже клавиши будут обработаны...
-		*/
 	}
-	else if (LocalKey() == KEY_ADD)
-		LocalKey='+';
-	else if (LocalKey() == KEY_SUBTRACT)
-		LocalKey='-';
-	else if (LocalKey() == KEY_MULTIPLY)
-		LocalKey='*';
 
 	if (Items[m_FocusPos].Type==DI_BUTTON && LocalKey() == KEY_SPACE)
 		LocalKey=KEY_ENTER;
@@ -2693,24 +2680,29 @@ bool Dialog::ProcessKey(const Manager::Key& Key)
 		case KEY_ADD:
 		case KEY_SUBTRACT:
 		case KEY_MULTIPLY:
-
 			if (Items[m_FocusPos].Type==DI_CHECKBOX)
 			{
-				unsigned int CHKState=
-				    (LocalKey() == KEY_ADD?1:
-				     (LocalKey() == KEY_SUBTRACT?0:
-				      ((LocalKey() == KEY_MULTIPLY)?2:
-				       Items[m_FocusPos].Selected)));
-
-				if (Items[m_FocusPos].Selected != static_cast<int>(CHKState))
-					if (SendMessage(DN_BTNCLICK,m_FocusPos,ToPtr(CHKState)))
+				const auto NewState = [&]
+				{
+					switch (LocalKey())
 					{
-						Items[m_FocusPos].Selected=CHKState;
-						ShowDialog();
+					case KEY_ADD:      return BSTATE_CHECKED;
+					case KEY_SUBTRACT: return BSTATE_UNCHECKED;
+					case KEY_MULTIPLY: return BSTATE_3STATE;
+					default:           std::unreachable();
 					}
-			}
+				}();
 
+				if
+				(
+					Items[m_FocusPos].Selected != NewState && // Changed?
+					(Items[m_FocusPos].Flags & DIF_3STATE || NewState != BSTATE_3STATE) && // Supported?
+					SendMessage(DN_BTNCLICK, m_FocusPos, ToPtr(NewState)) // Accepted?
+				)
+					ShowDialog();
+			}
 			return true;
+
 		case KEY_LEFT:  case KEY_NUMPAD4: case KEY_MSWHEEL_LEFT:
 		case KEY_RIGHT: case KEY_NUMPAD6: case KEY_MSWHEEL_RIGHT:
 		{
@@ -3657,19 +3649,20 @@ bool Dialog::Do_ProcessTab(bool Next)
 	return true;
 }
 
+static auto toggle_checkbox_state(intptr_t& State, bool Is3State)
+{
+	// 2-state: 0, 1, 0, 1, ...
+	// 3-state: 0, 1, 2, 0, 1, 2, ...
+	State = (State + 1) % (Is3State? 3 : 2);
+}
+
 bool Dialog::Do_ProcessSpace()
 {
 	if (Items[m_FocusPos].Type==DI_CHECKBOX)
 	{
 		const auto OldSelected = Items[m_FocusPos].Selected;
 
-		if (Items[m_FocusPos].Flags&DIF_3STATE)
-		{
-			++Items[m_FocusPos].Selected;
-			Items[m_FocusPos].Selected %= 3;
-		}
-		else
-			Items[m_FocusPos].Selected = !Items[m_FocusPos].Selected;
+		toggle_checkbox_state(Items[m_FocusPos].Selected, flags::check_one(Items[m_FocusPos].Flags, DIF_3STATE));
 
 		const auto OldFocusPos = m_FocusPos;
 
@@ -3901,11 +3894,11 @@ int Dialog::SelectFromComboBox(DialogItemEx& CurItem, DlgEdit& EditLine)
 
 		if (CurItem.Flags & DIF_LISTNOAMPERSAND)
 		{
-			strStr = remove_highlight(ItemPtr.Name);
+			strStr = remove_highlight(ItemPtr.GetName());
 			EditLine.SetString(strStr);
 		}
 		else
-			EditLine.SetString(ItemPtr.Name);
+			EditLine.SetString(ItemPtr.GetName());
 
 		EditLine.SetLeftPos(0);
 		Redraw();
@@ -4435,6 +4428,21 @@ intptr_t Dialog::DefProc(intptr_t Msg, intptr_t Param1, void* Param2)
 	return 0;
 }
 
+static void update_auto_flags(DialogItemEx const& Item)
+{
+	if (!(Item.Flags & DIF_AUTOMATION))
+		return;
+
+	for (const auto& i: Item.Auto)
+	{
+		assert(Item.Selected < std::size(i.Flags));
+
+		const auto AutoFlags = i.Flags[Item.Selected];
+		i.Owner->Flags = (i.Owner->Flags & ~AutoFlags[1]) | AutoFlags[0];
+		// State change events are deliberately not sent to the handler
+	}
+}
+
 //////////////////////////////////////////////////////////////////////////
 /* $ 28.07.2000 SVS
    Посылка сообщения диалогу
@@ -4895,7 +4903,7 @@ intptr_t Dialog::SendMessage(intptr_t Msg,intptr_t Param1,void* Param2)
 								auto& Item = ListItems->Item;
 								Item = {};
 								Item.Flags=ListMenuItem.Flags;
-								Item.Text=ListMenuItem.Name.c_str();
+								Item.Text=ListMenuItem.GetName().c_str();
 								Item.UserData = ListMenuItem.SimpleUserData;
 								Item.Reserved = 0;
 
@@ -5042,9 +5050,9 @@ intptr_t Dialog::SendMessage(intptr_t Msg,intptr_t Param1,void* Param2)
 							const auto& ListMenuItem = ListBox->at(ListBox->GetSelectPos());
 							const auto Edit = static_cast<DlgEdit*>(CurItem.ObjPtr);
 							if (CurItem.Flags & DIF_LISTNOAMPERSAND)
-								Edit->SetHiString(ListMenuItem.Name);
+								Edit->SetHiString(ListMenuItem.GetName());
 							else
-								Edit->SetString(ListMenuItem.Name);
+								Edit->SetString(ListMenuItem.GetName());
 							Edit->RemoveSelection();
 						}
 					}
@@ -5314,19 +5322,23 @@ intptr_t Dialog::SendMessage(intptr_t Msg,intptr_t Param1,void* Param2)
 		/*****************************************************************/
 		case DN_BTNCLICK:
 		{
-			intptr_t Ret=DlgProc(Msg,Param1,Param2);
+			const auto Ret = DlgProc(Msg, Param1, Param2);
+			if (!Ret)
+				return Ret;
 
-			if (Ret && (CurItem.Flags & DIF_AUTOMATION) && !CurItem.Auto.empty())
+			const auto NewState = std::bit_cast<intptr_t>(Param2);
+
+			const auto MaxState =
+				Type == DI_CHECKBOX? (CurItem.Flags & DIF_3STATE? 3 : 2) :
+				Type == DI_RADIOBUTTON? 1 :
+				0;
+
+			assert(NewState <= MaxState);
+
+			if (NewState <= MaxState)
 			{
-				const auto iParam = std::bit_cast<intptr_t>(Param2) % 3;
-
-				for (const auto& i: CurItem.Auto)
-				{
-					const auto NewFlags = i.Owner->Flags;
-					i.Owner->Flags = (NewFlags & (~i.Flags[iParam][1])) | i.Flags[iParam][0];
-					// здесь намеренно в обработчик не посылаются эвенты об изменении
-					// состояния...
-				}
+				CurItem.Selected = NewState;
+				update_auto_flags(CurItem);
 			}
 
 			return Ret;
@@ -5361,35 +5373,23 @@ intptr_t Dialog::SendMessage(intptr_t Msg,intptr_t Param1,void* Param2)
 		{
 			if (Type == DI_CHECKBOX)
 			{
-				int Selected = CurItem.Selected;
-				auto State = std::bit_cast<intptr_t>(Param2);
-				if (State == BSTATE_TOGGLE)
-					State=++Selected;
+				const auto Selected = CurItem.Selected;
+				auto NewState = std::bit_cast<intptr_t>(Param2);
 
-				if (CurItem.Flags & DIF_3STATE)
-					State%=3;
-				else
-					State&=1;
+				assert(NewState <= BSTATE_TOGGLE);
+				if (NewState > BSTATE_TOGGLE)
+					return Selected;
 
-				CurItem.Selected = State;
+				if (NewState == BSTATE_TOGGLE)
+					toggle_checkbox_state(NewState, flags::check_one(CurItem.Flags, DIF_3STATE));
 
-				if (Selected != State && DialogMode.Check(DMODE_SHOW))
+				if (Selected != NewState)
 				{
-					// автоматизация
-					if ((CurItem.Flags & DIF_AUTOMATION) && !CurItem.Auto.empty())
-					{
-						State%=3;
-						for (const auto& i: CurItem.Auto)
-						{
-							const auto NewFlags = i.Owner->Flags;
-							i.Owner->Flags = (NewFlags & (~i.Flags[State][1])) | i.Flags[State][0];
-							// здесь намеренно в обработчик не посылаются эвенты об изменении
-							// состояния...
-						}
-						Param1=-1;
-					}
+					CurItem.Selected = NewState;
+					update_auto_flags(CurItem);
 
-					SendMessage(DM_REDRAW, 0, nullptr);
+					if (DialogMode.Check(DMODE_SHOW))
+						SendMessage(DM_REDRAW, 0, nullptr);
 				}
 
 				return Selected;
@@ -5529,8 +5529,8 @@ intptr_t Dialog::SendMessage(intptr_t Msg,intptr_t Param1,void* Param2)
 						if (CurItem.ListPtr->GetShowItemCount())
 						{
 							const auto& ListMenuItem = CurItem.ListPtr->current();
-							Ptr = ListMenuItem.Name.data();
-							Len = ListMenuItem.Name.size();
+							Ptr = ListMenuItem.GetName().data();
+							Len = ListMenuItem.GetName().size();
 						}
 						InitItemData();
 						break;
@@ -5579,7 +5579,7 @@ intptr_t Dialog::SendMessage(intptr_t Msg,intptr_t Param1,void* Param2)
 					Len=0;
 					if (CurItem.ListPtr->GetShowItemCount())
 					{
-						Len = CurItem.ListPtr->current().Name.size();
+						Len = CurItem.ListPtr->current().GetName().size();
 					}
 					break;
 

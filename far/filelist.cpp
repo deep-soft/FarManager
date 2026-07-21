@@ -2940,7 +2940,7 @@ bool FileList::ChangeDir(string_view const NewDir, bool IsParent, bool ResolvePa
 		{
 			Global->CtrlObject->FolderHistory->AddToHistory(m_CurDir);
 			if (!IsPopPlugin)
-				InitFSWatcher(false);
+				InitFSWatcher();
 		}
 	};
 
@@ -3616,7 +3616,7 @@ void FileList::OnSortingChange()
 void FileList::InitCurDir(string_view CurDir)
 {
 	Panel::InitCurDir(CurDir);
-	InitFSWatcher(false);
+	InitFSWatcher();
 }
 
 bool FileList::GoToFile(long idxItem)
@@ -4715,7 +4715,7 @@ static int select_sort_layer(std::vector<std::pair<panel_sort, sort_order>> cons
 	for (const auto& i: SortModes)
 	{
 		auto& Item = AvailableSortModesMenuItems[i.MenuPosition];
-		Item.Name = msg(i.Label);
+		Item.SetName(msg(i.Label));
 
 		if (std::ranges::any_of(SortLayers, [&](std::pair<panel_sort, sort_order> const& Layer) { return Layer.first == static_cast<panel_sort>(&i - SortModes); }))
 		{
@@ -4803,7 +4803,7 @@ static void edit_sort_layers(int MenuPos)
 				{
 					const auto NewSortModeIndex = std::ranges::find(SortModes, Result, &sort_mode::MenuPosition) - SortModes;
 					const auto Order = SortModes[NewSortModeIndex].DefaultLayers.begin()->second;
-					SortLayersMenu->at(Pos).Name = msg(SortModes[NewSortModeIndex].Label);
+					SortLayersMenu->at(Pos).SetName(msg(SortModes[NewSortModeIndex].Label));
 					SortLayersMenu->at(Pos).SetCustomCheck(order_indicator(Order));
 					SortLayers[Pos] = { static_cast<panel_sort>(NewSortModeIndex), Order };
 					SortLayersMenu->Redraw();
@@ -4885,11 +4885,11 @@ void FileList::SelectSortMode()
 	{
 		auto& Item = SortMenu[i.MenuPosition];
 
-		Item.Name = msg(i.Label);
+		Item.SetName(msg(i.Label));
 		Item.AccelKey = i.MenuKey;
 	}
 
-	static const menu_item MenuSeparator{ {}, LIF_SEPARATOR };
+	static const menu_item MenuSeparator{ string{}, LIF_SEPARATOR };
 
 	OpenMacroPluginInfo ompInfo{ MCT_GETCUSTOMSORTMODES };
 	MacroPluginReturn const* mpr{};
@@ -4907,7 +4907,7 @@ void FileList::SelectSortMode()
 				SortMenu.emplace_back(MenuSeparator);
 				for (size_t i=0; i < mpr->Count; i += 3)
 				{
-					SortMenu.emplace_back(menu_item{ mpr->Values[i + 2].String });
+					SortMenu.emplace_back(menu_item{ mpr->Values[i + 2].String, {} });
 				}
 			}
 			else
@@ -4967,7 +4967,7 @@ void FileList::SelectSortMode()
 	bool PlusPressed = false;
 
 	{
-		const auto MenuStrings = VMenu::AddHotkeys(SortMenu);
+		VMenu::DecorateItemsWithHotkeys(SortMenu);
 
 		const auto SortModeMenu = VMenu2::create(msg(lng::MMenuSortTitle), SortMenu);
 		SortModeMenu->SetHelp(L"PanelCmdSort"sv);
@@ -5379,8 +5379,6 @@ void FileList::CountDirSize(bool IsRealNames)
 	SortFileList(true);
 	ShowFileList();
 	Parent()->Redraw();
-
-	InitFSWatcher(true);
 }
 
 
@@ -7304,7 +7302,7 @@ void FileList::UpdateIfChanged(bool Changed)
 	Update(UPDATE_KEEP_SELECTION);
 }
 
-void FileList::InitFSWatcher(bool CheckTree)
+void FileList::InitFSWatcher()
 {
 	if (m_PanelMode == panel_mode::PLUGIN_PANEL)
 		return;
@@ -7321,7 +7319,7 @@ void FileList::InitFSWatcher(bool CheckTree)
 
 	if (Global->Opt->AutoUpdateRemoteDrive || (!Global->Opt->AutoUpdateRemoteDrive && DriveType != DRIVE_REMOTE) || Type == root_type::volume)
 	{
-		FSWatcher.emplace(m_BackgroundUpdater->event_id(), m_CurDir, CheckTree);
+		FSWatcher.emplace(m_BackgroundUpdater->event_id(), m_CurDir);
 	}
 }
 

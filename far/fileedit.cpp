@@ -184,11 +184,18 @@ bool dlgOpenEditor(string &strFileName, uintptr_t &codepage)
 	return false;
 }
 
-static bool dlgBadEditorCodepage(uintptr_t& codepage, bytes_view const ErrorBytes)
+enum class badcp_action
+{
+	show,
+	proceed,
+	cancel
+};
+
+static badcp_action BadCodepageDialog(bool const IsLoad, uintptr_t& codepage, std::variant<wchar_t, bytes> const& Data)
 {
 	DialogBuilder Builder(lng::MWarning);
 
-	const auto [UsupportedData, UsupportedDataMessage] = codepages::UnsupportedDataMessage(bytes{ ErrorBytes });
+	const auto [UsupportedData, UsupportedDataMessage] = codepages::UnsupportedDataMessage(Data);
 
 	string const Messages[]
 	{
@@ -209,25 +216,56 @@ static bool dlgBadEditorCodepage(uintptr_t& codepage, bytes_view const ErrorByte
 	cp_val = codepage;
 
 	std::vector<DialogBuilderListItem> Items;
-	codepages::instance().FillCodePagesList(Items, true, false, true, false, false);
+	codepages::instance().FillCodePagesList(Items, IsLoad, false, IsLoad, false, false);
 
 	const auto MaxLength = std::ranges::fold_left(Messages, 0uz, [](size_t const Value, string const& i){ return std::max(Value, i.size()); });
 
 	Builder.AddComboBox(cp_val, static_cast<int>(std::max(MaxLength, 46uz)), Items);
+	const auto ComboboxId = Builder.GetLastID();
 
 	add_line(Messages[1]);
 	add_line(Messages[2]);
 	add_line(Messages[3]);
 
-	Builder.AddOKCancel();
+	if (IsLoad)
+		Builder.AddOKCancel();
+	else
+	{
+		Builder.AddSeparator();
+		Builder.AddButtons({{ lng::MEditorSaveCPWarnShow, lng::MEditorSave, lng::MCancel }});
+	}
+
+	const auto ProceedButtonId = Builder.GetLastID() - 1;
+
 	Builder.SetDialogMode(DMODE_WARNINGSTYLE);
 	Builder.SetId(BadEditorCodePageId);
 
-	if (!Builder.ShowDialog())
-		return false;
+	Builder.SetHandler([&](Dialog* const Dlg, intptr_t const Msg, intptr_t const Param1, void* const Param2)
+	{
+		switch (Msg)
+		{
+		case DN_EDITCHANGE:
+			if (!IsLoad && static_cast<size_t>(Param1) == ComboboxId)
+				Dlg->SendMessage(DM_SETFOCUS, ProceedButtonId, {});
+			break;
+		}
 
-	codepage = cp_val;
-	return true;
+		return Dlg->DefProc(Msg, Param1, Param2);
+	});
+
+	const auto Result = Builder.ShowDialogEx();
+	const auto CancelButtonId = IsLoad? 1 : 2;
+
+	if (Result < 0 || Result == CancelButtonId)
+		return badcp_action::cancel;
+
+	if (IsLoad || Result == 1)
+	{
+		codepage = cp_val;
+		return badcp_action::proceed;
+	}
+
+	return badcp_action::show;
 }
 
 enum enumSaveFileAs
@@ -1543,7 +1581,7 @@ bool FileEditor::LoadFile(const string_view Name, int& UserBreak, error_state_ex
 			{
 				BadConversion = true;
 				uintptr_t cp = m_codepage;
-				if (!dlgBadEditorCodepage(cp, ErrorBytes)) // cancel
+				if (BadCodepageDialog(true, cp, bytes{ ErrorBytes }) == badcp_action::cancel)
 				{
 					EditFile.Close();
 					SetLastError(ERROR_OPEN_FAILED); //????
@@ -1713,15 +1751,8 @@ bool FileEditor::ReloadFile(uintptr_t codepage)
 	}
 }
 
-// Eol and Codepage are used ONLY if bSaveAs = true!
-int FileEditor::SaveFile(const string_view Name, bool bSaveAs, error_state_ex& ErrorState, eol Eol, uintptr_t Codepage, bool AddSignature)
+int FileEditor::SaveFile(const string_view Name, bool bSaveAs, error_state_ex& ErrorState, eol Eol, uintptr_t& Codepage, bool AddSignature)
 {
-	if (!bSaveAs)
-	{
-		Eol = eol::none;
-		Codepage=m_editor->GetCodePage();
-	}
-
 	SCOPED_ACTION(taskbar::indeterminate);
 	SCOPED_ACTION(wakeful);
 
@@ -1826,10 +1857,15 @@ int FileEditor::SaveFile(const string_view Name, bool bSaveAs, error_state_ex& E
 	// 2025-05-31 MZK  And the file is not ephemeral anymore
 	m_Flags.Clear(FFILEEDIT_DELETEONCLOSE | FFILEEDIT_DELETEONLYFILEONCLOSE | FFILEEDIT_EPHEMERAL);
 
-	if (!IsUtfCodePage(Codepage))
+	for (;;)
 	{
+		if (IsUtfCodePage(Codepage))
+			break;
+
 		int LineNumber=-1;
 		encoding::diagnostics Diagnostics;
+
+		const auto CurrentCodepage = Codepage;
 
 		for(auto& Line: m_editor->Lines)
 		{
@@ -1844,24 +1880,12 @@ int FileEditor::SaveFile(const string_view Name, bool bSaveAs, error_state_ex& E
 
 			if (Diagnostics.ErrorPosition)
 			{
-				const auto [UsupportedData, UsupportedDataMessage] = codepages::UnsupportedDataMessage(SaveStr[*Diagnostics.ErrorPosition]);
+				const auto Result = BadCodepageDialog(false, Codepage, SaveStr[*Diagnostics.ErrorPosition]);
 
-				//SetMessageHelp(L"EditorDataLostWarning")
-				const auto Result = Message(MSG_WARNING,
-					msg(lng::MWarning),
-					{
-						msg(lng::MUnsupportedCodePageSelectedCodepage),
-						codepages::FormatName(Codepage),
-						far::vformat(msg(lng::MUnsupportedCodePageDoesNotSupport), msg(UsupportedDataMessage)),
-						UsupportedData,
-						msg(lng::MEditorSaveNotRecommended)
-					},
-					{ lng::MEditorSaveCPWarnShow, lng::MEditorSave, lng::MCancel });
-
-				if (Result == message_result::second_button)
+				if (Result == badcp_action::proceed)
 					break;
 
-				if(Result == message_result::first_button)
+				if(Result == badcp_action::show)
 				{
 					m_editor->GoToLine(LineNumber);
 					if(!ValidStr)
@@ -1877,6 +1901,9 @@ int FileEditor::SaveFile(const string_view Name, bool bSaveAs, error_state_ex& E
 				return SAVEFILE_CANCEL;
 			}
 		}
+
+		if (CurrentCodepage == Codepage)
+			break;
 	}
 
 	const string NameForPlugin(Name);
@@ -2639,15 +2666,16 @@ intptr_t FileEditor::EditorControl(int Command, intptr_t Param1, void *Param2)
 	const auto result = m_editor->EditorControl(Command, Param1, Param2);
 	if (result&&ECTL_GETINFO==Command)
 	{
-		const auto Info=static_cast<EditorInfo*>(Param2);
+		auto& Info = *static_cast<EditorInfo*>(Param2);
 		if (m_bAddSignature)
-			Info->Options|=EOPT_BOM;
+			Info.Options |= EOPT_BOM;
 		if (Global->Opt->EdOpt.ShowTitleBar)
-			Info->Options|=EOPT_SHOWTITLEBAR;
+			Info.Options |= EOPT_SHOWTITLEBAR;
 		if (Global->Opt->EdOpt.ShowKeyBar)
-			Info->Options|=EOPT_SHOWKEYBAR;
-		if (CheckStructSize(Info, &EditorInfo::WindowArea))
-			Info->WindowArea = GetPosition().as<RECT>();
+			Info.Options |= EOPT_SHOWKEYBAR;
+		Info.CodePage = m_codepage;
+		if (CheckStructSize(&Info, &EditorInfo::WindowArea))
+			Info.WindowArea = GetPosition().as<RECT>();
 	}
 	return result;
 }

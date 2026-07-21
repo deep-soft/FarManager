@@ -522,16 +522,25 @@ namespace
 		return !(Item.Flags & (LIF_HIDDEN | LIF_FILTERED));
 	}
 
-	string_view get_item_text(const menu_item_ex& Item)
+	string_view get_item_text(const menu_item& Item)
 	{
-		return Item.Name;
+		return Item.GetName();
+	}
+
+	int get_item_visual_length(const menu_item& Item, const bool ShowAmpersand)
+	{
+		if (Item.VisualLength != Item.InvalidVisualLength)
+			return Item.VisualLength;
+
+		const auto ItemText{ get_item_text(Item) };
+		return Item.VisualLength = static_cast<int>(ShowAmpersand ? visual_string_length(ItemText) : HiStrlen(ItemText));
 	}
 
 	std::pair<int, int> item_hpos_limits(const int ItemLength, const int TextAreaWidth, const item_hscroll_policy Policy) noexcept
 	{
 		using enum item_hscroll_policy;
 
-		assert(ItemLength > 0);
+		assert(ItemLength >= 0);
 		assert(TextAreaWidth > 0);
 
 		switch (Policy)
@@ -540,7 +549,9 @@ namespace
 			return{ std::numeric_limits<int>::min(), std::numeric_limits<int>::max()};
 
 		case cling_to_edge:
-			return{ 1 - ItemLength, TextAreaWidth - 1 };
+			return ItemLength > 0
+				? std::pair{ 1 - ItemLength, TextAreaWidth - 1 }
+				: std::pair{ 0, TextAreaWidth };
 
 		case bound:
 			return{ std::min(0, TextAreaWidth - ItemLength), std::max(0, TextAreaWidth - ItemLength) };
@@ -970,7 +981,7 @@ bool VMenu::UpdateItem(const FarListUpdate *NewItem)
 		Item.ComplexUserData = {};
 	}
 
-	Item.Name = NullToEmpty(NewItem->Item.Text);
+	Item.SetName(NullToEmpty(NewItem->Item.Text));
 	UpdateItemFlags(NewItem->Index, NewItem->Item.Flags);
 	Item.SimpleUserData = NewItem->Item.UserData;
 
@@ -1385,7 +1396,7 @@ long long VMenu::VMProcess(int OpCode, void* vParam, long long iParam)
 			const auto& menuEx = at(iParam);
 			if (OpCode == MCODE_F_MENU_GETVALUE)
 			{
-				*static_cast<string*>(vParam) = menuEx.Name;
+				*static_cast<string*>(vParam) = menuEx.GetName();
 				return 1;
 			}
 			else
@@ -1422,7 +1433,7 @@ long long VMenu::VMProcess(int OpCode, void* vParam, long long iParam)
 		{
 			if (!HasVisible())
 				return 0;
-			*static_cast<string*>(vParam) = at(SelectPos).Name;
+			*static_cast<string*>(vParam) = at(SelectPos).GetName();
 			return 1;
 		}
 
@@ -1894,13 +1905,15 @@ bool VMenu::ProcessKey(const Manager::Key& Key)
 		}
 		case KEY_MSWHEEL_UP:
 		{
-			SetSelectPos(SelectPos - 1, -1, true);
+			FarListPos Pos{ sizeof(Pos), SelectPos - 1, TopPos - 1 };
+			SetSelectPos(&Pos);
 			DrawMenu();
 			break;
 		}
 		case KEY_MSWHEEL_DOWN:
 		{
-			SetSelectPos(SelectPos + 1, 1, true);
+			FarListPos Pos{ sizeof(Pos), SelectPos + 1, TopPos + 1 };
+			SetSelectPos(&Pos);
 			DrawMenu();
 			break;
 		}
@@ -2073,6 +2086,8 @@ bool VMenu::ClickHandler(window* Menu, int const MenuClick)
 
 bool VMenu::ProcessMouse(const MOUSE_EVENT_RECORD *MouseEvent)
 {
+	// Need to use menu_layout instead of hard-coded positions relative to m_Where
+
 	if (IsMouseButtonEvent(MouseEvent->dwEventFlags) && MouseEvent->dwButtonState && !m_Where.contains(MouseEvent->dwMousePosition))
 	{
 		const auto NewButtonState = MouseEvent->dwButtonState & ~IntKeyState.PrevMouseButtonState;
@@ -2340,12 +2355,7 @@ bool VMenu::SetItemHPos(menu_item_ex& Item, const auto& GetNewHPos)
 	if (Item.Flags & LIF_SEPARATOR) return false;
 
 	const auto ItemLength{ GetItemVisualLength(Item) };
-	if (ItemLength <= 0)
-	{
-		assert(Item.HorizontalPosition == 0);
-		m_HorizontalTracker->update_item_hpos(Item.HorizontalPosition, 0, 0, 0);
-		return false;
-	}
+	assert(ItemLength >= 0);
 
 	const auto NewHPos = [&]
 	{
@@ -2815,16 +2825,17 @@ void VMenu::ConnectSeparator(const size_t ItemIndex, string& separator, const in
 	if (CheckFlags(VMENU_NOMERGEBORDER) || !m_FixedColumns.empty() || separator.size() <= 3)
 		return;
 
+	// Bug! The code below does not account for wide characters
 	for (const auto I : std::views::iota(0uz, separator.size() - 3))
 	{
 		const auto AnyPrev = ItemIndex > 0 && Items[ItemIndex - 1].HorizontalPosition == 0;
 		const auto AnyNext = ItemIndex < Items.size() - 1 && Items[ItemIndex + 1].HorizontalPosition == 0;
 
-		const auto PCorrection = AnyPrev && !CheckFlags(VMENU_SHOWAMPERSAND)? HiFindRealPos(Items[ItemIndex - 1].Name, I) - I : 0;
-		const auto NCorrection = AnyNext && !CheckFlags(VMENU_SHOWAMPERSAND)? HiFindRealPos(Items[ItemIndex + 1].Name, I) - I : 0;
+		const auto PCorrection = AnyPrev && !CheckFlags(VMENU_SHOWAMPERSAND)? HiFindRealPos(Items[ItemIndex - 1].GetName(), I) - I : 0;
+		const auto NCorrection = AnyNext && !CheckFlags(VMENU_SHOWAMPERSAND)? HiFindRealPos(Items[ItemIndex + 1].GetName(), I) - I : 0;
 
-		wchar_t PrevItem = (AnyPrev && Items[ItemIndex - 1].Name.size() > I + PCorrection)? Items[ItemIndex - 1].Name[I + PCorrection] : 0;
-		wchar_t NextItem = (AnyNext && Items[ItemIndex + 1].Name.size() > I + NCorrection)? Items[ItemIndex + 1].Name[I + NCorrection] : 0;
+		wchar_t PrevItem = (AnyPrev && Items[ItemIndex - 1].GetName().size() > I + PCorrection)? Items[ItemIndex - 1].GetName()[I + PCorrection] : 0;
+		wchar_t NextItem = (AnyNext && Items[ItemIndex + 1].GetName().size() > I + NCorrection)? Items[ItemIndex + 1].GetName()[I + NCorrection] : 0;
 
 		if (!PrevItem && !NextItem)
 			break;
@@ -2845,14 +2856,15 @@ void VMenu::ConnectSeparator(const size_t ItemIndex, string& separator, const in
 
 void VMenu::ApplySeparatorName(const menu_item_ex& Item, string& separator) const
 {
-	if (Item.Name.empty() || separator.size() <= 3)
+	if (Item.GetName().empty() || separator.size() <= 3)
 		return;
 
-	auto NameWidth{ std::min(Item.Name.size(), separator.size() - 2) };
+	// Bug! The code below does not account for wide characters
+	auto NameWidth{ std::min(Item.GetName().size(), separator.size() - 2) };
 	auto NamePos{ (separator.size() - NameWidth) / 2 };
 
 	separator[NamePos - 1] = L' ';
-	separator.replace(NamePos, NameWidth, fit_to_left(Item.Name, NameWidth));
+	separator.replace(NamePos, NameWidth, fit_to_left(Item.GetName(), NameWidth));
 	separator[NamePos + NameWidth] = L' ';
 }
 
@@ -2950,13 +2962,16 @@ bool VMenu::DrawItemText(
 	if (const auto Indent{ std::max(Item.HorizontalPosition, 0) }; Indent > 0)
 	{
 		GotoXY(TextArea.start(), Y);
-		if (ClippedText(BlankLine.substr(0, Indent), TextArea)) return true;
+		if (ClippedText(BlankLine.substr(0, Indent), TextArea))
+			return Indent > TextArea.length() || !get_item_text(Item).empty();
 		// Sanity check: one space (U+0020) occupies one screen cell
 		assert(WhereX() == TextArea.start() + Indent);
 	}
 
+	// If get_item_text(Item).empty(), the loop below still works correctly.
+	// Since it does not advance CurX, filling the right margin after the loop works as expected.
 	const auto [ItemText, Highlight] { GetItemTextWithHighlight(Item) };
-	const auto Markup{ markup_highlight(string_view{ ItemText }, Highlight) };
+	const auto Markup{ markup_highlight(ItemText, Highlight) };
 	const std::array MarkupColors{ ColorIndices.Normal, ColorIndices.Highlighted, ColorIndices.Normal };
 	static_assert(Markup.size() == MarkupColors.size());
 
@@ -3432,7 +3447,7 @@ FarListItem *VMenu::MenuItem2FarList(const menu_item_ex *MItem, FarListItem *FIt
 	{
 		*FItem = {};
 		FItem->Flags = MItem->Flags;
-		FItem->Text = MItem->Name.c_str();
+		FItem->Text = MItem->GetName().c_str();
 		FItem->UserData = MItem->SimpleUserData;
 		return FItem;
 	}
@@ -3512,7 +3527,7 @@ bool VMenu::Pack()
 			if (!(Items[FirstIndex].Flags & LIF_SEPARATOR) && !(Items[LastIndex].Flags & LIF_SEPARATOR))
 			{
 				// Not using get_item_text because... just in case
-				if (Items[FirstIndex].Name == Items[LastIndex].Name)
+				if (Items[FirstIndex].GetName() == Items[LastIndex].GetName())
 				{
 					DeleteItem(static_cast<int>(LastIndex));
 				}
@@ -3534,27 +3549,27 @@ const UUID& VMenu::Id() const
 	return MenuId;
 }
 
-std::vector<string> VMenu::AddHotkeys(std::span<menu_item> const MenuItems)
+void VMenu::DecorateItemsWithHotkeys(std::span<menu_item> const MenuItems, const bool ShowAmpersand)
 {
-	std::vector<string> Result(MenuItems.size());
-
-	const size_t MaxLength = std::ranges::fold_left(MenuItems, 0uz, [](size_t Value, const auto& i)
+	const auto MaxVisualLength = std::ranges::fold_left(MenuItems, 0, [ShowAmpersand](const auto Acc, const auto& Item)
 	{
-		return std::max(Value, i.Name.size());
+		return std::max(Acc, get_item_visual_length(Item, ShowAmpersand));
 	});
 
-	for (const auto& [Item, Str]: zip(MenuItems, Result))
+	for (auto& Item : MenuItems)
 	{
 		if (Item.Flags & LIF_SEPARATOR || !Item.AccelKey)
 			continue;
 
-		const auto Key = KeyToLocalizedText(Item.AccelKey);
-		const auto Hl = HiStrlen(Item.Name) != visual_string_length(Item.Name);
-		Str = fit_to_left(Item.Name, MaxLength + (Hl? 2 : 1)) + Key;
-		Item.Name = Str;
+		// `fit_to_left` always preserves ampersand which occupies exactly one screen cell. In other words,
+		// it accounts for the same number of screen cell as calculated by `visual_string_length`.
+		// If we show ampersand, an item occupies same number of screen cells as `fit_to_left` accounted for.
+		// If we do not show ampersand and an item actually has ampersand, it will occupy one screen cell less than
+		// `fit_to_left` accounted for, so we need to add an extra space to compensate for disappeared ampersand.
+		const auto Hl{ !ShowAmpersand
+			&& get_item_visual_length(Item, false) != static_cast<int>(visual_string_length(get_item_text(Item))) };
+		Item.SetName(fit_to_left(Item.GetName(), MaxVisualLength + (Hl? 2 : 1)) + KeyToLocalizedText(Item.AccelKey));
 	}
-
-	return Result;
 }
 
 int VMenu::GetNaturalMenuWidth() const
@@ -3584,8 +3599,7 @@ int VMenu::CalculateTextAreaWidth() const
 
 int VMenu::GetItemVisualLength(const menu_item_ex& Item) const
 {
-	const auto ItemText{ get_item_text(Item) };
-	return static_cast<int>(CheckFlags(VMENU_SHOWAMPERSAND) ? visual_string_length(ItemText) : HiStrlen(ItemText));
+	return get_item_visual_length(Item, CheckFlags(VMENU_SHOWAMPERSAND));
 }
 
 int VMenu::SafeGetItemAnnotationStart(const menu_item_ex& Item) const
@@ -3721,6 +3735,7 @@ TEST_CASE("item.hpos.limits")
 	}
 	TestDataPoints[]
 	{
+		{  0, 5, { {  0, 5 }, {  0, 5 }, {  0, 0 } } },
 		{  1, 5, { {  0, 4 }, {  0, 4 }, {  0, 0 } } },
 		{  3, 5, { { -2, 4 }, {  0, 2 }, {  0, 0 } } },
 		{  5, 5, { { -4, 4 }, {  0, 0 }, {  0, 0 } } },
