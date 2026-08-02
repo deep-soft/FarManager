@@ -1,4 +1,4 @@
-# 2026-05-14 # 2026-03-01 # 2026-02-01 # 2025-07-02 07:30 # 2024-09-02 00:40
+# 2026-08-02 # 2026-05-14 # 2026-03-01 # 2026-02-01 # 2025-07-02 07:30 # 2024-09-02 00:40
 # far.sln, source archive # copy files from extra folder, soft_fast_search patch
 name: Build release VC
 
@@ -93,11 +93,11 @@ jobs:
 #         msbuild_cl_x86_debug,
         ]
         include:
-#          - { build: msbuild_cl_x64_release,   compiler: msbuild_cl, arch: amd64,       platform_sln: x64,   platform_name: x64,   build_config: Release }
-#          - { build: msbuild_cl_x86_release,   compiler: msbuild_cl, arch: amd64_x86,   platform_sln: Win32, platform_name: x86,   build_config: Release }
-#          - { build: msbuild_cl_ARM64_release, compiler: msbuild_cl, arch: amd64_arm64, platform_sln: ARM64, platform_name: ARM64, build_config: Release }
-          - { build: msbuild_cl_x64_debug,     compiler: msbuild_cl, arch: amd64,       platform_sln: x64,   platform_name: x64,   build_config: Debug   }
-#          - { build: msbuild_cl_x86_debug,     compiler: msbuild_cl, arch: amd64_x86,   platform_sln: Win32, platform_name: x86,   build_config: Debug   }
+#          - { build: msbuild_cl_x64_release,   compiler: msbuild_cl, arch: amd64,       platform_sln: x64,   platform_name: x64,   build_type: Release }
+#          - { build: msbuild_cl_x86_release,   compiler: msbuild_cl, arch: amd64_x86,   platform_sln: Win32, platform_name: x86,   build_type: Release }
+#          - { build: msbuild_cl_ARM64_release, compiler: msbuild_cl, arch: amd64_arm64, platform_sln: ARM64, platform_name: ARM64, build_type: Release }
+          - { build: msbuild_cl_x64_debug,     compiler: msbuild_cl, arch: amd64,       platform_sln: x64,   platform_name: x64,   build_type: Debug   }
+#          - { build: msbuild_cl_x86_debug,     compiler: msbuild_cl, arch: amd64_x86,   platform_sln: Win32, platform_name: x86,   build_type: Debug   }
 #        exclude:
 #          - { build: msbuild_cl_x64_release   }: ${{ inputs.msbuild_cl_x64_release_input   != true }}
 #          - { build: msbuild_cl_x86_release   }: ${{ inputs.msbuild_cl_x86_release_input   != true }}
@@ -150,14 +150,14 @@ jobs:
           arch: ${{ matrix.arch }}
 
       - name: Set environment for debug build
-#        if: matrix.build_config  == 'Debug'
+#        if: matrix.build_type  == 'Debug'
         run: |
           Add-Content -Path $env:GITHUB_ENV -Value "DEBUG=1"
 
       - name: Build (cl)
         working-directory: _build/vc
         run: |
-          msbuild -m /property:Configuration=${{ matrix.build_config }} /property:Platform=${{ matrix.platform_sln }} far`.sln
+          msbuild -m /property:Configuration=${{ matrix.build_type }} /property:Platform=${{ matrix.platform_sln }} far.sln
 
       - name: Perform CodeQL Analysis
 #        if: matrix.build == 'msbuild_cl_x64_debug'
@@ -177,11 +177,11 @@ jobs:
 #         msbuild_cl_x86_debug,
         ]
         include:
-          - { build: msbuild_cl_x64_release,   compiler: msbuild_cl, arch: amd64,       platform_sln: x64,   platform_name: x64,   build_config: Release }
-          - { build: msbuild_cl_x86_release,   compiler: msbuild_cl, arch: amd64_x86,   platform_sln: Win32, platform_name: x86,   build_config: Release }
-          - { build: msbuild_cl_ARM64_release, compiler: msbuild_cl, arch: amd64_arm64, platform_sln: ARM64, platform_name: ARM64, build_config: Release }
-#          - { build: msbuild_cl_x64_debug,     compiler: msbuild_cl, arch: amd64,       platform_sln: x64,   platform_name: x64,   build_config: Debug   }
-#          - { build: msbuild_cl_x86_debug,     compiler: msbuild_cl, arch: amd64_x86,   platform_sln: Win32, platform_name: x86,   build_config: Debug   }
+          - { build: msbuild_cl_x64_release,   compiler: msbuild_cl, arch: amd64,       platform_sln: x64,   platform_name: x64,   build_type: Release }
+          - { build: msbuild_cl_x86_release,   compiler: msbuild_cl, arch: amd64_x86,   platform_sln: Win32, platform_name: x86,   build_type: Release }
+          - { build: msbuild_cl_ARM64_release, compiler: msbuild_cl, arch: amd64_arm64, platform_sln: ARM64, platform_name: ARM64, build_type: Release }
+#          - { build: msbuild_cl_x64_debug,     compiler: msbuild_cl, arch: amd64,       platform_sln: x64,   platform_name: x64,   build_type: Debug   }
+#          - { build: msbuild_cl_x86_debug,     compiler: msbuild_cl, arch: amd64_x86,   platform_sln: Win32, platform_name: x86,   build_type: Debug   }
 #        exclude:
 #          - { build: msbuild_cl_x64_release   }: ${{ inputs.msbuild_cl_x64_release_input   != true }}
 #          - { build: msbuild_cl_x86_release   }: ${{ inputs.msbuild_cl_x86_release_input   != true }}
@@ -253,14 +253,14 @@ jobs:
           arch: ${{ matrix.arch }}
 
       - name: Set environment for debug build
-        if: matrix.build_config  == 'Debug'
+        if: matrix.build_type  == 'Debug'
         run: |
           Add-Content -Path $env:GITHUB_ENV -Value "DEBUG=1"
 
       - name: Build (cl)
         working-directory: _build/vc
         run: |
-          msbuild -m /property:Configuration=${{ matrix.build_config }} /property:Platform=${{ matrix.platform_sln }} far`.sln
+          msbuild -m /property:Configuration=${{ matrix.build_type }} /property:Platform=${{ matrix.platform_sln }} far.sln
 
       - name: Perform CodeQL Analysis
         if: matrix.build == 'msbuild_cl_x64_debug'
@@ -268,10 +268,10 @@ jobs:
 
 #       - name: Create zip
 #         continue-on-error: true
-#         working-directory: _build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}
+#         working-directory: _build/vc/_output/product/${{ matrix.build_type }}.${{ matrix.platform_sln }}
 #         run: |
 #           dir ./
-#           Compress-Archive . ../${{ env.PROG_NAME }}.${{ matrix.build_config }}.${{ matrix.platform_sln }}.${{ env.VERSION }}.zip
+#           Compress-Archive . ../${{ env.PROG_NAME }}.${{ matrix.build_type }}.${{ matrix.platform_sln }}.${{ env.VERSION }}.zip
 #           dir ../
 
       - name: Add file from extra folder
@@ -281,15 +281,15 @@ jobs:
           pushd extra;
           rm -R ./Documentation/pol || true;
           rm -R ./Documentation/rus || true;
-          cp -R * '../_build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}' || true;
+          cp -R * '../_build/vc/_output/product/${{ matrix.build_type }}.${{ matrix.platform_sln }}' || true;
           popd;
-          ls -la '_build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}' || true;
+          ls -la '_build/vc/_output/product/${{ matrix.build_type }}.${{ matrix.platform_sln }}' || true;
 
       - name: Add extra plugins NetBox
         continue-on-error: true
         shell: bash
         run: |
-          pushd '_build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}/Plugins';
+          pushd '_build/vc/_output/product/${{ matrix.build_type }}.${{ matrix.platform_sln }}/Plugins';
           for extra_plug in Far-NetBox ; do
             mkdir $extra_plug;
             cd $extra_plug;
@@ -319,7 +319,7 @@ jobs:
         continue-on-error: true
         shell: bash
         run: |
-          pushd '_build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}/Plugins';
+          pushd '_build/vc/_output/product/${{ matrix.build_type }}.${{ matrix.platform_sln }}/Plugins';
           for extra_plug in Far-Colorer ; do
             mkdir $extra_plug;
             cd $extra_plug;
@@ -371,47 +371,47 @@ jobs:
           password: '${{ secrets.WINDOWS_PFX_PASSWORD }}'
           certificatesha1: '${{ secrets.WINDOWS_PFX_SHA1_THUMBPRINT }}'
           # certificatename: '${{ secrets.CERTNAME }}'
-          folder: '_build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}'
+          folder: '_build/vc/_output/product/${{ matrix.build_type }}.${{ matrix.platform_sln }}'
           recursive: true
 
       - name: Create Zip Archive Release
-        if: matrix.build_config  == 'Release'
+        if: matrix.build_type  == 'Release'
         uses: deep-soft/zip-release@v2
         with:
           type: 'zip'
           filename: '${{ env.PROG_NAME }}.${{ matrix.platform_sln }}.${{ env.VERSION }}.zip'
-          directory: '_build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}'
+          directory: '_build/vc/_output/product/${{ matrix.build_type }}.${{ matrix.platform_sln }}'
           exclusions: '*.map *.pdb'
           recursive_exclusions: '*.map *.pdb changelog *Bel.lng *Cze.lng *Ger.lng *Hun.lng *Ita.lng *Lit.lng *Pol.lng *Por.lng *Rus.lng *Sky.lng *Spa.lng *Ukr* *Bel.hlf *Cze.hlf *Ger.hlf *Hun.hlf *Ita.hlf *Lit.hlf *Pol.hlf *Por.hlf *Rus.hlf *Sky.hlf *Spa.hlf *Ukr*'
           path: '.'
 
       - name: Upload zip
-        if: matrix.build_config  == 'Release'
+        if: matrix.build_type  == 'Release'
         continue-on-error: true
         uses: deep-soft/upload-artifact@v7
         with:
           name: ${{ env.PROG_NAME }}.${{ matrix.platform_name }}.${{ env.VERSION }}.zip
-          #path: _build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}/${{ env.PROG_NAME }}.${{ matrix.build_config }}.${{ matrix.platform_sln }}.${{ env.VERSION }}.zip
+          #path: _build/vc/_output/product/${{ matrix.build_type }}.${{ matrix.platform_sln }}/${{ env.PROG_NAME }}.${{ matrix.build_type }}.${{ matrix.platform_sln }}.${{ env.VERSION }}.zip
           path: ${{ env.ZIP_RELEASE_ARCHIVE }}
 
       - name: Upload folder
-        if: matrix.build_config  == 'Debug'
+        if: matrix.build_type  == 'Debug'
         continue-on-error: true
         uses: deep-soft/upload-artifact@v7
         with:
-          name: ${{ env.PROG_NAME }}.${{ matrix.build_config }}.${{ matrix.platform_name }}
-          path: _build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}
+          name: ${{ env.PROG_NAME }}.${{ matrix.build_type }}.${{ matrix.platform_name }}
+          path: _build/vc/_output/product/${{ matrix.build_type }}.${{ matrix.platform_sln }}
 
 #      - name: Create list file
 #        continue-on-error: true
 #        shell: bash
 #        run: |
-#          list_file="${{ env.PROG_NAME }}.${{ matrix.build }}-${{ matrix.compiler }}-${{ matrix.arch }}-${{ matrix.platform_sln }}-${{ matrix.platform_name }}-${{ matrix.build_config }}.txt"
+#          list_file="${{ env.PROG_NAME }}.${{ matrix.build }}-${{ matrix.compiler }}-${{ matrix.arch }}-${{ matrix.platform_sln }}-${{ matrix.platform_name }}-${{ matrix.build_type }}.txt"
 #          ls -lR > $list_file
 #          echo "LIST_File=$list_file" >> $GITHUB_ENV
 
       - name: Publish
-        if: matrix.build_config  == 'Release'
+        if: matrix.build_type  == 'Release'
         continue-on-error: true
         uses: deep-soft/action-gh-release@v3
         with:
@@ -423,7 +423,7 @@ jobs:
             ${{ env.ASSET_SRC }}
 
       - name: Prepare latest Release
-        if: matrix.build_config  == 'Release'
+        if: matrix.build_type  == 'Release'
         continue-on-error: false
         shell: bash
         run: |
@@ -431,7 +431,7 @@ jobs:
           echo "${{ env.VERSION }}" > ${{ env.PROG_NAME }}-latest.txt
 
       - name: Publish latest Release
-        if: matrix.build_config  == 'Release'
+        if: matrix.build_type  == 'Release'
         continue-on-error: false
         uses: deep-soft/action-gh-release@v3
         with:
@@ -452,7 +452,7 @@ jobs:
         continue-on-error: true
         shell: bash
         run: |
-          pushd '_build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}'
+          pushd '_build/vc/_output/product/${{ matrix.build_type }}.${{ matrix.platform_sln }}'
           curl -LOJ "https://github.com/deep-soft/DS-Progs/raw/main/bin/Far3-Plugins-Extra.zip"
           curl -LOJ "https://github.com/deep-soft/DS-Progs/raw/main/bin/Far3-Profile.zip"
           7z x Far3-Plugins-Extra.zip
@@ -470,7 +470,7 @@ jobs:
           password: '${{ secrets.WINDOWS_PFX_PASSWORD }}'
           certificatesha1: '${{ secrets.WINDOWS_PFX_SHA1_THUMBPRINT }}'
           # certificatename: '${{ secrets.CERTNAME }}'
-          folder: '_build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}'
+          folder: '_build/vc/_output/product/${{ matrix.build_type }}.${{ matrix.platform_sln }}'
           recursive: true
 
       - name: extra - Create Zip Archive Release
@@ -479,7 +479,7 @@ jobs:
         with:
           type: 'zip'
           filename: '${{ env.PROG_NAME }}.${{ matrix.platform_sln }}.${{ env.VERSION }}-extra.zip'
-          directory: '_build/vc/_output/product/${{ matrix.build_config }}.${{ matrix.platform_sln }}'
+          directory: '_build/vc/_output/product/${{ matrix.build_type }}.${{ matrix.platform_sln }}'
           exclusions: '*.map *.pdb'
           recursive_exclusions: '*.map *.pdb changelog *Bel.lng *Cze.lng *Ger.lng *Hun.lng *Ita.lng *Lit.lng *Pol.lng *Por.lng *Rus.lng *Sky.lng *Spa.lng *Ukr* *Bel.hlf *Cze.hlf *Ger.hlf *Hun.hlf *Ita.hlf *Lit.hlf *Pol.hlf *Por.hlf *Rus.hlf *Sky.hlf *Spa.hlf *Ukr*'
           path: '.'
