@@ -9,7 +9,7 @@
   <PropertyGroup Label="UserMacros">
     <ProjectSpecificOutDirName>Plugins\..</ProjectSpecificOutDirName>
     <ProjectSpecificIntDirName>Plugins\luamacro\$(ProjectName)</ProjectSpecificIntDirName>
-    <VersionLuaSDK>20250712</VersionLuaSDK>
+    <VersionLuaSDK>20260801</VersionLuaSDK>
     <DirBit Condition="'$(Platform)'=='Win32'">32</DirBit>
     <DirBit Condition="'$(Platform)'=='x64'">64</DirBit>
     <DirBit Condition="'$(Platform)'=='ARM64'">ARM64</DirBit>
@@ -47,6 +47,13 @@
     <ClCompile Include="luafar\lf_usercontrol.c" />
     <ClCompile Include="luafar\lf_reg.c" />
     <ClCompile Include="luafar\lf_service.c" />
+    <ClCompile Include="luafar\lf_flags.c" />
+    <ClCompile Include="luafar\lf_editor.c" />
+    <ClCompile Include="luafar\lf_dialog.c" />
+    <ClCompile Include="luafar\lf_panel.c" />
+    <ClCompile Include="luafar\lf_advcontrol.c" />
+    <ClCompile Include="luafar\lf_macro.c" />
+    <ClCompile Include="luafar\lf_viewer.c" />
     <ClCompile Include="luafar\lf_slnunico.c">
       <WarningLevel>Level1</WarningLevel>
       <SDLCheck>false</SDLCheck>

@@ -27,6 +27,8 @@ _CRTIMP unsigned int __cdecl __MINGW_NOTHROW _control87 (unsigned int unNew, uns
 #define SYNCHRO_TIMER_UNREF 0x2
 #define SYNCHRO_FUNCTION    0x4
 
+#define PAIR(prefix,txt) {#txt, prefix ## _ ## txt}
+
 typedef struct
 {
 	lua_State *L;
@@ -81,6 +83,7 @@ void PushFarColor(lua_State *L, const struct FarColor* Color);
 HANDLE OptHandle(lua_State *L);
 void FillPluginPanelItem(lua_State *L, struct PluginPanelItem *pi, int CollectorPos);
 size_t aligned_size(size_t Size, size_t Alignment);
+TSynchroData* CreateSynchroData(int type, int data, TTimerData *td);
 
 typedef struct
 {

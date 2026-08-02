@@ -1,5 +1,5 @@
 NAME=luafar3
-VERSION_LUASDK=20250712
+VERSION_LUASDK=20260801
 USERCPP=/Iluasdk/include /DBUILD_DLL /DLUADLL=\"lua51.dll\"
 !ifndef LUA
 LUA=luasdk\$(VERSION_LUASDK)\32\lua.exe
@@ -27,6 +27,13 @@ $(INTDIR)\lf_luamacro.obj \
 $(INTDIR)\lf_usercontrol.obj \
 $(INTDIR)\lf_reg.obj \
 $(INTDIR)\lf_service.obj \
+$(INTDIR)\lf_flags.obj \
+$(INTDIR)\lf_editor.obj \
+$(INTDIR)\lf_dialog.obj \
+$(INTDIR)\lf_panel.obj \
+$(INTDIR)\lf_advcontrol.obj \
+$(INTDIR)\lf_macro.obj \
+$(INTDIR)\lf_viewer.obj \
 $(INTDIR)\lf_slnunico.obj \
 $(INTDIR)\lf_utf8lib.obj \
 $(INTDIR)\lf_liolib51.obj \

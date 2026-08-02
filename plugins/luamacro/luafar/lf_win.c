@@ -16,6 +16,7 @@ WARNING_POP()
 #include "lf_luafar.h"
 #include "lf_bit64.h"
 #include "lf_service.h"
+#include "lf_flags.h"
 
 typedef NTSTATUS(NTAPI* tpNtQueryInformationFile)(HANDLE FileHandle, PIO_STATUS_BLOCK IoStatusBlock, PVOID FileInformation, ULONG Length, FILE_INFORMATION_CLASS FileInformationClass);
 typedef NTSTATUS(NTAPI* tpNtSetInformationFile)(HANDLE FileHandle, PIO_STATUS_BLOCK IoStatusBlock, PVOID FileInformation, ULONG Length, FILE_INFORMATION_CLASS FileInformationClass);
@@ -1034,8 +1035,6 @@ static int win_GetEnvironmentStrings(lua_State *L)
 	FreeEnvironmentStringsW(buf);
 	return 1;
 }
-
-#define PAIR(prefix,txt) {#txt, prefix ## _ ## txt}
 
 const luaL_Reg win_funcs[] =
 {

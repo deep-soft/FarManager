@@ -3,12 +3,18 @@
 
 #define TKEY_BINARY "__binary"
 
-typedef int64_t flags_t;
-
-flags_t  OptFlags(lua_State* L, int pos, flags_t dflt);
-flags_t  GetFlagCombination(lua_State *L, int pos, int *success);
-flags_t  GetFlagsFromTable(lua_State *L, int pos, const char* key);
-void     PutFlagsToTable(lua_State *L, const char* key, flags_t flags);
+void     PutRECTToTable(lua_State *L, const char* key, RECT rect);
+int      SetKeyBar(lua_State *L, BOOL editor);
+void     GetOptGuid(lua_State *L, int pos, GUID* target, const GUID* source);
+void     PushEditorSetPosition(lua_State *L, const struct EditorSetPosition *esp);
+int      FillEditorSelect(lua_State *L, int pos_table, struct EditorSelect *es);
+void     FillEditorSetPosition(lua_State *L, struct EditorSetPosition *esp);
+void     OptInputRecord(lua_State* L, TPluginData *pd, int pos, INPUT_RECORD* ir);
+void     PushFarMacroValue(lua_State* L, const struct FarMacroValue* val);
+int      pcall_msg(lua_State* L, int narg, int nret);
+int      Dialog_getvalue(lua_State *L, int pos, HANDLE *target);
+void     PushPluginObject(lua_State* L, HANDLE hPlugin);
+void     PackMacroValues(lua_State* L, size_t Count, const struct FarMacroValue* Values);
 
 int      PushDMParams (lua_State *L, intptr_t Msg, intptr_t Param1);
 int      PushDNParams (lua_State *L, intptr_t Msg, intptr_t Param1, void *Param2);
