@@ -1,5 +1,5 @@
-# 2026-08-02 # 2026-05-14 # 2026-03-01 # 2026-02-01 # 2025-07-02 07:30 # 2024-09-02 00:40
-# far.sln, source archive # copy files from extra folder, soft_fast_search patch
+# 2026-08-03 # 2026-08-02 # 2026-05-14 # 2026-03-01 # 2026-02-01 # 2025-07-02 07:30 # 2024-09-02 00:40
+# far.slnx, far.sln, source archive # copy files from extra folder, soft_fast_search patch
 name: Build release VC
 
 on:
@@ -157,7 +157,7 @@ jobs:
       - name: Build (cl)
         working-directory: _build/vc
         run: |
-          msbuild -m /property:Configuration=${{ matrix.build_type }} /property:Platform=${{ matrix.platform_sln }} far.sln
+          msbuild -m /property:Configuration=${{ matrix.build_type }} /property:Platform=${{ matrix.platform_sln }} far.slnx
 
       - name: Perform CodeQL Analysis
 #        if: matrix.build == 'msbuild_cl_x64_debug'
@@ -260,7 +260,7 @@ jobs:
       - name: Build (cl)
         working-directory: _build/vc
         run: |
-          msbuild -m /property:Configuration=${{ matrix.build_type }} /property:Platform=${{ matrix.platform_sln }} far.sln
+          msbuild -m /property:Configuration=${{ matrix.build_type }} /property:Platform=${{ matrix.platform_sln }} far.slnx
 
       - name: Perform CodeQL Analysis
         if: matrix.build == 'msbuild_cl_x64_debug'
