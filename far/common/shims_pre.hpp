@@ -59,11 +59,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #if COMPILER(CLANG)
 
-WARNING_PUSH()
-WARNING_DISABLE_CLANG("-Wbuiltin-macro-redefined")
-// Seems to be broken in v20 or incompatible with libstdc++ headers
-#undef __cpp_explicit_this_parameter
-WARNING_POP()
+
 
 #endif
 
@@ -113,6 +109,7 @@ extern "C" _CRTIMP void _invalid_parameter(wchar_t const*, wchar_t const*, wchar
 extern "C" _CRTIMP void _invalid_parameter_noinfo();
 
 
+#ifndef _CRT_CONST_CORRECT_OVERLOADS
 // Current implementation of wcschr etc. in gcc removes const from the returned pointer. The issue has been opened since 2007.
 // These semi-magical defines and appropriate inline overloads in shims_post.hpp are intended to fix this madness.
 
@@ -121,6 +118,7 @@ extern "C" _CRTIMP void _invalid_parameter_noinfo();
 #define _CONST_RETURN const
 // Disable broken inline overloads
 #define __CORRECT_ISO_CPP_WCHAR_H_PROTO
+#endif
 
 #endif
 

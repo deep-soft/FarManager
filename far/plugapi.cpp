@@ -60,7 +60,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "keyboard.hpp"
 #include "message.hpp"
 #include "filefilter.hpp"
-#include "fileowner.hpp"
 #include "stddlg.hpp"
 #include "pathmix.hpp"
 #include "exitcode.hpp"
@@ -809,7 +808,7 @@ intptr_t WINAPI apiMenuFn(
 					Selected++;
 				}
 
-				CurItem.SetName(NullToEmpty(i.Text));
+				CurItem.set_name(NullToEmpty(i.Text));
 				if(CurItem.Flags&LIF_SEPARATOR)
 				{
 					CurItem.AccelKey=0;
@@ -2147,7 +2146,7 @@ size_t WINAPI apiGetFileOwner(const wchar_t *Computer, const wchar_t *Name, wcha
 	[&]
 	{
 		string strOwner;
-		if (!GetFileOwner(NullToEmpty(Computer), NullToEmpty(Name), strOwner))
+		if (!os::fs::get_file_owner(NullToEmpty(Name), NullToEmpty(Computer), strOwner))
 			return 0uz;
 
 		if (Owner && Size)
