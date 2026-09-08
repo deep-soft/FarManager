@@ -63,9 +63,14 @@ static std::wstring ui64toa_width(uint64_t value, unsigned width, bool bThousand
 	return str(value);
 }
 
+static size_t pad_width(size_t const MinWidth, size_t const StrSize)
+{
+	return StrSize < MinWidth? MinWidth - StrSize : 0;
+}
+
 static std::wstring PrintTitle(std::wstring_view const Msg)
 {
-	return far::format(L"{}:{:<{}} "sv, Msg, L""sv, 30 - Msg.size());
+	return far::format(L"{}:{:<{}} "sv, Msg, L""sv, pad_width(30, Msg.size()));
 }
 
 static std::wstring PrintTitle(int MsgId)
@@ -850,7 +855,7 @@ static void DumpNTCounters(HANDLE InfoFile, PerfThread& Thread, DWORD dwPid)
 			// 32-bit Counter.  Divide delta by delta time.  Display suffix: "/s"
 		case PERF_COUNTER_BULK_COUNT:
 			// 64-bit Counter.  Divide delta by delta time. Display Suffix: "/s"
-			WriteToFile(InfoFile, far::format(L"{:>27} {:>{}}{}\n"sv, ui64toa_width(pdata->qwCounters[i], 0, CounterType == counter_type::number), ui64toa_width(pdata->qwResults[i], 0, CounterType == counter_type::number), 8 - PerSec.size(), PerSec));
+			WriteToFile(InfoFile, far::format(L"{:>27} {:>{}}{}\n"sv, ui64toa_width(pdata->qwCounters[i], 0, CounterType == counter_type::number), ui64toa_width(pdata->qwResults[i], 0, CounterType == counter_type::number), pad_width(8, PerSec.size()), PerSec));
 			break;
 
 		default:

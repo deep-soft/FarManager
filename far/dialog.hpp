@@ -49,6 +49,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 //----------------------------------------------------------------------------
 
+class DlgEdit;
 class History;
 
 // Флаги текущего режима диалога
@@ -95,7 +96,7 @@ struct DialogItemEx: public FarDialogItem
 	string strData;
 	BitFlags IFlags;
 	std::vector<DialogItemAutomation> Auto;
-	void* ObjPtr{};
+	DlgEdit* Edit{};
 	vmenu_ptr ListPtr;
 	struct DlgUserControl* UCData{};
 
@@ -194,8 +195,6 @@ public:
 	static bool IsValid(Dialog* Handle);
 
 	bool InitOK() const {return bInitOK;}
-	void GetDialogObjectsData();
-	void GetDialogObjectsExpandData();
 	void SetDialogMode(DWORD Flags) { DialogMode.Set(Flags); }
 	bool CheckDialogMode(DWORD Flags) const { return DialogMode.Check(Flags); }
 	// метод для перемещения диалога
@@ -304,6 +303,8 @@ private:
 	rectangle CalcComboBoxPos(const DialogItemEx* CurItem, intptr_t ItemCount) const;
 	void ProcessKey(int Key, size_t ItemPos);
 	void ProcessDrag(const MOUSE_EVENT_RECORD *MouseEvent);
+	void GetDialogObjectsData();
+	void GetDialogObjectsExpandData();
 	bool IsEditableComboBox(size_t Index) const;
 	bool IsDropDownComboBox(size_t Index) const;
 	static bool ItemHasDropDownArrow(const DialogItemEx *Item);

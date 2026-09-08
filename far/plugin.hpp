@@ -441,10 +441,6 @@ enum FARDIALOGITEMTYPES
 	DI_USERCONTROL                  =255,
 };
 
-/*
-   Check diagol element type has inputstring?
-   (DI_EDIT, DI_FIXEDIT, DI_PSWEDIT, etc)
-*/
 static __inline BOOL IsEdit(enum FARDIALOGITEMTYPES Type)
 {
 	switch (Type)

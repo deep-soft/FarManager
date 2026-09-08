@@ -2576,8 +2576,8 @@ void FarMacroApi::dlggetvalueFunc() const
 
 						if (IsEdit(ItemType))
 						{
-							if (const auto EditPtr = static_cast<const DlgEdit*>(Item.ObjPtr))
-								Ret = EditPtr->GetString();
+							if (Item.Edit)
+								Ret = Item.Edit->GetString();
 						}
 
 						break;

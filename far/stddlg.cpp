@@ -394,7 +394,7 @@ SearchReplaceDlgResult GetSearchReplaceString(
 					if (!Picker) break;
 
 					// BUGBUG: #0003136: DM_INSERTTEXT or something like that
-					static_cast<DlgEdit*>(Dlg->GetAllItem()[dlg_edit_search_text].ObjPtr)->InsertString(Picker(Param1 == dlg_button_selection));
+					Dlg->GetAllItem()[dlg_edit_search_text].Edit->InsertString(Picker(Param1 == dlg_button_selection));
 					Dlg->SendMessage(DM_SETFOCUS, dlg_edit_search_text, nullptr);
 				}
 				return TRUE;

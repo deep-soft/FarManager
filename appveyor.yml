@@ -118,7 +118,7 @@ build_script:
   - curl --silent "https://api.github.com/repos/colorer/Colorer-schemes/releases/latest" | grep '"tag_name":' | sed -E 's/.*^"v([^^^"]+)^".*/\1/' > TEMP
   - set /p COLORER_SCHEMES_VERSION=<TEMP
   - echo "Download colorer schemes %COLORER_SCHEMES_VERSION%"
-  - set COLORER_SCHEMES_FILE_NAME=colorer-base.allpacked.%COLORER_SCHEMES_VERSION%.zip
+  - set COLORER_SCHEMES_FILE_NAME=colorer-base.allpacked.v%COLORER_SCHEMES_VERSION%.zip
   - set COLORER_SCHEMES_BASE_URL=https://github.com/colorer/Colorer-schemes/releases/download/v%COLORER_SCHEMES_VERSION%/
   - curl -fsLJO %COLORER_SCHEMES_BASE_URL%%COLORER_SCHEMES_FILE_NAME%
   - set COLORER_DIR=ci\%configuration%.%platform_name%\Plugins\FarColorer

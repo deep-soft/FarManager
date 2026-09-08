@@ -97,7 +97,7 @@ def parse_clang(map_file, map_data):
 
 def parse_gcc(map_file, map_data):
 	re_file = re.compile(r"^File \s+$")
-	re_file_name = re.compile(r"^\[ *[0-9]+\]\(.+\)\(.+\)\(.+\)\(.+\) \(nx 1\) 0x[0-9A-Fa-f]+ (.+)\s+$")
+	re_file_name = re.compile(r"^\[ *[0-9]+\]\(.+\)\(.+\)\(.+\)\(scl 103\) \(nx 1\) 0x[0-9A-Fa-f]+ (.+)\s+$")
 	re_symbol = re.compile(r"^\[ *[0-9]+\]\(.+\)\(.+\)\(.+\)\(.+\) \(nx 0\) 0x([0-9A-Fa-f]+) (.+)\s+$")
 	BaseAddress = 0x1000
 	last_line = None

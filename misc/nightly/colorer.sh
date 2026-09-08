@@ -37,7 +37,7 @@ function bcolorer {
     return 1
   fi
   echo "Download Colorer schemes ${COLORER_SCHEMES_VERSION}"
-  COLORER_SCHEMES_FILE_NAME=colorer-base.allpacked.${COLORER_SCHEMES_VERSION}.zip
+  COLORER_SCHEMES_FILE_NAME=colorer-base.allpacked.v${COLORER_SCHEMES_VERSION}.zip
 
   rm -f ${COLORER_SCHEMES_FILE_NAME}
 

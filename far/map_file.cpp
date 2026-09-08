@@ -179,8 +179,8 @@ static auto determine_format(std::istream& Stream)
 static void read_mini(std::istream& Stream, map_file::data& Data)
 {
 	RegExp ReObject, ReSymbol;
-	ReObject.Compile(L"^(\\d+) (.+)$"sv, OP_OPTIMIZE);
-	ReSymbol.Compile(L"^([0-9A-Fa-f]+) (\\d+) (.+)$"sv, OP_OPTIMIZE);
+	ReObject.Compile(LR"(^(\d+) (.+)$)"sv, OP_OPTIMIZE);
+	ReSymbol.Compile(LR"(^([0-9A-Fa-f]+) (\d+) (.+)$)"sv, OP_OPTIMIZE);
 
 	regex_match Match;
 	auto& m = Match.Matches;
@@ -304,8 +304,8 @@ static void read_gcc(std::istream& Stream, map_file::data& Data)
 {
 	RegExp ReFile, ReFileName, ReSymbol;
 	ReFile.Compile(L"^File $"sv);
-	ReFileName.Compile(L"^\\[ *[0-9]+\\]\\(.+\\)\\(.+\\)\\(.+\\)\\(.+\\) \\(nx 1\\) 0x[0-9A-Fa-f]+ (.+)$"sv);
-	ReSymbol.Compile(L"^\\[ *[0-9]+\\]\\(.+\\)\\(.+\\)\\(.+\\)\\(.+\\) \\(nx 0\\) 0x([0-9A-Fa-f]+) (.+)$"sv);
+	ReFileName.Compile(LR"(^\[ *[0-9]+\]\(.+\)\(.+\)\(.+\)\(scl 103\) \(nx 1\) 0x[0-9A-Fa-f]+ (.+)$)"sv);
+	ReSymbol.Compile(LR"(^\[ *[0-9]+\]\(.+\)\(.+\)\(.+\)\(.+\) \(nx 0\) 0x([0-9A-Fa-f]+) (.+)$)"sv);
 
 	regex_match Match;
 	auto& m = Match.Matches;

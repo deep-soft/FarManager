@@ -38,7 +38,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // Platform:
 
 // Common:
-#include "common/function_ref.hpp"
 #include "common/preprocessor.hpp"
 #include "common/source_location.hpp"
 

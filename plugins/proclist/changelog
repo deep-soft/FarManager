@@ -1,3 +1,9 @@
+drkns 2026-09-04 21:51:48+01:00 - build 225
+
+1. Fix crashes on long UI strings.
+
+2. Fix Ukrainian translation.
+
 drkns 2025-10-04 00:01:09+01:00 - build 224
 
 1. PCH.
