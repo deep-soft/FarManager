@@ -76,6 +76,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "platform.memory.hpp"
 
 // Common:
+#include "common/enum_substrings.hpp"
 #include "common/from_string.hpp"
 #include "common/scope_exit.hpp"
 #include "common/uuid.hpp"
@@ -113,12 +114,8 @@ static TVar Convert2TVar(const FarMacroValue &val)
 		case FMVT_STRING:  return TVar(val.String);
 		case FMVT_POINTER: return TVar(val.Pointer);
 		case FMVT_DIALOG:  return TVar(static_cast<Dialog*>(val.Pointer));
-		case FMVT_TABLE: {
-			TVar tv(val.Integer);
-			tv.SetType(TVar::Type::Table);
-			return tv;
-		}
-		default: return TVar();
+		case FMVT_TABLE:   return TVar(val.Integer, TVar::Type::Table);
+		default:           return TVar();
 	}
 }
 
@@ -1581,14 +1578,28 @@ void FarMacroApi::waitkeyFunc() const
 void FarMacroApi::minFunc() const
 {
 	const auto Params = parseParams(2);
-	PushValue(std::min(Params[0], Params[1]));
+
+	PushValue(std::min(Params[0], Params[1], [](TVar const& a, TVar const& b)
+	{
+		if (a.isDouble() || b.isDouble())
+			return a.asDouble() < b.asDouble();
+
+		return a.asInteger() < b.asInteger();
+	}));
 }
 
 // n=max(n1,n2)
 void FarMacroApi::maxFunc() const
 {
 	const auto Params = parseParams(2);
-	PushValue(std::max(Params[0], Params[1]));
+
+	PushValue(std::min(Params[0], Params[1], [](TVar const& a, TVar const& b)
+	{
+		if (a.isDouble() || b.isDouble())
+			return a.asDouble() > b.asDouble();
+
+		return a.asInteger() > b.asInteger();
+	}));
 }
 
 // n=mod(n1,n2)
@@ -1596,59 +1607,13 @@ void FarMacroApi::modFunc() const
 {
 	const auto Params = parseParams(2);
 
-	const auto NumeratorType = Params[0].ParseType();
-	const auto DenominatorType = Params[1].ParseType();
-
-	TVar Result;
-
-	switch(DenominatorType)
+	if (Params[0].isDouble() || Params[1].isDouble())
 	{
-	case TVar::Type::Unknown:
-	case TVar::Type::Integer:
-		if (const auto Denominator = Params[1].asInteger())
-		{
-			switch (NumeratorType)
-			{
-			case TVar::Type::Unknown:
-			case TVar::Type::Integer:
-				Result = Params[0].asInteger() % Denominator;
-				break;
-
-			case TVar::Type::Double:
-				Result = std::fmod(Params[0].asDouble(), Denominator);
-				break;
-
-			default:
-				break;
-			}
-		}
-		break;
-
-	case TVar::Type::Double:
-		if (const auto Denominator = Params[1].asDouble())
-		{
-			switch (NumeratorType)
-			{
-			case TVar::Type::Unknown:
-			case TVar::Type::Integer:
-				Result = std::fmod(Params[0].asInteger(), Denominator);
-				break;
-
-			case TVar::Type::Double:
-				Result = std::fmod(Params[0].asDouble(), Denominator);
-				break;
-
-			default:
-				break;
-			}
-		}
-		break;
-
-	default:
-		break;
+		PushValue(std::fmod(Params[0].asDouble(), Params[1].asDouble()));
+		return;
 	}
 
-	PushValue(Result);
+	PushValue(Params[0].asInteger() % Params[1].asInteger());
 }
 
 // N=index(S1,S2[,Mode])
@@ -1863,13 +1828,21 @@ void FarMacroApi::msgBoxFunc() const
 
 	auto Flags = static_cast<DWORD>(Params[2].asInteger());
 	Flags&=~(FMSG_KEEPBACKGROUND|FMSG_ERRORTYPE);
-	Flags|=FMSG_ALLINONE;
 
 	if (!extract_integer<WORD, 1>(Flags) || extract_integer<WORD, 1>(Flags) > extract_integer<WORD, 1>(FMSG_MB_RETRYCANCEL))
 		Flags|=FMSG_MB_OK;
 
-	const auto TempBuf = concat(title, L'\n', text);
-	const auto Result = pluginapi::apiMessageFn(&FarUuid, &FarUuid, Flags, nullptr, std::bit_cast<const wchar_t* const*>(TempBuf.c_str()), 0, 0) + 1;
+	std::vector<string> Items;
+	Items.emplace_back(title);
+
+	for (const auto& i: enum_tokens(text, L"\n"sv))
+		Items.emplace_back(i);
+
+	std::vector<const wchar_t*> RawItems;
+	RawItems.reserve(Items.size());
+	std::ranges::transform(Items, std::back_inserter(RawItems), [](const auto& Str){ return Str.c_str(); });
+
+	const auto Result = pluginapi::apiMessageFn(&FarUuid, &FarUuid, Flags, nullptr, RawItems.data(), RawItems.size(), 0) + 1;
 	PushValue(Result);
 }
 
@@ -3491,33 +3464,19 @@ void FarMacroApi::absFunc() const
 {
 	const auto Params = parseParams(1);
 
-	TVar Result;
-
-	switch(Params[0].ParseType())
+	if (Params[0].isInteger())
 	{
-	case TVar::Type::Integer:
-		{
-			if (const auto i = Params[0].asInteger(); i < 0)
-				Result = -i;
-			else
-				Result = Params[0];
-		}
-		break;
-
-	case TVar::Type::Double:
-		{
-		if (const auto d = Params[0].asDouble(); d < 0)
-			Result = -d;
-		else
-			Result = Params[0];
-		}
-		break;
-
-	default:
-		break;
+		if (const auto i = Params[0].asInteger(); i < 0)
+			return PushValue(-i);
 	}
 
-	PushValue(Result);
+	if (Params[0].isDouble())
+	{
+		if (const auto d = Params[0].asDouble(); d < 0)
+			return PushValue(-d);
+	}
+
+	PushValue(Params[0]);
 }
 
 void FarMacroApi::ascFunc() const
