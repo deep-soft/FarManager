@@ -46,6 +46,42 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 //----------------------------------------------------------------------------
 
+/*
+SQLite >= 3.54 uses GetTickCount64 to gather entropy for some randomness stuff.
+Unfortunately, they call it in a stupid way that prevents us from hooking it.
+Asking them to change it would be pointless, since they do not support < Vista anymore.
+So, a fallback implementation is provided here.
+We don't care about the wraparound for now, since it's just for entropy.
+*/
+
+#include <windows.h>
+
+static ULONGLONG WINAPI GetTickCount64_Fallback(void)
+{
+	return GetTickCount();
+}
+
+static ULONGLONG WINAPI GetTickCount64_Wrapper(void)
+{
+	static ULONGLONG(WINAPI * GetTickCount64Ptr)(void);
+	if (GetTickCount64Ptr)
+		return GetTickCount64Ptr();
+
+WARNING_PUSH()
+WARNING_DISABLE_MSC(4191) // 'operator/operation' : unsafe conversion from 'type of expression' to 'type required'
+	GetTickCount64Ptr = (ULONGLONG(WINAPI*)(void))GetProcAddress(GetModuleHandle(L"kernel32.dll"), "GetTickCount64");
+WARNING_POP()
+
+	if (GetTickCount64Ptr)
+		return GetTickCount64Ptr();
+
+	GetTickCount64Ptr = GetTickCount64_Fallback;
+	return GetTickCount64Ptr();
+}
+
+#define GetTickCount64 GetTickCount64_Wrapper
+
+
 #define SQLITE_API __declspec(dllexport)
 
 WARNING_PUSH(3)
@@ -53,6 +89,7 @@ WARNING_PUSH(3)
 WARNING_DISABLE_MSC(4018) // '>': signed / unsigned mismatch
 WARNING_DISABLE_MSC(4391) // 'signature' : incorrect return type for intrinsic function, expected 'type'
 WARNING_DISABLE_MSC(4668) // 'symbol' is not defined as a preprocessor macro, replacing with '0' for 'directives'
+WARNING_DISABLE_MSC(4815) // 'object name': flexible array member in object will have no elements
 WARNING_DISABLE_MSC(5105) // macro expansion producing 'defined' has undefined behavior
 WARNING_DISABLE_MSC(4191) // 'operator/operation' : unsafe conversion from 'type of expression' to 'type required'
 WARNING_DISABLE_MSC(5262) // implicit fall-through occurs here; are you missing a break statement? Use [[fallthrough]] when a break statement is intentionally omitted between cases
