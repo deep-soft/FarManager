@@ -1,4 +1,27 @@
 --------------------------------------------------------------------------------
+shmuel 2026-11-12 17:44:14+02:00 - build 6753
+
+1. Editor: Do not reset last search state when a match is not found
+
+   Clearing cached match coordinates on search failure caused repeated
+   Shift-F7/Alt-F7 searches on a single occurrence to alternate between
+   "Not found" and re-selecting the same match.
+
+--------------------------------------------------------------------------------
+shmuel 2026-11-11 22:53:35+02:00 - build 6752
+
+1. Editor: Advance past previous match in repeated search operations
+
+   The search starting point in repeated operations (Shift-F7, Alt-F7)
+   now takes the previous match length into consideration rather than
+   naively incrementing/decrementing the cursor position.
+
+--------------------------------------------------------------------------------
+drkns 2026-11-09 23:38:27+00:00 - build 6751
+
+1. Fix Find file crash on really long strings.
+
+--------------------------------------------------------------------------------
 shmuel 2026-11-02 13:19:02+02:00 - build 6750
 
 1. Revert the previous commit. It caused stack overflow with picture.lua.
